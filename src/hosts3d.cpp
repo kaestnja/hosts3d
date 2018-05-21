@@ -46,7 +46,9 @@ view_type vwdef[2] = {{0.0, 0.0, {0.0, 75.0, -360.0}, {0.0, 75.0, MOV - 360.0}},
 sett_type setts = {false, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 5000, "", "<sudo command> hsen", "1", "eth0", "", "<sudo command> killall hsen"
   , {"", "", "", ""}, ins, off, alt, {vwdef[0], vwdef[0], vwdef[0], vwdef[0], vwdef[0]}};  //settings
 host_type *seltd = 0, *lnkht = 0;  //selected host, link line host
-MyLL hstsLL, lnksLL, altsLL, pktsLL;  //dynamic data struct for hosts, links, alerts, packets
+MyLL lnksLL, altsLL, pktsLL;  //dynamic data struct for links, alerts, packets
+MyHT hstsByIp; // data struct that arranges hosts by ip address
+MyHT hstsByPos; // data struct that arranges hosts by (x, y, z) co-ordinates
 GLuint objsDraw;  //GL compiled objects
 MyGLWin GLWin;  //2D GUI
 
@@ -59,17 +61,77 @@ void hsdStop(int sig)
   goRun = false;
 }
 
+HtKeyType keyFromCoOrdinates (int px, int py, int pz) {
+  // todo: measure/fix collisions
+  return (HtKeyType)(0xffff & ((px * 31) + (py * 37) + (pz * 41)));
+}
+
+HtKeyType keyFromIpAddress(in_addr ip) {
+  // Thomas Wang hash
+  // http://burtleburtle.net/bob/hash/integer.html
+
+  unsigned int addr = ip.s_addr;
+
+  addr += ~(addr << 15);
+  addr ^= (addr >> 10);
+  addr += (addr << 3);
+  addr ^= (addr >> 6);
+  addr += ~(addr << 11);
+  addr ^= (addr >>16 );
+
+  return (HtKeyType) addr;
+}
+
+// HtFirstThatCallback callback for hostIp()
+bool isHostIpAddress(void *data, long arg1, long arg2, long arg3, long arg4) {
+  host_type *ht = (host_type *) data;
+  unsigned long s_addr = (unsigned long) arg1;
+  if (ht->hip.s_addr == s_addr) {
+    return true;
+  }
+  return false;
+}
+
+// HtFirstThatCallback callback for hostAtPos()
+bool isHostHere(void * data, long pht_, long px_, long py_, long pz_) {
+  host_type *ht = (host_type *) data;
+  host_type *pht = (host_type *) pht_;
+  int px = (int) px_;
+  int py = (int) py_;
+  int pz = (int) pz_;
+
+  if ((ht != pht) && (ht->px == px) && (ht->py == py) && (ht->pz == pz)) {
+    return true;
+  }
+  return false;
+}
+
 //check if a host is at a position
 host_type *hostAtpos(int px, int py, int pz, host_type *pht)
 {
-  host_type *ht;
-  hstsLL.Start(2);
-  while ((ht = (host_type *)hstsLL.Read(2)))
-  {
-    if ((ht != pht) && (ht->px == px) && (ht->py == py) && (ht->pz == pz)) return ht;
-    hstsLL.Next(2);
-  }
-  return 0;
+  HtKeyType key = keyFromCoOrdinates(px, py, pz);
+  return (host_type *) hstsByPos.firstThat(key, 2, &isHostHere,
+					   (long) (void *)pht,
+					   (long) px, (long) py, (long) pz);
+}
+
+//add an entry to the hstsByIp hashtable
+void newHostByIp(host_type *ht) {
+  HtKeyType key = keyFromIpAddress(ht->hip);
+  void *ret = hstsByIp.newEntryAtBucket(key, (void *) ht);
+}
+
+// remove an entry from the hstsByPos hashtable
+void hostByPositionPreMove(host_type *ht) {
+  bool success;
+  HtKeyType key = keyFromCoOrdinates(ht->px, ht->py, ht->pz);
+  success = hstsByPos.deleteEntryAtBucket(0, key, (void *) ht);
+}
+
+// add an entry to the hstsByPos hashtable
+void hostByPositionPostMove(host_type *ht) {
+  HtKeyType key = keyFromCoOrdinates(ht->px, ht->py, ht->pz);
+  void *ret = hstsByPos.newEntryAtBucket(key, (void *) ht);
 }
 
 //find blank host position
@@ -125,10 +187,18 @@ host_type *hostCreate(in_addr ip)
   host_type host = {0, 0, 0, 0, 0, setts.anm, setts.nhp, 0, setts.nhl, 0, SPC, 0, SPC, 0, 0, 0, 0, ip, "", "", "", ""}, *ht;
   strcpy(host.htip, inet_ntoa(ip));
   for (unsigned char cnt = 0; cnt < SVCS; cnt++) host.svc[cnt] = -1;
-  int hnet = hostNet(&host);
-  if (hnet != 2) hostPos(&host, HPR, 1);
-  ht = (host_type *)hstsLL.Write(new host_type(host));
+
+  ht = new host_type(host);
+
+  int hnet = hostNet(ht);
+  if (hnet != 2) hostPos(ht, HPR, 1);
+
+  newHostByIp(ht);
+
   if (hnet == 2) moveCollision(ht);
+
+  hostByPositionPostMove(ht);
+
   refresh = true;
   return ht;
 }
@@ -190,7 +260,7 @@ void pcktCreate(pkif_type *pkt, host_type *sht, host_type *dht, bool lk)
   if ((pktsLL.Num() < setts.pks) && (sht->shp || dht->shp) && (!setts.sen || (pkt->sen == setts.sen))
     && (!setts.pr || (pkt->pr == setts.pr)) && (!setts.prt || (pkt->srcpt == setts.prt) || (pkt->dstpt == setts.prt)) && goAnim)
   {
-    pckt_type pckt = {pkt->pr, pkt->dstpt, frame, {sht->px, sht->py, sht->pz}, dht}, *pk; 
+    pckt_type pckt = {pkt->pr, pkt->dstpt, frame, {sht->px, sht->py, sht->pz}, dht}, *pk;
     pktsLL.End(2);
     while ((pk = (pckt_type *)pktsLL.Read(2)))
     {
@@ -209,17 +279,18 @@ void pcktCreate(pkif_type *pkt, host_type *sht, host_type *dht, bool lk)
   }
 }
 
+void hostDestroyCb(void **data, long arg1, long arg2, long arg3, long arg4) {
+  host_type *ht = *((host_type **) data);
+  delete ht;
+  *data = 0;
+}
+
 //destroy hosts LL
 void hostsDestroy()
 {
-  host_type *ht;
-  hstsLL.Start(1);
-  while ((ht = (host_type *)hstsLL.Read(1)))
-  {
-    delete ht;
-    hstsLL.Next(1);
-  }
-  hstsLL.Destroy();
+  hstsByIp.forEach(1, hostDestroyCb, 0, 0, 0, 0);
+  hstsByIp.destroy();
+  hstsByPos.destroy();
 }
 
 //destroy links LL
@@ -309,6 +380,50 @@ void allDestroy()
   hostsDestroy();
 }
 
+void hostDrawCb(void **data, long arg1, long arg2, long arg3, long arg4)
+{
+  host_type *ht = *((host_type **) data);
+  unsigned short *ptr_cnt = (unsigned short *) (void *) arg1;
+  bool dips = (arg2 == 1l) ? true : false;
+  bool anms = (arg3 == 1l) ? true : false;
+
+  if (ht != seltd)  //draw host
+  {
+    if ((setts.sona != hst) || ht->vis || ht->sld || ht->anm)
+    {
+      glPushMatrix();
+
+      glLoadName(*ptr_cnt);
+      glTranslated(ht->px, ht->py, ht->pz);
+
+      if (ht->col)
+	glCallList(objsDraw + 12);
+      else if
+	(ht->sld) glCallList(objsDraw + 10);
+      else
+	glCallList(objsDraw + ht->clr);
+
+      glPopMatrix();
+
+      if (dips && !ht->col && (ht->pip || (setts.sips == all) || ((setts.sips == sel) && ht->sld)) && ((setts.sipn != nms) || *ht->htnm))  //draw host IP/name
+      {
+	glColor3ub(white[0], white[1], white[2]);
+	glRasterPos3i(ht->px, ht->py + 11, ht->pz);
+	GLWin.DrawString((const unsigned char *)(*ht->htnm && setts.sipn ? ht->htnm : ht->htip));
+      }
+      if (anms && ht->anm)
+      {
+	alrtCreate(anom, 248, ht);  //create anomaly alert
+	if (setts.mvd < 25)
+	  setts.mvd = 25;
+      }
+      if (animate && ht->vis)
+	ht->vis--;
+    }
+  }
+  (*ptr_cnt)++;
+}
+
 //draw host objects
 void hostsDraw(GLenum mode)
 {
@@ -335,38 +450,8 @@ void hostsDraw(GLenum mode)
     if (animate && seltd->vis) seltd->vis--;
   }
   unsigned short cnt = 1;
-  host_type *ht;
-  hstsLL.Start(1);
-  while ((ht = (host_type *)hstsLL.Read(1)))
-  {
-    if (ht != seltd)  //draw host
-    {
-      if ((setts.sona != hst) || ht->vis || ht->sld || ht->anm)
-      {
-        glPushMatrix();
-        glLoadName(cnt);
-        glTranslated(ht->px, ht->py, ht->pz);
-        if (ht->col) glCallList(objsDraw + 12);
-        else if (ht->sld) glCallList(objsDraw + 10);
-        else glCallList(objsDraw + ht->clr);
-        glPopMatrix();
-        if (dips && !ht->col && (ht->pip || (setts.sips == all) || ((setts.sips == sel) && ht->sld)) && ((setts.sipn != nms) || *ht->htnm))  //draw host IP/name
-        {
-          glColor3ub(white[0], white[1], white[2]);
-          glRasterPos3i(ht->px, ht->py + 11, ht->pz);
-          GLWin.DrawString((const unsigned char *)(*ht->htnm && setts.sipn ? ht->htnm : ht->htip));
-        }
-        if (anms && ht->anm)
-        {
-          alrtCreate(anom, 248, ht);  //create anomaly alert
-          if (setts.mvd < 25) setts.mvd = 25;
-        }
-        if (animate && ht->vis) ht->vis--;
-      }
-    }
-    cnt++;
-    hstsLL.Next(1);
-  }
+  hstsByIp.forEach(1, hostDrawCb, (long)(void *)&cnt, dips ? 1l : 0l,
+		   anms ? 1l : 0l, 0);
 }
 
 //draw link objects
@@ -582,7 +667,7 @@ void displayGL()
   glLoadIdentity();
   gluLookAt(setts.vws[0].ee.x, setts.vws[0].ee.y, setts.vws[0].ee.z, setts.vws[0].dr.x, setts.vws[0].dr.y, setts.vws[0].dr.z, 0.0, 1.0, 0.0);
   glCallList(objsDraw + 14);  //draw cross object
-  if (hstsLL.Num()) hostsDraw(GL_RENDER);
+  if (hstsByIp.Num() != 0) hostsDraw(GL_RENDER);
   if (lnksLL.Num()) linksDraw();
   if (altsLL.Num()) alrtsDraw();
   if (pktsLL.Num()) pcktsDraw();
@@ -649,43 +734,58 @@ void messageBox(const char *ttl, const char *msg)
   displayGL();
 }
 
+void hostSetCb(void **data, long arg1, long arg2, long arg3, long arg4)
+{
+  host_type *ht = *((host_type **) data);
+  unsigned char mbr = (unsigned char) arg1;
+  unsigned char val = (unsigned char) arg2;
+  switch (mbr)
+  {
+  case 0:
+    if (!val && (setts.sona == hst) && ht->sld)
+    {
+      ht->vis = 254;
+      setts.mvd = 255;
+    }
+    ht->sld = val;
+    break;
+
+  case 1:
+    ht->pip = val;
+    break;
+
+  case 2:
+    ht->anm = val;
+    break;
+
+  case 3:
+    ht->shp = val;
+    break;
+
+  case 4:
+    ht->alk = val;
+    break;
+   }
+}
+
 //set value for all hosts
 void hostsSet(unsigned char mbr, unsigned char val)
 {
-  host_type *ht;
-  hstsLL.Start(1);
-  while ((ht = (host_type *)hstsLL.Read(1)))
-  {
-    switch (mbr)
-    {
-      case 0:
-        if (!val && (setts.sona == hst) && ht->sld)
-        {
-          ht->vis = 254;
-          setts.mvd = 255;
-        }
-        ht->sld = val;
-        break;
-      case 1: ht->pip = val; break;
-      case 2: ht->anm = val; break;
-      case 3: ht->shp = val; break;
-      case 4: ht->alk = val; break;
-    }
-    hstsLL.Next(1);
-  }
+  hstsByIp.forEach(1, hostSetCb, (long) mbr, (long) val, 0, 0);
 }
 
 //return pointer to host from IP address
 host_type *hostIP(in_addr ip, bool crt)
 {
-  host_type *ht;
-  hstsLL.Start(2);
-  while ((ht = (host_type *)hstsLL.Read(2)))
-  {
-    if (ht->hip.s_addr == ip.s_addr) return ht;
-    hstsLL.Next(2);
-  }
-  if (crt) return hostCreate(ip);
+  HtKeyType key = keyFromIpAddress(ip);
+  host_type *ht = (host_type *) hstsByIp.firstThat(key, 2, &isHostIpAddress,
+						   (long) ip.s_addr, 0, 0, 0);
+  if (ht)
+    return ht;
+
+  if (crt)
+    return hostCreate(ip);
+
   return 0;
 }
 
@@ -718,7 +818,9 @@ void netLoad(const char *fl)
               return;
             }
             host.col = 0;
-            ht = (host_type *)hstsLL.Write(new host_type(host));
+	    ht = new host_type(host);
+	    newHostByIp(ht);
+	    hostByPositionPostMove(ht);
             moveCollision(ht);
           }
           while (fread(&hip, ipsz, 1, net) == 1)
@@ -738,7 +840,9 @@ void netLoad(const char *fl)
         while (fread(&host, htsz, 1, net) == 1)
         {
           host.col = 0;
-          ht = (host_type *)hstsLL.Write(new host_type(host));
+          ht = new host_type(host);
+	  newHostByIp(ht);
+	  hostByPositionPostMove(ht);
           moveCollision(ht);
         }
         goHosts = 0;
@@ -748,32 +852,48 @@ void netLoad(const char *fl)
   }
 }
 
+bool netSaveCb(void *data, long arg1, long arg2, long arg3, long arg4)
+{
+  FILE *fp = (FILE *)(void *) arg1;
+  unsigned int hostscount = (unsigned int) arg2;
+  unsigned int *ptrcount = (unsigned int *)(void *) arg3;
+  host_type *ht = (host_type *) data;
+  size_t htsz = sizeof(host_type), ipsz = sizeof(in_addr);
+
+  if (*ptrcount == hostscount) {
+    return false; // Will NOT halt the iteration
+  }
+
+  if (fwrite(ht, sizeof(host_type), 1, fp) != 1) {
+    return true; // Will halt the iteration
+  }
+
+  (*ptrcount)++;
+
+  return false;
+}
+
 //save network layout
 void netSave(const char* fl)
 {
   FILE *net;
   if ((net = fopen(fl, "wb")))
   {
-    unsigned int hsts = hstsLL.Num(), cnt = 0;
+    unsigned int hsts = hstsByIp.Num(), cnt = 0;
     fputs("HN1", net);
     if (fwrite(&hsts, sizeof(hsts), 1, net) == 1)
     {
-      size_t htsz = sizeof(host_type), ipsz = sizeof(in_addr);
-      host_type *ht;
-      hstsLL.Start(1);
-      while ((ht = (host_type *)hstsLL.Read(1)))
-      {
-        if (cnt++ == hsts) break;
-        if (fwrite(ht, htsz, 1, net) != 1)
-        {
-          fclose(net);
-          remove(fl);
-          return;
-        }
-        hstsLL.Next(1);
+      if (hstsByIp.firstThat(1, &netSaveCb, (long) net, (long) hsts,
+			     (long) &cnt, 0)) {
+	// fwrite() failed in netSaveCb
+	fclose(net);
+	remove(fl);
+	return;
       }
+
       link_type *lk;
       lnksLL.Start(1);
+      size_t ipsz = sizeof(in_addr);
       while ((lk = (link_type *)lnksLL.Read(1)))
       {
         if (fwrite(&lk->sht->hip, ipsz, 1, net) != 1) break;
@@ -784,6 +904,96 @@ void netSave(const char* fl)
     }
     fclose(net);
   }
+}
+
+void btnProcessExportCsvCb(void **data, long arg1, long arg2,
+			   long arg3, long arg4) {
+  host_type *ht = *((host_type **) data);
+  FILE *cf = (FILE *)(void *) arg1;
+  unsigned char cnt;
+  char buf[5], svc[12], row[1097];
+
+  if (ht->sld)
+  {
+    strcpy(row, "\"");
+    quotecsv(ht->htip, row);
+    strcat(row, "\",\"");
+    quotecsv(ht->htmc, row);
+    strcat(row, "\",\"");
+    quotecsv(ht->htnm, row);
+    strcat(row, "\",\"");
+    quotecsv(ht->htrm, row);
+    strcat(row, "\",\"");
+    for (cnt = 0; cnt < SVCS; cnt++)
+    {
+      if (ht->svc[cnt] == -1) break;
+      sprintf(svc, "%s:%d ", protoDecode((ht->svc[cnt] % 10000) / 10, buf), ht->svc[cnt] / 10000);
+      strcat(row, svc);
+    }
+    strcat(row, "\"\n");
+    fputs(row, cf);
+  }
+}
+
+typedef struct FindHostsCbData_ {
+  char *gi1;
+  char *gi2;
+  char *gi3;
+  char *gi4;
+  char *gi5;
+  bool anet;
+  in_addr_t mask, net;
+  unsigned int found;
+  unsigned short sprt;
+} FindHostsCbData;
+
+void btnProcessFindHostsCb(void **data, long arg1, long arg2,
+			   long arg3, long arg4) {
+  host_type *ht = *((host_type **) data);
+  FindHostsCbData *findhostscbdata = (FindHostsCbData *)(void *) arg1;
+  bool ipok = true;
+
+  if (*(findhostscbdata->gi1)) {
+    if (findhostscbdata->anet) {
+      if ((ht->hip.s_addr & findhostscbdata->mask) != findhostscbdata->net) {
+	ipok = false;
+      }
+    } else if (strcmp(ht->htip, findhostscbdata->gi1)) {
+      ipok = false;
+    }
+  }
+
+  if (ipok && strcasestr(ht->htmc, findhostscbdata->gi2) &&
+      strcasestr(ht->htnm, findhostscbdata->gi3) &&
+      strcasestr(ht->htrm, findhostscbdata->gi4)) {
+    if (!*(findhostscbdata->gi5)) {
+      ht->sld = 1;
+      findhostscbdata->found++;
+    } else {
+      for (unsigned cnt = 0; cnt < SVCS; cnt++) {
+	if (ht->svc[cnt] == -1) {
+	  break;
+	}
+
+	if ((ht->svc[cnt] / 10000) == findhostscbdata->sprt) {
+	  ht->sld = 1;
+	  findhostscbdata->found++;
+	  break;
+	}
+      }
+    }
+  }
+}
+
+void btnProcessSlInActCb(void **data, long arg1, long arg2, long arg3,
+			 long arg4) {
+  host_type *ht = *((host_type **) data);
+  time_t itime = (time_t) arg1;
+  char *gi1 = (char *)(void *) arg2;
+  char *gi2 = (char *)(void *) arg3;
+  char *gi3 = (char *)(void *) arg4;
+
+  ht->sld = ((itime - ht->lpk) > ((atoi(gi1) * 86400) + (atoi(gi2) * 360) + (atoi(gi3) * 60)));
 }
 
 //process 2D GUI button selected
@@ -811,35 +1021,8 @@ void btnProcess(int gs)
         FILE *cf;
         if ((cf = fopen(gi1, "w")))
         {
-          unsigned char cnt;
-          char buf[5], svc[12], row[1097];
           fputs("\"IP\",\"MAC\",\"Name\",\"Remarks\",\"Services\"\n", cf);
-          host_type *ht;
-          hstsLL.Start(1);
-          while ((ht = (host_type *)hstsLL.Read(1)))
-          {
-            if (ht->sld)
-            {
-              strcpy(row, "\"");
-              quotecsv(ht->htip, row);
-              strcat(row, "\",\"");
-              quotecsv(ht->htmc, row);
-              strcat(row, "\",\"");
-              quotecsv(ht->htnm, row);
-              strcat(row, "\",\"");
-              quotecsv(ht->htrm, row);
-              strcat(row, "\",\"");
-              for (cnt = 0; cnt < SVCS; cnt++)
-              {
-                if (ht->svc[cnt] == -1) break;
-                sprintf(svc, "%s:%d ", protoDecode((ht->svc[cnt] % 10000) / 10, buf), ht->svc[cnt] / 10000);
-                strcat(row, svc);
-              }
-              strcat(row, "\"\n");
-              fputs(row, cf);
-            }
-            hstsLL.Next(1);
-          }
+	  hstsByIp.forEach(1, btnProcessExportCsvCb, (long) cf, 0, 0, 0);
           fclose(cf);
         }
         GLWin.Close();  //close all 2D GUI windows
@@ -868,6 +1051,8 @@ void btnProcess(int gs)
           unsigned short sprt = 0;
           unsigned int found = 0;
           in_addr_t mask = 0, net = 0;
+	  FindHostsCbData findhostscbdata;
+
           char ttmp[19], lmc[18], lnm[256], lrm[256], *cidr;  //lowercase MAC, name, remarks
           if (*gi1)
           {
@@ -880,46 +1065,30 @@ void btnProcess(int gs)
               anet = true;
             }
           }
-          if (*gi5) sprt = atoi(gi5);
+          if (*gi5)
+	    sprt = atoi(gi5);
+
           seltd = 0;
-          if (!glfwGetKey(GLFW_KEY_LCTRL) && !glfwGetKey(GLFW_KEY_RCTRL)) hostsSet(0, 0);  //ht->sld
-          host_type *ht;
-          hstsLL.Start(1);
-          while ((ht = (host_type *)hstsLL.Read(1)))
-          {
-            ipok = true;
-            if (*gi1)
-            {
-              if (anet)
-              {
-                if ((ht->hip.s_addr & mask) != net) ipok = false;
-              }
-              else if (strcmp(ht->htip, gi1)) ipok = false;
-            }
-            if (ipok && strstr(strLower(ht->htmc, lmc), gi2) && strstr(strLower(ht->htnm, lnm), gi3) && strstr(strLower(ht->htrm, lrm), gi4))
-            {
-              if (!*gi5)
-              {
-                ht->sld = 1;
-                found++;
-              }
-              else
-              {
-                for (cnt = 0; cnt < SVCS; cnt++)
-                {
-                  if (ht->svc[cnt] == -1) break;
-                  if ((ht->svc[cnt] / 10000) == sprt)
-                  {
-                    ht->sld = 1;
-                    found++;
-                    break;
-                  }
-                }
-              }
-            }
-            hstsLL.Next(1);
-          }
-          sprintf(ttmp, "Found: %u", found);
+
+          if (!glfwGetKey(GLFW_KEY_LCTRL) && !glfwGetKey(GLFW_KEY_RCTRL))
+	    hostsSet(0, 0);  //ht->sld
+
+	  findhostscbdata.gi1 = gi1;
+	  findhostscbdata.gi2 = gi2;
+	  findhostscbdata.gi3 = gi3;
+	  findhostscbdata.gi4 = gi4;
+	  findhostscbdata.gi5 = gi5;
+	  findhostscbdata.anet = anet;
+	  findhostscbdata.mask = mask;
+	  findhostscbdata.net = net;
+	  findhostscbdata.found = 0;
+	  findhostscbdata.sprt = sprt;
+
+	  hstsByIp.forEach(1, btnProcessFindHostsCb,
+			   (long)(void *) &findhostscbdata,
+			   0, 0, 0);
+
+          sprintf(ttmp, "Found: %u", findhostscbdata.found);
           GLWin.PutLabel(ttmp, GLResult[5]);
         }
       }
@@ -1100,13 +1269,10 @@ void btnProcess(int gs)
       {
         seltd = 0;
         time_t itime = time(0);
-        host_type *ht;
-        hstsLL.Start(1);
-        while ((ht = (host_type *)hstsLL.Read(1)))
-        {
-          ht->sld = ((itime - ht->lpk) > ((atoi(gi1) * 86400) + (atoi(gi2) * 360) + (atoi(gi3) * 60)));
-          hstsLL.Next(1);
-        }
+	hstsByIp.forEach(1, btnProcessSlInActCb, (long) itime,
+			 (long)(void *) gi1,
+			 (long)(void *) gi2,
+			 (long)(void *) gi3);
         GLWin.Close();  //close all 2D GUI windows
       }
       else messageBox("ERROR", "Enter Days, Hours or Minutes!");
@@ -1148,43 +1314,39 @@ void btnProcess(int gs)
   }
 }
 
+bool hostTabFirstThatCb(void *data, long arg1, long arg2, long arg3, long arg4)
+{
+  host_type *ht = (host_type *) data;
+  host_type **identified_hd = (host_type **)(void *) arg1;
+
+  if (*identified_hd != 0) {
+    if (ht->sld) {
+      return true; // i.e. return the next one after the identified one
+    } else {
+      return false;
+    }
+  }
+
+  if (seltd && (seltd == ht)) {
+    *identified_hd = ht;
+    return false;
+  }
+
+  return false;
+}
+
 //select next/prev host in selection
 void hostTab(bool nx)
 {
   host_type *ht;
-  (nx ? hstsLL.Start(1) : hstsLL.End(1));
-  if (seltd)
-  {
-    while ((ht = (host_type *)hstsLL.Read(1)))
-    {
-      if (ht == seltd) break;
-      (nx ? hstsLL.Next(1) : hstsLL.Prev(1));
-    }
-    (nx ? hstsLL.Next(1) : hstsLL.Prev(1));
-  }
-  while ((ht = (host_type *)hstsLL.Read(1)))
-  {
-    if (ht->sld)
-    {
-      seltd = ht;
-      hostDetails();
-      return;
-    }
-    (nx ? hstsLL.Next(1) : hstsLL.Prev(1));
-  }
-  if (seltd)
-  {
-    (nx ? hstsLL.Start(1) : hstsLL.End(1));
-    while ((ht = (host_type *)hstsLL.Read(1)))
-    {
-      if (ht->sld)
-      {
-        seltd = ht;
-        hostDetails();
-        break;
-      }
-      (nx ? hstsLL.Next(1) : hstsLL.Prev(1));
-    }
+  host_type *identified_hd = 0;
+
+  ht = (host_type *) hstsByPos.firstThat(1, &hostTabFirstThatCb,
+					 (long)(void *) &identified_hd,
+					 0, 0, 0);
+  if (ht) {
+    seltd = ht;
+    hostDetails();
   }
 }
 
@@ -1221,6 +1383,14 @@ void offsetReset()
   rpoff = milliTime(0) - milliTime(&pkrp.ptime);
 }
 
+void infoSelectionForEachCb(void **data, long arg1, long arg2, long arg3,
+			    long arg4) {
+  host_type *ht = *((host_type **) data);
+  FILE *fp = (FILE *)(void *) arg1;
+  if (ht->sld)
+    fprintf(fp, "\n%s\t%s", ht->htip, ht->htnm);
+}
+
 //generate selection info
 void infoSelection()
 {
@@ -1228,14 +1398,86 @@ void infoSelection()
   if ((info = fopen(hsddata("tmp-hinfo-hsd"), "w")))
   {
     fprintf(info, "CURRENT SELECTION\n");
-    host_type *ht;
-    hstsLL.Start(1);
-    while ((ht = (host_type *)hstsLL.Read(1)))
-    {
-      if (ht->sld) fprintf(info, "\n%s\t%s", ht->htip, ht->htnm);
-      hstsLL.Next(1);
-    }
+    hstsByPos.forEach(1, &infoSelectionForEachCb, (long)(void *) info, 0, 0, 0);
     fclose(info);
+  }
+}
+
+void keyboardForEachCb(void **data, long arg1, long arg2, long arg3, long arg4)
+{
+  host_type *ht = *((host_type **) data);
+  int key = (int) arg1;
+  int dx, dz;
+  double angt;
+
+  if (key == 595) {
+    ht->sld = !ht->sld;  //invert selection, ctrl+s
+  } else if (key == 590) {
+    ht->sld = (*ht->htnm != '\0');  //select all named hosts, ctrl+n
+  } else if (ht->sld) {
+    switch (key) {
+
+    case 'T':
+      ht->pip = !ht->pip;
+      break;  //toggle selection persistant IP
+
+    case 'J':
+      ht->alk = 1;
+      break;  //automatic link lines for selection
+
+    case 586:
+      ht->alk = 0;
+      break;  //stop automatic link lines for selection, ctrl+j
+
+    case 'P':
+      ht->shp = 1;
+      break;  //show packets for selection
+
+    case 592:
+      ht->shp = 0;
+      break;  //stop showing packets for selection, ctrl+p
+
+    default:
+      if (ht->lck)
+	break;
+
+      hostByPositionPreMove(ht);
+
+      if (key == 'Q') {
+	ht->py += SPC;  //move selection up
+      } else if (key == 'E') {
+	ht->py -= SPC;  //move selection down
+      } else {
+	if (key == 'W')
+	  angt = setts.vws[0].ax * RAD;  //move selection forward
+	else if (key == 'A')
+	  angt = (setts.vws[0].ax + 90.0) * RAD;  //move selection left
+	else if (key == 'D')
+	  angt = (setts.vws[0].ax - 90.0) * RAD;  //move selection right
+	else
+	  angt = (setts.vws[0].ax + 180.0) * RAD;  //move selection back
+
+	if (cos(angt) >= 0.707) {
+	  dx = 0;
+	  dz = 1;
+	} else if (sin(angt) > 0.707) {
+	  dx = 1;
+	  dz = 0;
+	} else if (sin(angt) < -0.707) {
+	  dx = -1;
+	  dz = 0;
+	} else {
+	  dx = 0;
+	  dz = -1;
+	}
+
+	ht->px += dx * SPC;
+	ht->pz += dz * SPC;
+      }
+
+      hostByPositionPostMove(ht);
+      moveCollision(ht);
+    }
   }
 }
 
@@ -1306,61 +1548,7 @@ void GLFWCALL keyboardGL(int key, int action)
         while (goHosts == 1) usleep(1000);
       case 595: case 590: case 'T': case 'J': case 586: case 'P': case 592:
         if ((key == 595) || (key == 590)) seltd = 0;
-        int dx, dz;
-        double angt;        
-        host_type *ht;
-        hstsLL.Start(1);
-        while ((ht = (host_type *)hstsLL.Read(1)))
-        {
-          if (key == 595) ht->sld = !ht->sld;  //invert selection, ctrl+s
-          else if (key == 590) ht->sld = (*ht->htnm != '\0');  //select all named hosts, ctrl+n
-          else if (ht->sld)
-          {
-            switch (key)
-            {
-              case 'T': ht->pip = !ht->pip; break;  //toggle selection persistant IP
-              case 'J': ht->alk = 1; break;  //automatic link lines for selection
-              case 586: ht->alk = 0; break;  //stop automatic link lines for selection, ctrl+j
-              case 'P': ht->shp = 1; break;  //show packets for selection
-              case 592: ht->shp = 0; break;  //stop showing packets for selection, ctrl+p
-              default:
-                if (ht->lck) break;
-                if (key == 'Q') ht->py += SPC;  //move selection up
-                else if (key == 'E') ht->py -= SPC;  //move selection down
-                else
-                {
-                  if (key == 'W') angt = setts.vws[0].ax * RAD;  //move selection forward
-                  else if (key == 'A') angt = (setts.vws[0].ax + 90.0) * RAD;  //move selection left
-                  else if (key == 'D') angt = (setts.vws[0].ax - 90.0) * RAD;  //move selection right
-                  else angt = (setts.vws[0].ax + 180.0) * RAD;  //move selection back
-                  if (cos(angt) >= 0.707)
-                  {
-                    dx = 0;
-                    dz = 1;
-                  }
-                  else if (sin(angt) > 0.707)
-                  {
-                    dx = 1;
-                    dz = 0;
-                  }
-                  else if (sin(angt) < -0.707)
-                  {
-                    dx = -1;
-                    dz = 0;
-                  }
-                  else
-                  {
-                    dx = 0;
-                    dz = -1;
-                  }
-                  ht->px += dx * SPC;
-                  ht->pz += dz * SPC;
-                }
-                moveCollision(ht);
-            }
-          }
-          hstsLL.Next(1);
-        }
+	hstsByPos.forEach(1, &keyboardForEachCb, (long) key, 0, 0, 0);
         goHosts = 0;
         break;
       case 'F':  //2D GUI find hosts
@@ -1605,6 +1793,203 @@ void GLFWCALL keyboardGL(int key, int action)
   refresh = true;
 }
 
+void mnuKeyProcessLe9Cb(void **data, long arg1, long arg2, long arg3, long arg4)
+{
+  host_type *ht = *((host_type **) data);
+  int m = (int) arg1;
+  bool *ptr_init = (bool *)(void *) arg2;
+  int spx = 0, spy = 0, spz = 0;
+
+  if (ht->sld && !ht->lck)
+  {
+    switch (m)
+    {
+    case 1:  //move selection to grey zone
+      hostByPositionPreMove(ht);
+      if (ht->px < 0) ht->px *= -1;
+      if (ht->pz < 0) ht->pz *= -1;
+      hostPos(ht, HPR, 1);
+      hostByPositionPostMove(ht);
+      moveCollision(ht);
+      break;
+
+    case 2:  //move selection to blue zone
+      hostByPositionPreMove(ht);
+      if (ht->px > 0) ht->px *= -1;
+      if (ht->pz < 0) ht->pz *= -1;
+      hostPos(ht, HPR, 1);
+      hostByPositionPostMove(ht);
+      moveCollision(ht);
+      break;
+
+    case 3:  //move selection to green zone
+      hostByPositionPreMove(ht);
+      if (ht->px > 0) ht->px *= -1;
+      if (ht->pz > 0) ht->pz *= -1;
+      hostPos(ht, HPR, 1);
+      hostByPositionPostMove(ht);
+      moveCollision(ht);
+      break;
+
+    case 4:  //move selection to red zone
+      hostByPositionPreMove(ht);
+      if (ht->px < 0) ht->px *= -1;
+      if (ht->pz > 0) ht->pz *= -1;
+      hostPos(ht, HPR, 1);
+      hostByPositionPostMove(ht);
+      moveCollision(ht);
+      break;
+
+    case 5: case 6: case 7:  //auto arrange
+      if (*ptr_init)
+      {
+	hostByPositionPreMove(ht);
+	hostPos(ht, (m == 5 ? HPR : 10), (m == 7 ? 2 : 1));
+	hostByPositionPostMove(ht);
+	moveCollision(ht);
+	spx = ht->px;
+	spy = ht->py;
+	spz = ht->pz;
+	*ptr_init = false;
+      }
+      else
+      {
+	hostByPositionPreMove(ht);
+	ht->px = spx;
+	ht->py = spy;
+	ht->pz = spz;
+	hostPos(ht, (m == 5 ? HPR : 10), (m == 7 ? 2 : 1));
+	hostByPositionPostMove(ht);
+	moveCollision(ht);
+      }
+      break;
+
+    case 8:  //arrange into nets
+      if (!(spx = hostNet(ht)))
+	break;
+
+      if (spx == 1) {
+	hostByPositionPreMove(ht);
+	hostPos(ht, HPR, 1);
+	hostByPositionPostMove(ht);
+      }
+      moveCollision(ht);
+      break;
+
+    case 9:  //delete selection
+      if (ht == lnkht)
+	lnkht = 0;
+
+      linkCreDel(ht, 0, 0, true);
+      hostByPositionPreMove(ht);
+      hostPos(ht, HPR, 1);
+      moveCollision(ht);
+      // Do NOT call hostByPositionPostMove(ht) here. The 'ht' is about to get
+      // deleted and therefore about to get deleted from the hstsByIp hash
+      // table. The 'hostByPositionPreMove()' call above will delete the ht from
+      // the hstsByPos hash table, so we are done cleaning the ht properly.
+
+      delete ht;
+      *data = 0;
+
+      break;
+    }
+  }
+}
+
+void mnuKeyProcessLe36Cb(void **data, long arg1, long arg2, long arg3, long arg4)
+{
+  host_type *ht = *((host_type **) data);
+  int m = (int) arg1;
+  time_t itime = (time_t) arg2;
+
+  unsigned char cnt;
+  char scmd[274];
+
+  switch (m)
+  {
+  case 31:
+    ht->sld = ht->anm;
+    break;  //select all anomalies
+
+  case 32:
+    ht->sld = ht->shp;
+    break;  //select all showing packets
+
+  case 33:
+    ht->sld = ((itime - ht->lpk) > 300);
+    break;  //5 minutes
+
+  case 34:
+    ht->sld = ((itime - ht->lpk) > 3600);
+    break;  //1 hour
+
+  case 35:
+    ht->sld = ((itime - ht->lpk) > 86400);
+    break;  //1 day
+
+  case 36:
+    ht->sld = ((itime - ht->lpk) > 604800);
+    break;  //1 week
+
+  default:
+    if (!ht->sld)
+      break;
+
+    switch (m)
+      {
+      case 10:
+      case 11:
+      case 12:
+      case 13:
+      case 14:
+      case 15:
+      case 16:
+      case 17:
+      case 18:
+      case 19:
+	ht->clr = m % 10;
+	break;  //colour
+
+      case 21:
+	ht->lck = 1;
+	break;  //lock on
+
+      case 22:
+	ht->lck = 0;
+	break;  //lock off
+
+      case 23:
+	ht->dld = 0;
+	break;  //reset downloads
+
+      case 24:
+	ht->uld = 0;
+	break;  //reset uploads
+
+      case 25:
+	for (cnt = 0; cnt < SVCS; cnt++)
+	  ht->svc[cnt] = -1;
+	break;  //reset services list
+
+      case 26:
+	ht->anm = 0;
+	break;  //acknowledge anomaly
+
+      case 27:
+      case 28:
+      case 29:
+      case 30:
+	if (!*setts.cmd[m - 27])
+	  break;
+
+	sprintf(scmd, "%s %s &", setts.cmd[m - 27], ht->htip);
+	if (system(scmd)) break;  //nothing
+	break;
+      }
+  }
+}
+
 //process 2D GUI menu item selected
 void mnuProcess(int m)
 {
@@ -1615,7 +2000,6 @@ void mnuProcess(int m)
   {
     waitShow();
     bool init = true;
-    int spx = 0, spy = 0, spz = 0;
     goHosts = 1;
     while (goHosts == 1) usleep(1000);
     if (m == 9)
@@ -1624,116 +2008,15 @@ void mnuProcess(int m)
       pcktsDestroy();
       alrtsDestroy();
     }
-    host_type *ht;
-    hstsLL.Start(1);
-    while ((ht = (host_type *)hstsLL.Read(1)))
-    {
-      if (ht->sld && !ht->lck)
-      {
-        switch (m)
-        {
-          case 1:  //move selection to grey zone
-            if (ht->px < 0) ht->px *= -1;
-            if (ht->pz < 0) ht->pz *= -1;
-            hostPos(ht, HPR, 1);
-            moveCollision(ht);
-            break;
-          case 2:  //move selection to blue zone
-            if (ht->px > 0) ht->px *= -1;
-            if (ht->pz < 0) ht->pz *= -1;
-            hostPos(ht, HPR, 1);
-            moveCollision(ht);
-            break;
-          case 3:  //move selection to green zone
-            if (ht->px > 0) ht->px *= -1;
-            if (ht->pz > 0) ht->pz *= -1;
-            hostPos(ht, HPR, 1);
-            moveCollision(ht);
-            break;
-          case 4:  //move selection to red zone
-            if (ht->px < 0) ht->px *= -1;
-            if (ht->pz > 0) ht->pz *= -1;
-            hostPos(ht, HPR, 1);
-            moveCollision(ht);
-            break;
-          case 5: case 6: case 7:  //auto arrange
-            if (init)
-            {
-              hostPos(ht, (m == 5 ? HPR : 10), (m == 7 ? 2 : 1));
-              moveCollision(ht);
-              spx = ht->px;
-              spy = ht->py;
-              spz = ht->pz;
-              init = false;
-            }
-            else
-            {
-              ht->px = spx;
-              ht->py = spy;
-              ht->pz = spz;
-              hostPos(ht, (m == 5 ? HPR : 10), (m == 7 ? 2 : 1));
-              moveCollision(ht);
-            }
-            break;
-          case 8:  //arrange into nets
-            if (!(spx = hostNet(ht))) break;
-            if (spx == 1) hostPos(ht, HPR, 1);
-            moveCollision(ht);
-            break;
-          case 9:  //delete selection
-            if (ht == lnkht) lnkht = 0;
-            linkCreDel(ht, 0, 0, true);
-            hostPos(ht, HPR, 1);
-            moveCollision(ht);
-            delete ht;
-            ht = 0;
-            hstsLL.Delete(1);
-            break;
-        }
-      }
-      if (ht) hstsLL.Next(1);
-    }
+    hstsByIp.forEach(1, &mnuKeyProcessLe9Cb, (long) m, (long)(void *)&init, 0, 0);
     goHosts = 0;
     GLWin.Close();  //close all 2D GUI windows
   }
   else if (m <= 36)
   {
     if (m >= 31) seltd = 0;
-    unsigned char cnt;
     time_t itime = time(0);
-    char scmd[274];
-    host_type *ht;
-    hstsLL.Start(1);
-    while ((ht = (host_type *)hstsLL.Read(1)))
-    {
-      switch (m)
-      {
-        case 31: ht->sld = ht->anm; break;  //select all anomalies
-        case 32: ht->sld = ht->shp; break;  //select all showing packets
-        case 33: ht->sld = ((itime - ht->lpk) > 300); break;  //5 minutes
-        case 34: ht->sld = ((itime - ht->lpk) > 3600); break;  //1 hour
-        case 35: ht->sld = ((itime - ht->lpk) > 86400); break;  //1 day
-        case 36: ht->sld = ((itime - ht->lpk) > 604800); break;  //1 week
-        default:
-          if (!ht->sld) break;
-          switch (m)
-          {
-            case 10: case 11: case 12: case 13: case 14: case 15: case 16: case 17: case 18: case 19: ht->clr = m % 10; break;  //colour
-            case 21: ht->lck = 1; break;  //lock on
-            case 22: ht->lck = 0; break;  //lock off
-            case 23: ht->dld = 0; break;  //reset downloads
-            case 24: ht->uld = 0; break;  //reset uploads
-            case 25: for (cnt = 0; cnt < SVCS; cnt++) ht->svc[cnt] = -1; break;  //reset services list
-            case 26: ht->anm = 0; break;  //acknowledge anomaly
-            case 27: case 28: case 29: case 30:
-              if (!*setts.cmd[m - 27]) break;
-              sprintf(scmd, "%s %s &", setts.cmd[m - 27], ht->htip);
-              if (system(scmd)) break;  //nothing
-              break;
-          }
-      }
-      hstsLL.Next(1);
-    }
+    hstsByIp.forEach(1, &mnuKeyProcessLe36Cb, (long) m, (long) itime, 0, 0);
   }
   else
   {
@@ -1793,17 +2076,28 @@ void mnuProcess(int m)
         if (seltd->lck) break;
         goHosts = 1;
         while (goHosts == 1) usleep(1000);
+	hostByPositionPreMove(seltd);
         seltd->px += (int)((setts.vws[0].ee.x - seltd->px) / SPC) * SPC;
         seltd->py += (int)((setts.vws[0].ee.y - seltd->py) / SPC) * SPC;
         seltd->pz += (int)((setts.vws[0].ee.z - seltd->pz) / SPC) * SPC;
+	hostByPositionPostMove(seltd);
         moveCollision(seltd);
         goHosts = 0;
         break;
       case 43:  //go to selected host
         if (seltd)
         {
-          view_type tview = {(seltd->pz < 0 ? 0.0 : 180.0), 0.0, {seltd->px, seltd->py + 5.0, seltd->pz + ((seltd->pz < 0 ? -16 : 16) * MOV)}
-            , {seltd->px, seltd->py + 5.0, seltd->pz + ((seltd->pz < 0 ? -15 : 15) * MOV)}};
+          view_type tview = {(seltd->pz < 0 ? 0.0 : 180.0),
+			     0.0,
+			     {seltd->px,
+			      seltd->py + 5.0,
+			      seltd->pz + ((seltd->pz < 0 ? -16 : 16) * MOV)
+			     },
+			     {seltd->px,
+			      seltd->py + 5.0,
+			      seltd->pz + ((seltd->pz < 0 ? -15 : 15) * MOV)
+			     }
+	  };
           setts.vws[0] = tview;
         }
         break;
@@ -1920,7 +2214,13 @@ void mnuProcess(int m)
       case 88: netSave(hsddata("3network.hnl")); break;  //save current network layout as network layout 3
       case 89: netSave(hsddata("4network.hnl")); break;  //save current network layout as network layout 4
       case 90: case 91:  //2D GUI netpos editor
-        if ((m == 91) && seltd) sprintf(sbuf, "pos %s/32 %d %d %d %s", seltd->htip, seltd->px / SPC, seltd->py / SPC, seltd->pz / SPC, tclr[seltd->clr]);  //add selected host net pos
+        if ((m == 91) && seltd)
+	  sprintf(sbuf, "pos %s/32 %d %d %d %s",
+		  seltd->htip,
+		  seltd->px / SPC,
+		  seltd->py / SPC,
+		  seltd->pz / SPC,
+		  tclr[seltd->clr]);  //add selected host net pos
         GLWin.CreateWin(-1, -1, 332, 234, "NET POSITIONS", true, true);
         GLWin.AddLabel(10, 10, "Line:");
         GLResult[0] = (GLWin.AddInput(10, 26, 50, 255, sbuf) * 100) + HSD_NETPOS;
@@ -2223,6 +2523,21 @@ void mnuProcess(int m)
   }
 }
 
+void infoGeneralCb(void **data, long arg1, long arg2, long arg3, long arg4)
+{
+  host_type *ht = *((host_type **) data);
+  unsigned int *ptrcnt = (unsigned int *)(void *) arg1;
+  unsigned long long *ptrsdld = (unsigned long long *) arg2;
+  unsigned long long *ptrsuld = (unsigned long long *) arg3;
+
+  if (ht->sld)
+  {
+    (*ptrsdld) += ht->dld;
+    (*ptrsuld) += ht->uld;
+    (*ptrcnt)++;
+  }
+}
+
 //generate general info
 void infoGeneral()
 {
@@ -2232,22 +2547,26 @@ void infoGeneral()
     unsigned int cnt = 0;
     unsigned long long sdld = 0, suld = 0;
     char buf[11];
-    host_type *ht;
-    hstsLL.Start(1);
-    while ((ht = (host_type *)hstsLL.Read(1)))
-    {
-      if (ht->sld)
-      {
-        sdld += ht->dld;
-        suld += ht->uld;
-        cnt++;
-      }
-      hstsLL.Next(1);
-    }
+    hstsByIp.forEach(1, &infoGeneralCb, (long)(void *) &cnt,
+		     (long)(void *) &sdld, (long)(void *) &suld, 0);
     fprintf(info, "GENERAL\n\nHosts: %u\nDownloads: %s", cnt, formatBytes(sdld, buf));
     fprintf(info, "\nUploads: %s", formatBytes(suld, buf));  //reuse buf
     fclose(info);
   }
+}
+
+bool findHostGlObjectCb(void *data, long arg1, long arg2, long arg3, long arg4)
+{
+  host_type *ht = (host_type *) data;
+  GLuint target = (GLuint) arg1;
+  GLuint *current = (GLuint *)(void *) arg2;
+
+  if (*current == target) {
+    return true;
+  }
+
+  (*current)++;
+  return false;
 }
 
 //glfwSetMouseButtonCallback
@@ -2287,7 +2606,7 @@ void GLFWCALL clickGL(int button, int action)
     else
     {
       mMove = false;
-      if (hstsLL.Num())
+      if (hstsByIp.Num())
       {
         if (!glfwGetKey(GLFW_KEY_LCTRL) && !glfwGetKey(GLFW_KEY_RCTRL)) hostsSet(0, 0);  //ht->sld
         int sx = mBxx - mPsx, sy = mBxy - mPsy, asx = abs(sx), asy = abs(sy);
@@ -2325,7 +2644,11 @@ void GLFWCALL clickGL(int button, int action)
               ptrnames = ptr + 2;
               if (*ptrnames)
               {
-                ht = (host_type *)hstsLL.Find(*ptrnames);
+		GLuint current = 1;
+                ht = (host_type *)hstsByIp.firstThat(1, &findHostGlObjectCb,
+						     (long) *ptrnames,
+						     (long)(void *) &current,
+						     0, 0);
                 ht->sld = 1;
               }
               else seltd->sld = 1;
@@ -2336,7 +2659,11 @@ void GLFWCALL clickGL(int button, int action)
           {
             if (*closest)
             {
-              ht = (host_type *)hstsLL.Find(*closest);
+	      GLuint current = 1;
+	      ht = (host_type *) hstsByIp.firstThat(1, &findHostGlObjectCb,
+						    (long) *closest,
+						    (long)(void *) &current,
+						    0, 0);
               if (ht->sld)
               {
                 ht->sld = 0;
@@ -2537,6 +2864,18 @@ void initObjsGL()
   glEndList();
 }
 
+void pktProcessCb(void **data, long arg1, long arg2, long arg3, long arg4)
+{
+  host_type *dh = *((host_type **) data);
+  host_type *sh = (host_type *)(void *) arg1;
+  in_addr_t mask = (in_addr_t) arg2;
+  in_addr_t dstip = (in_addr_t) arg3;
+  pkif_type *pkif = (pkif_type *)(void *) arg4;
+
+  if ((dh != sh) && ((dh->hip.s_addr & mask) == dstip))
+    pcktCreate(pkif, sh, dh, false);
+}
+
 //glfwCreateThread
 void GLFWCALL pktProcess(void *arg)
 {
@@ -2666,12 +3005,8 @@ void GLFWCALL pktProcess(void *arg)
         else if (setts.bct && (mask = isBroadcast(pkif->dstip)))
         {
           dstip = pkif->dstip.s_addr & mask;
-          hstsLL.Start(2);
-          while ((dh = (host_type *)hstsLL.Read(2)))
-          {
-            if ((dh != sh) && ((dh->hip.s_addr & mask) == dstip)) pcktCreate(pkif, sh, dh, false);
-            hstsLL.Next(2);
-          }
+	  hstsByIp.forEach(2, &pktProcessCb, (long)(void *) sh, (long) mask,
+			   (long) dstip, (long)(void *) pkif);
         }
         if (pksc == pkfl)
         {

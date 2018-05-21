@@ -115,3 +115,131 @@ MyLL::~MyLL()
 {
   Destroy();
 }
+
+MyHT::MyHT() {
+  for (unsigned i = 0; i < HT_BUCKETS; i++) {
+    buckets[i] = 0;
+  }
+  count = 0;
+}
+
+MyHT::~MyHT() {
+  destroy();
+}
+
+int MyHT::Num() {
+  return count;
+}
+
+void MyHT::destroy() {
+  for (unsigned i = 0; i < HT_BUCKETS; i++) {
+    if (buckets[i]) {
+      buckets[i]->Destroy();
+      buckets[i] = 0;
+    }
+  }
+  count = 0;
+}
+
+void * MyHT::newEntryAtBucket(HtKeyType key, void *data) {
+  void *ret;
+  MyLL *bucket = buckets[key];
+  if (!bucket) {
+    bucket = new MyLL;
+    buckets[key] = bucket;
+  }
+  ret = bucket->Write(data);
+  count++;
+  return ret;
+}
+
+bool MyHT::deleteEntryAtBucket(unsigned char pc, HtKeyType key, void *data) {
+  MyLL *bucket = buckets[key];
+
+  if (!bucket) {
+    return false;
+  }
+
+  bucket->Start(pc);
+  while (1) {
+    void *curr = bucket->Read(pc);
+    if (!curr) {
+      return false;
+    }
+    if (curr == data) {
+      count--;
+      bucket->Delete(pc);
+      if (bucket->Num() == 0) {
+	delete bucket;
+	buckets[key] = 0;
+      }
+      return true;
+    } else {
+      bucket->Next(pc);
+    }
+  }
+}
+
+void MyHT::forEach(unsigned char pc, HtForEachCallback cb, long arg1, long arg2,
+		   long arg3, long arg4) {
+  for (unsigned i = 0; i < HT_BUCKETS; i++) {
+    MyLL *bucket = buckets[i];
+    if (!bucket) {
+      continue;
+    }
+
+    void *data;
+    bucket->Start(pc);
+    while ((data = bucket->Read(pc))) {
+      (*cb)(&data, arg1, arg2, arg3, arg4);
+      if (!data) {
+	// callback deleted the data, so we delete the linked list item
+	count--;
+	bucket->Delete(pc);
+	// if the linked list is empty, delete the linked list itself
+	if (bucket->Num() == 0) {
+	  delete bucket;
+	  buckets[i] = 0;
+	  break;
+	}
+      } else {
+	bucket->Next(pc);
+      }
+    }
+  }
+}
+
+void *MyHT::firstThat(HtKeyType key, unsigned char pc,
+		      HtFirstThatCallback cb, long arg1,
+		      long arg2, long arg3, long arg4) {
+  void *data;
+  MyLL *bucket = buckets[key];
+  if (!bucket) {
+    return 0;
+  }
+
+  bucket->Start(pc);
+  while ((data = bucket->Read(pc))) {
+    if ((*cb)(data, arg1, arg2, arg3, arg4)) {
+      return data;
+    } else {
+      bucket->Next(pc);
+    }
+  }
+
+  // Still here
+  return 0;
+}
+
+// Version that walks over all buckets, i.e. doesn't need a key
+void *MyHT::firstThat(unsigned char pc, HtFirstThatCallback cb, long arg1,
+		      long arg2, long arg3, long arg4) {
+  for (unsigned key = 0; key < HT_BUCKETS; key++) {
+    void *data = firstThat((HtKeyType) key, pc, cb, arg1, arg2, arg3, arg4);
+    if (data) {
+      return data;
+    }
+  }
+  // Still here
+  return 0;
+}

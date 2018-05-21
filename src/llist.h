@@ -38,3 +38,37 @@ class MyLL
     void Delete(unsigned char pc);
     void Destroy();
 };
+
+#define HT_BUCKETS 65536 // => 16-bit key
+typedef unsigned short HtKeyType;
+typedef bool (*HtFirstThatCallback)(void *, long, long, long, long);
+typedef void (*HtForEachCallback)(void **, long, long, long, long);
+
+class MyHT
+{
+ private:
+  MyLL *buckets[HT_BUCKETS];
+  int count;
+
+ public:
+  MyHT();
+  ~MyHT();
+
+  int Num();
+  void destroy();
+
+  void * newEntryAtBucket(HtKeyType key, void *data);
+
+  bool deleteEntryAtBucket(unsigned char pc, HtKeyType key, void *data);
+
+  void forEach(unsigned char pc, HtForEachCallback cb, long arg1, long arg2,
+	       long arg3, long arg4);
+
+  void *firstThat(HtKeyType key, unsigned char pc,
+		  HtFirstThatCallback cb, long arg1,
+		  long arg2, long arg3, long arg4);
+  
+  // Version that walks over all buckets, i.e. doesn't need a key
+  void *firstThat(unsigned char pc, HtFirstThatCallback cb, long arg1,
+		  long arg2, long arg3, long arg4);
+};
