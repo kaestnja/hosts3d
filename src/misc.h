@@ -86,5 +86,5 @@ char *strLower(const char *ms, char *ls);
 
 // strcasestr is missing on Windows
 #ifdef __MINGW32__
-char * strcasestr (const char *haystack, const char *needle);
+const char * strcasestr (const char *haystack, const char *needle);
 #endif

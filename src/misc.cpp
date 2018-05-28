@@ -168,13 +168,17 @@ char *strLower(const char *ms, char *ls)
 
 // strcasestr is missing on Windows, so we roll our own
 #ifdef __MINGW32__
-char * strcasestr (const char *haystack, const char *needle) {
+const char * strcasestr (const char *haystack, const char *needle) {
   /* Caller needs to sanitize arguments */
   const char *h_ptr;
   unsigned n_len = strlen(needle);
-  unsigned h_len = strlen(haystack) + 1;
+  unsigned h_len = strlen(haystack);
+  if ((h_len == 0) && (n_len == 0)) {
+    // Treat this as success
+    return haystack;
+  }
+  
   for (h_ptr = haystack; *h_ptr; h_ptr++) {
-    h_len--;
     if (h_len < n_len) {
       /* not enough haystack left to search */
       return 0;
@@ -182,7 +186,9 @@ char * strcasestr (const char *haystack, const char *needle) {
     if (0 == strncasecmp(h_ptr, needle, n_len)) {
       return h_ptr;
     }
+    h_len--;
   }
+  // Unreachable.
   return 0;
 }
 #endif
