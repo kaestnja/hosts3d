@@ -18,6 +18,7 @@
 #include <string.h>
 #include <sys/stat.h>  //struct stat, stat()
 #ifndef __MINGW32__
+#include <strings.h>    //strncasecmp()
 #include <arpa/inet.h>  //inet_addr()
 #endif
 
@@ -164,3 +165,24 @@ char *strLower(const char *ms, char *ls)
   for (unsigned int cnt = 0; cnt < strlen(ms); cnt++) ls[cnt] = tolower(ms[cnt]);
   return ls;
 }
+
+// strcasestr is missing on Windows, so we roll our own
+#ifdef __MINGW32__
+char * strcasestr (const char *haystack, const char *needle) {
+  /* Caller needs to sanitize arguments */
+  const char *h_ptr;
+  unsigned n_len = strlen(needle);
+  unsigned h_len = strlen(haystack) + 1;
+  for (h_ptr = haystack; *h_ptr; h_ptr++) {
+    h_len--;
+    if (h_len < n_len) {
+      /* not enough haystack left to search */
+      return 0;
+    }
+    if (0 == strncasecmp(h_ptr, needle, n_len)) {
+      return h_ptr;
+    }
+  }
+  return 0;
+}
+#endif

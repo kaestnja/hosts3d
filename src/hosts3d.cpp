@@ -85,8 +85,8 @@ HtKeyType keyFromIpAddress(in_addr ip) {
 // HtFirstThatCallback callback for hostIp()
 bool isHostIpAddress(void *data, long arg1, long arg2, long arg3, long arg4) {
   host_type *ht = (host_type *) data;
-  unsigned long s_addr = (unsigned long) arg1;
-  if (ht->hip.s_addr == s_addr) {
+  unsigned long saddress = (unsigned long) arg1;
+  if (ht->hip.s_addr == saddress) {
     return true;
   }
   return false;
