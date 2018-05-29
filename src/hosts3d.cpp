@@ -1548,7 +1548,10 @@ void GLFWCALL keyboardGL(int key, int action)
         while (goHosts == 1) usleep(1000);
       case 595: case 590: case 'T': case 'J': case 586: case 'P': case 592:
         if ((key == 595) || (key == 590)) seltd = 0;
-	hstsByPos.forEach(1, &keyboardForEachCb, (long) key, 0, 0, 0);
+	// Since the keyboardForEachCb callback changes the hosts' positions,
+	// we cannot iterate (forEach) over the hstsByPos hash-table; instead
+	// we walk over the hstsByIp hash-table.
+	hstsByIp.forEach(1, &keyboardForEachCb, (long) key, 0, 0, 0);
         goHosts = 0;
         break;
       case 'F':  //2D GUI find hosts
