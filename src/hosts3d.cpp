@@ -51,6 +51,7 @@ MyHT hstsByIp; // data struct that arranges hosts by ip address
 MyHT hstsByPos; // data struct that arranges hosts by (x, y, z) co-ordinates
 GLuint objsDraw;  //GL compiled objects
 MyGLWin GLWin;  //2D GUI
+bool useIpAddrForGlName; // if true, use the host's IP address as the 'name' for host GL objects. Otherwise use the host_type pointer.
 
 #ifdef __MINGW32__
 #define usleep(usec) (Sleep((usec) / 1000))
@@ -380,10 +381,18 @@ void allDestroy()
   hostsDestroy();
 }
 
+static inline GLuint nameFromHostType (host_type *ht)
+{
+  if (useIpAddrForGlName) {
+    return ht->hip.s_addr;
+  } else {
+    return (GLuint) ht;
+  }
+}
+
 void hostDrawCb(void **data, long arg1, long arg2, long arg3, long arg4)
 {
   host_type *ht = *((host_type **) data);
-  unsigned short *ptr_cnt = (unsigned short *) (void *) arg1;
   bool dips = (arg2 == 1l) ? true : false;
   bool anms = (arg3 == 1l) ? true : false;
 
@@ -393,7 +402,7 @@ void hostDrawCb(void **data, long arg1, long arg2, long arg3, long arg4)
     {
       glPushMatrix();
 
-      glLoadName(*ptr_cnt);
+      glLoadName(nameFromHostType(ht));
       glTranslated(ht->px, ht->py, ht->pz);
 
       if (ht->col)
@@ -421,7 +430,6 @@ void hostDrawCb(void **data, long arg1, long arg2, long arg3, long arg4)
 	ht->vis--;
     }
   }
-  (*ptr_cnt)++;
 }
 
 //draw host objects
@@ -449,9 +457,8 @@ void hostsDraw(GLenum mode)
     }
     if (animate && seltd->vis) seltd->vis--;
   }
-  unsigned short cnt = 1;
-  hstsByIp.forEach(1, hostDrawCb, (long)(void *)&cnt, dips ? 1l : 0l,
-		   anms ? 1l : 0l, 0);
+
+  hstsByIp.forEach(1, hostDrawCb, 0l, dips ? 1l : 0l, anms ? 1l : 0l, 0);
 }
 
 //draw link objects
@@ -2558,18 +2565,15 @@ void infoGeneral()
   }
 }
 
-bool findHostGlObjectCb(void *data, long arg1, long arg2, long arg3, long arg4)
+static inline host_type * hostTypeFromName (GLuint name)
 {
-  host_type *ht = (host_type *) data;
-  GLuint target = (GLuint) arg1;
-  GLuint *current = (GLuint *)(void *) arg2;
-
-  if (*current == target) {
-    return true;
+  if (useIpAddrForGlName) {
+    in_addr ip;
+    ip.s_addr = name;
+    return hostIP(ip, false);
+  } else {
+    return (host_type *) name;
   }
-
-  (*current)++;
-  return false;
 }
 
 //glfwSetMouseButtonCallback
@@ -2647,11 +2651,7 @@ void GLFWCALL clickGL(int button, int action)
               ptrnames = ptr + 2;
               if (*ptrnames)
               {
-		GLuint current = 1;
-                ht = (host_type *)hstsByIp.firstThat(1, &findHostGlObjectCb,
-						     (long) *ptrnames,
-						     (long)(void *) &current,
-						     0, 0);
+		ht = hostTypeFromName(*ptrnames);
                 ht->sld = 1;
               }
               else seltd->sld = 1;
@@ -2662,11 +2662,7 @@ void GLFWCALL clickGL(int button, int action)
           {
             if (*closest)
             {
-	      GLuint current = 1;
-	      ht = (host_type *) hstsByIp.firstThat(1, &findHostGlObjectCb,
-						    (long) *closest,
-						    (long)(void *) &current,
-						    0, 0);
+	      ht = hostTypeFromName(*closest);
               if (ht->sld)
               {
                 ht->sld = 0;
@@ -3041,9 +3037,28 @@ int main(int argc, char *argv[])
     fprintf(stderr, "hosts3d 1.15 usage: %s [-f]\n  -f : display full screen\n", argv[0]);
     return 1;
   }
+
 #ifndef __MINGW32__
   syslog(LOG_INFO, "started\n");
 #endif
+
+  // The following code decides what we use as the 'name' for the host GL
+  // object.
+  // The 'name' is a GLuint type, and is used by the glSelectBuffer()
+  // API to identify the host objects selected by the user.
+  // GLuint is always 32 bits wide, irrespective of the CPU architecture.
+  // On 32-bit systems, pointer sizes are also 32 bits, and we exploit this
+  // coincidence to just use the (host_type *) as the name. So the name->host
+  // lookup is an O(1) operation on 32-bit systems.
+  // We can't do this on 64-bit systems, so we use the host's IP address
+  // (IPv4 address = 32 bits) as the name. The name->host lookup will use the
+  // hstsByIp hash table and is a O(log n) operation.
+  if (sizeof(GLuint) < sizeof(host_type *)) {
+    useIpAddrForGlName = true;
+  } else {
+    useIpAddrForGlName = false;
+  }
+
   if (!glfwInit())
   {
     fprintf(stderr, "hosts3d error: glfwInit() failed\n");
