@@ -1,0 +1,666 @@
+{
+  "Version": 1,
+  "WorkspaceRootPath": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\",
+  "Documents": [
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\etc\\security\\console.apps\\hsen||{8B382828-6202-11D1-8870-0000F87579D2}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:etc\\security\\console.apps\\hsen||{8B382828-6202-11D1-8870-0000F87579D2}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\etc\\pam.d\\hsen||{8B382828-6202-11D1-8870-0000F87579D2}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:etc\\pam.d\\hsen||{8B382828-6202-11D1-8870-0000F87579D2}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\etc\\init.d\\hsen||{8B382828-6202-11D1-8870-0000F87579D2}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:etc\\init.d\\hsen||{8B382828-6202-11D1-8870-0000F87579D2}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\etc\\default\\hsen||{8B382828-6202-11D1-8870-0000F87579D2}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:etc\\default\\hsen||{8B382828-6202-11D1-8870-0000F87579D2}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\man\\Makefile.in||{8B382828-6202-11D1-8870-0000F87579D2}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:man\\Makefile.in||{8B382828-6202-11D1-8870-0000F87579D2}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\man\\Makefile.am||{8B382828-6202-11D1-8870-0000F87579D2}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:man\\Makefile.am||{8B382828-6202-11D1-8870-0000F87579D2}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\man\\hsen.1||{8B382828-6202-11D1-8870-0000F87579D2}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:man\\hsen.1||{8B382828-6202-11D1-8870-0000F87579D2}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\man\\hosts3d.1||{8B382828-6202-11D1-8870-0000F87579D2}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:man\\hosts3d.1||{8B382828-6202-11D1-8870-0000F87579D2}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\BUILDINGNOTES.txt||{8B382828-6202-11D1-8870-0000F87579D2}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:BUILDINGNOTES.txt||{8B382828-6202-11D1-8870-0000F87579D2}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\aclocal.m4||{8B382828-6202-11D1-8870-0000F87579D2}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:aclocal.m4||{8B382828-6202-11D1-8870-0000F87579D2}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\src\\proto.h||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:src\\proto.h||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\src\\proto.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:src\\proto.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\src\\objects.h||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:src\\objects.h||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\src\\objects.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:src\\objects.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\src\\misc.h||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:src\\misc.h||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\src\\misc.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:src\\misc.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\src\\Makefile.in||{8B382828-6202-11D1-8870-0000F87579D2}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:src\\Makefile.in||{8B382828-6202-11D1-8870-0000F87579D2}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\src\\Makefile.am||{8B382828-6202-11D1-8870-0000F87579D2}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:src\\Makefile.am||{8B382828-6202-11D1-8870-0000F87579D2}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\src\\llist.h||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:src\\llist.h||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\src\\llist.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:src\\llist.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\src\\hsen.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:src\\hsen.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\src\\hosts3d.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:src\\hosts3d.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\src\\glwin.h||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:src\\glwin.h||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\src\\glwin.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:src\\glwin.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\src\\common.h||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:src\\common.h||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\missing||{8B382828-6202-11D1-8870-0000F87579D2}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:missing||{8B382828-6202-11D1-8870-0000F87579D2}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\Makefile.in||{8B382828-6202-11D1-8870-0000F87579D2}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:Makefile.in||{8B382828-6202-11D1-8870-0000F87579D2}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\Makefile.am||{8B382828-6202-11D1-8870-0000F87579D2}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:Makefile.am||{8B382828-6202-11D1-8870-0000F87579D2}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\install-sh||{8B382828-6202-11D1-8870-0000F87579D2}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:install-sh||{8B382828-6202-11D1-8870-0000F87579D2}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\COPYING||{8B382828-6202-11D1-8870-0000F87579D2}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:COPYING||{8B382828-6202-11D1-8870-0000F87579D2}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\configure.ac||{8B382828-6202-11D1-8870-0000F87579D2}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:configure.ac||{8B382828-6202-11D1-8870-0000F87579D2}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\configure||{8B382828-6202-11D1-8870-0000F87579D2}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:configure||{8B382828-6202-11D1-8870-0000F87579D2}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\config.h.in||{8B382828-6202-11D1-8870-0000F87579D2}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:config.h.in||{8B382828-6202-11D1-8870-0000F87579D2}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\compile-hsen||{8B382828-6202-11D1-8870-0000F87579D2}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:compile-hsen||{8B382828-6202-11D1-8870-0000F87579D2}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\compile-hosts3d||{8B382828-6202-11D1-8870-0000F87579D2}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:compile-hosts3d||{8B382828-6202-11D1-8870-0000F87579D2}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\compile-hsen.bat||{3B902123-F8A7-4915-9F01-361F908088D0}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:compile-hsen.bat||{3B902123-F8A7-4915-9F01-361F908088D0}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\compile-hosts3d.bat||{3B902123-F8A7-4915-9F01-361F908088D0}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:compile-hosts3d.bat||{3B902123-F8A7-4915-9F01-361F908088D0}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\README||{8B382828-6202-11D1-8870-0000F87579D2}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:README||{8B382828-6202-11D1-8870-0000F87579D2}"
+    }
+  ],
+  "DocumentGroupContainers": [
+    {
+      "Orientation": 0,
+      "VerticalTabListWidth": 256,
+      "DocumentGroups": [
+        {
+          "DockedWidth": 200,
+          "SelectedChildIndex": 0,
+          "Children": [
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "hsen",
+              "DocumentMoniker": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\etc\\security\\console.apps\\hsen",
+              "RelativeDocumentMoniker": "etc\\security\\console.apps\\hsen",
+              "ToolTip": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\etc\\security\\console.apps\\hsen",
+              "RelativeToolTip": "etc\\security\\console.apps\\hsen",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
+              "WhenOpened": "2025-06-15T23:47:26.459Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 1,
+              "Title": "hsen",
+              "DocumentMoniker": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\etc\\pam.d\\hsen",
+              "RelativeDocumentMoniker": "etc\\pam.d\\hsen",
+              "ToolTip": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\etc\\pam.d\\hsen",
+              "RelativeToolTip": "etc\\pam.d\\hsen",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
+              "WhenOpened": "2025-06-15T23:47:19.045Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 2,
+              "Title": "hsen",
+              "DocumentMoniker": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\etc\\init.d\\hsen",
+              "RelativeDocumentMoniker": "etc\\init.d\\hsen",
+              "ToolTip": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\etc\\init.d\\hsen",
+              "RelativeToolTip": "etc\\init.d\\hsen",
+              "ViewState": "AgIAABsAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
+              "WhenOpened": "2025-06-15T23:47:10.592Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 3,
+              "Title": "hsen",
+              "DocumentMoniker": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\etc\\default\\hsen",
+              "RelativeDocumentMoniker": "etc\\default\\hsen",
+              "ToolTip": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\etc\\default\\hsen",
+              "RelativeToolTip": "etc\\default\\hsen",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
+              "WhenOpened": "2025-06-15T23:47:02.121Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 4,
+              "Title": "Makefile.in",
+              "DocumentMoniker": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\man\\Makefile.in",
+              "RelativeDocumentMoniker": "man\\Makefile.in",
+              "ToolTip": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\man\\Makefile.in",
+              "RelativeToolTip": "man\\Makefile.in",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
+              "WhenOpened": "2025-06-15T23:46:57.821Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 5,
+              "Title": "Makefile.am",
+              "DocumentMoniker": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\man\\Makefile.am",
+              "RelativeDocumentMoniker": "man\\Makefile.am",
+              "ToolTip": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\man\\Makefile.am",
+              "RelativeToolTip": "man\\Makefile.am",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
+              "WhenOpened": "2025-06-15T23:46:56.092Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 6,
+              "Title": "hsen.1",
+              "DocumentMoniker": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\man\\hsen.1",
+              "RelativeDocumentMoniker": "man\\hsen.1",
+              "ToolTip": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\man\\hsen.1",
+              "RelativeToolTip": "man\\hsen.1",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
+              "WhenOpened": "2025-06-15T23:46:52.401Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 7,
+              "Title": "hosts3d.1",
+              "DocumentMoniker": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\man\\hosts3d.1",
+              "RelativeDocumentMoniker": "man\\hosts3d.1",
+              "ToolTip": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\man\\hosts3d.1",
+              "RelativeToolTip": "man\\hosts3d.1",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
+              "WhenOpened": "2025-06-15T23:46:49.007Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 8,
+              "Title": "BUILDINGNOTES.txt",
+              "DocumentMoniker": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\BUILDINGNOTES.txt",
+              "RelativeDocumentMoniker": "BUILDINGNOTES.txt",
+              "ToolTip": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\BUILDINGNOTES.txt",
+              "RelativeToolTip": "BUILDINGNOTES.txt",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.003109|",
+              "WhenOpened": "2025-06-15T23:46:45.236Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 9,
+              "Title": "aclocal.m4",
+              "DocumentMoniker": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\aclocal.m4",
+              "RelativeDocumentMoniker": "aclocal.m4",
+              "ToolTip": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\aclocal.m4",
+              "RelativeToolTip": "aclocal.m4",
+              "ViewState": "AgIAAKUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
+              "WhenOpened": "2025-06-15T23:46:39.539Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 10,
+              "Title": "proto.h",
+              "DocumentMoniker": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\src\\proto.h",
+              "RelativeDocumentMoniker": "src\\proto.h",
+              "ToolTip": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\src\\proto.h",
+              "RelativeToolTip": "src\\proto.h",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000680|",
+              "WhenOpened": "2025-06-15T23:46:37.487Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 11,
+              "Title": "proto.cpp",
+              "DocumentMoniker": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\src\\proto.cpp",
+              "RelativeDocumentMoniker": "src\\proto.cpp",
+              "ToolTip": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\src\\proto.cpp",
+              "RelativeToolTip": "src\\proto.cpp",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000677|",
+              "WhenOpened": "2025-06-15T23:46:34.677Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 12,
+              "Title": "objects.h",
+              "DocumentMoniker": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\src\\objects.h",
+              "RelativeDocumentMoniker": "src\\objects.h",
+              "ToolTip": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\src\\objects.h",
+              "RelativeToolTip": "src\\objects.h",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000680|",
+              "WhenOpened": "2025-06-15T23:46:32.534Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 13,
+              "Title": "objects.cpp",
+              "DocumentMoniker": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\src\\objects.cpp",
+              "RelativeDocumentMoniker": "src\\objects.cpp",
+              "ToolTip": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\src\\objects.cpp",
+              "RelativeToolTip": "src\\objects.cpp",
+              "ViewState": "AgIAABYCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000677|",
+              "WhenOpened": "2025-06-15T23:46:05.924Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 14,
+              "Title": "misc.h",
+              "DocumentMoniker": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\src\\misc.h",
+              "RelativeDocumentMoniker": "src\\misc.h",
+              "ToolTip": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\src\\misc.h",
+              "RelativeToolTip": "src\\misc.h",
+              "ViewState": "AgIAADMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000680|",
+              "WhenOpened": "2025-06-15T23:46:00.452Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 15,
+              "Title": "misc.cpp",
+              "DocumentMoniker": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\src\\misc.cpp",
+              "RelativeDocumentMoniker": "src\\misc.cpp",
+              "ToolTip": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\src\\misc.cpp",
+              "RelativeToolTip": "src\\misc.cpp",
+              "ViewState": "AgIAAKgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000677|",
+              "WhenOpened": "2025-06-15T23:45:54.373Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 16,
+              "Title": "Makefile.in",
+              "DocumentMoniker": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\src\\Makefile.in",
+              "RelativeDocumentMoniker": "src\\Makefile.in",
+              "ToolTip": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\src\\Makefile.in",
+              "RelativeToolTip": "src\\Makefile.in",
+              "ViewState": "AgIAAIkBAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
+              "WhenOpened": "2025-06-15T23:45:43.025Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 17,
+              "Title": "Makefile.am",
+              "DocumentMoniker": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\src\\Makefile.am",
+              "RelativeDocumentMoniker": "src\\Makefile.am",
+              "ToolTip": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\src\\Makefile.am",
+              "RelativeToolTip": "src\\Makefile.am",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
+              "WhenOpened": "2025-06-15T23:45:41.016Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 18,
+              "Title": "llist.h",
+              "DocumentMoniker": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\src\\llist.h",
+              "RelativeDocumentMoniker": "src\\llist.h",
+              "ToolTip": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\src\\llist.h",
+              "RelativeToolTip": "src\\llist.h",
+              "ViewState": "AgIAABgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000680|",
+              "WhenOpened": "2025-06-15T23:45:37.429Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 19,
+              "Title": "llist.cpp",
+              "DocumentMoniker": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\src\\llist.cpp",
+              "RelativeDocumentMoniker": "src\\llist.cpp",
+              "ToolTip": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\src\\llist.cpp",
+              "RelativeToolTip": "src\\llist.cpp",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000677|",
+              "WhenOpened": "2025-06-15T23:41:48.138Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 20,
+              "Title": "hsen.cpp",
+              "DocumentMoniker": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\src\\hsen.cpp",
+              "RelativeDocumentMoniker": "src\\hsen.cpp",
+              "ToolTip": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\src\\hsen.cpp",
+              "RelativeToolTip": "src\\hsen.cpp",
+              "ViewState": "AgIAAAwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000677|",
+              "WhenOpened": "2025-06-15T23:41:42.277Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 21,
+              "Title": "hosts3d.cpp",
+              "DocumentMoniker": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\src\\hosts3d.cpp",
+              "RelativeDocumentMoniker": "src\\hosts3d.cpp",
+              "ToolTip": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\src\\hosts3d.cpp",
+              "RelativeToolTip": "src\\hosts3d.cpp",
+              "ViewState": "AgIAAPQKAAAAAAAAAAAlwAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000677|",
+              "WhenOpened": "2025-06-15T23:40:56.493Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 22,
+              "Title": "glwin.h",
+              "DocumentMoniker": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\src\\glwin.h",
+              "RelativeDocumentMoniker": "src\\glwin.h",
+              "ToolTip": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\src\\glwin.h",
+              "RelativeToolTip": "src\\glwin.h",
+              "ViewState": "AgIAAHIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000680|",
+              "WhenOpened": "2025-06-15T23:40:49.864Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 23,
+              "Title": "glwin.cpp",
+              "DocumentMoniker": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\src\\glwin.cpp",
+              "RelativeDocumentMoniker": "src\\glwin.cpp",
+              "ToolTip": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\src\\glwin.cpp",
+              "RelativeToolTip": "src\\glwin.cpp",
+              "ViewState": "AgIAAPMFAAAAiPAewvspwAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000677|",
+              "WhenOpened": "2025-06-15T23:39:59.338Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 24,
+              "Title": "common.h",
+              "DocumentMoniker": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\src\\common.h",
+              "RelativeDocumentMoniker": "src\\common.h",
+              "ToolTip": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\src\\common.h",
+              "RelativeToolTip": "src\\common.h",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000680|",
+              "WhenOpened": "2025-06-15T23:39:47.775Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 26,
+              "Title": "Makefile.in",
+              "DocumentMoniker": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\Makefile.in",
+              "RelativeDocumentMoniker": "Makefile.in",
+              "ToolTip": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\Makefile.in",
+              "RelativeToolTip": "Makefile.in",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
+              "WhenOpened": "2025-06-15T23:39:39.682Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 27,
+              "Title": "Makefile.am",
+              "DocumentMoniker": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\Makefile.am",
+              "RelativeDocumentMoniker": "Makefile.am",
+              "ToolTip": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\Makefile.am",
+              "RelativeToolTip": "Makefile.am",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
+              "WhenOpened": "2025-06-15T23:39:38.568Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 28,
+              "Title": "install-sh",
+              "DocumentMoniker": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\install-sh",
+              "RelativeDocumentMoniker": "install-sh",
+              "ToolTip": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\install-sh",
+              "RelativeToolTip": "install-sh",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
+              "WhenOpened": "2025-06-15T23:39:32.448Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 29,
+              "Title": "COPYING",
+              "DocumentMoniker": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\COPYING",
+              "RelativeDocumentMoniker": "COPYING",
+              "ToolTip": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\COPYING",
+              "RelativeToolTip": "COPYING",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
+              "WhenOpened": "2025-06-15T23:39:31.311Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 30,
+              "Title": "configure.ac",
+              "DocumentMoniker": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\configure.ac",
+              "RelativeDocumentMoniker": "configure.ac",
+              "ToolTip": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\configure.ac",
+              "RelativeToolTip": "configure.ac",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
+              "WhenOpened": "2025-06-15T23:39:28.004Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 31,
+              "Title": "configure",
+              "DocumentMoniker": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\configure",
+              "RelativeDocumentMoniker": "configure",
+              "ToolTip": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\configure",
+              "RelativeToolTip": "configure",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
+              "WhenOpened": "2025-06-15T23:39:23.193Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 32,
+              "Title": "config.h.in",
+              "DocumentMoniker": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\config.h.in",
+              "RelativeDocumentMoniker": "config.h.in",
+              "ToolTip": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\config.h.in",
+              "RelativeToolTip": "config.h.in",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
+              "WhenOpened": "2025-06-15T23:39:21.678Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 33,
+              "Title": "compile-hsen",
+              "DocumentMoniker": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\compile-hsen",
+              "RelativeDocumentMoniker": "compile-hsen",
+              "ToolTip": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\compile-hsen",
+              "RelativeToolTip": "compile-hsen",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
+              "WhenOpened": "2025-06-15T23:39:20.278Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 35,
+              "Title": "compile-hsen.bat",
+              "DocumentMoniker": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\compile-hsen.bat",
+              "RelativeDocumentMoniker": "compile-hsen.bat",
+              "ToolTip": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\compile-hsen.bat",
+              "RelativeToolTip": "compile-hsen.bat",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "00000000-0000-0000-0000-000000000000.000000|iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAE8SURBVDhPvZJNSwJRGIWfmcaQiH6DEdEHFBEFBe6KoKKoTf8iAlOmgdbipqBf0rKICAuDkj4WERgulL5o06gLx9S53lZJzrVQgh54uXDOuefdvPAXpJReqW00y4xkQAa8RmtoWb2dz4tLKw0vyACWGZaVSkWZ48SVPDpLKvr3scyw1BtWAPfpLIenl9i5PO92jv2DODd3KW\u002BsjlJg6DqOU2JidIjJsWGckoNhKLE6iuMKQbVaQdQENSFwq1VcV3hjdZSCcrmMBsTPk5wkLtA0SF7f4pQ\u002BvFFoVjA\u002BMsja8hw93V0IV/D69sLj8xOx3T1SD2lvXC34YnVhlvmZIIV8gei2Sd628fs7vbGfCwCKRQdDh/VQBJ\u002Bvo\u002Bnl/low0N/HVmiD4PQUO7EovQH15jTL3MyApjotIbNe5f/5BEiOoURWS5r0AAAAAElFTkSuQmCC",
+              "WhenOpened": "2025-06-15T23:37:11.578Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 36,
+              "Title": "compile-hosts3d.bat",
+              "DocumentMoniker": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\compile-hosts3d.bat",
+              "RelativeDocumentMoniker": "compile-hosts3d.bat",
+              "ToolTip": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\compile-hosts3d.bat",
+              "RelativeToolTip": "compile-hosts3d.bat",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "00000000-0000-0000-0000-000000000000.000000|iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAE8SURBVDhPvZJNSwJRGIWfmcaQiH6DEdEHFBEFBe6KoKKoTf8iAlOmgdbipqBf0rKICAuDkj4WERgulL5o06gLx9S53lZJzrVQgh54uXDOuefdvPAXpJReqW00y4xkQAa8RmtoWb2dz4tLKw0vyACWGZaVSkWZ48SVPDpLKvr3scyw1BtWAPfpLIenl9i5PO92jv2DODd3KW\u002BsjlJg6DqOU2JidIjJsWGckoNhKLE6iuMKQbVaQdQENSFwq1VcV3hjdZSCcrmMBsTPk5wkLtA0SF7f4pQ\u002BvFFoVjA\u002BMsja8hw93V0IV/D69sLj8xOx3T1SD2lvXC34YnVhlvmZIIV8gei2Sd628fs7vbGfCwCKRQdDh/VQBJ\u002Bvo\u002Bnl/low0N/HVmiD4PQUO7EovQH15jTL3MyApjotIbNe5f/5BEiOoURWS5r0AAAAAElFTkSuQmCC",
+              "WhenOpened": "2025-06-15T23:34:00.445Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 37,
+              "Title": "README",
+              "DocumentMoniker": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\README",
+              "RelativeDocumentMoniker": "README",
+              "ToolTip": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\README",
+              "RelativeToolTip": "README",
+              "ViewState": "AgIAAB4AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
+              "WhenOpened": "2025-06-15T23:33:12.691Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 25,
+              "Title": "missing",
+              "DocumentMoniker": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\missing",
+              "RelativeDocumentMoniker": "missing",
+              "ToolTip": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\missing",
+              "RelativeToolTip": "missing",
+              "ViewState": "AgIAAEcBAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
+              "WhenOpened": "2025-06-15T23:32:30.122Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 34,
+              "Title": "compile-hosts3d",
+              "DocumentMoniker": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\compile-hosts3d",
+              "RelativeDocumentMoniker": "compile-hosts3d",
+              "ToolTip": "C:\\Users\\kaestnja\\source\\repos\\github.com\\kaestnja\\hosts3d\\compile-hosts3d",
+              "RelativeToolTip": "compile-hosts3d",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
+              "WhenOpened": "2025-06-15T23:32:08.562Z",
+              "EditorCaption": ""
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
