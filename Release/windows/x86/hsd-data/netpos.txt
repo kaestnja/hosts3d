@@ -1,1 +1,0 @@
-#pos net x-position y-position z-position colour
