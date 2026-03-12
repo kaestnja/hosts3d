@@ -1,5 +1,6 @@
 # Build artifacts
 src/*.o
+.vs/
 
 # Machine-local runtime/helper config
 start-hsenW.local.bat
