@@ -1,0 +1,63 @@
+Left Mouse Button	Select Host
+	Click-and-Drag to Select Multiple Hosts
+	Click Selected Host to Toggle Persistant IP/Name
+Middle Mouse Button	Click-and-Drag to Change View
+Right Mouse Button	Show Menu
+Mouse Wheel	Move Up/Down
+Up/Down	Move Forward/Back
+Left/Right	Move Left/Right
+Shift + Up/Down/Left/Right	Move at Triple Speed
+Home	Recall Home View
+Ctrl + Home	Recall Alternate Home View
+Ctrl + F1-F4	Recall View Position 1-4
+Ctrl	Multi-Select
+Ctrl + A	Select All Hosts
+Ctrl + S	Invert Selection
+Q/E	Move Selection Up/Down
+W/S	Move Selection Forward/Back
+A/D	Move Selection Left/Right
+F	Find Hosts
+Tab	Select Next Host in Selection
+Ctrl + Tab	Select Previous Host in Selection
+T	Toggle Persistant IP/Name for Selection
+C	Cycle Show IP - IP/Name - Name Only
+Ctrl + D	Toggle Add Destination Hosts [D]
+M	Make Host
+N	Edit Hostname for Selected Host
+Ctrl + N	Select All Named Hosts
+R	Edit Remarks for Selected Host
+L	Press Twice with Different Selected Hosts for Link Line
+Ctrl + L	Delete Link Line (2nd Selected Host, Press L on 1st)
+Y	Automatic Link Lines for All Hosts
+Ctrl + Y	Toggle Automatic Link Lines for New Hosts [L]
+J	Automatic Link Lines for Selection
+Ctrl + J	Stop Automatic Link Lines for Selection
+Ctrl + R	Delete Link Lines for All Hosts
+P	Show Packets for Selection
+Ctrl + P	Stop Showing Packets for Selection
+U	Show Packets for All Hosts
+Ctrl + U	Toggle Show Packets for New Hosts [P]
+F1-F4	Show Packets from Sensor 1-4
+F5	Show Packets from All Sensors
+[  ]	Change Sensor to Show Packets from
+B	Toggle Show Simulated Broadcasts [B]
+-  +	Decrease/Increase Allowed Packets
+Ctrl + T	Toggle Show Packet Destination Port
+Z	Toggle Double Speed Packets [F]
+K	Packets Off
+Page Down	Record Packet Traffic
+Insert	Replay Recorded Packet Traffic
+Page Up	Skip to Next Packet during Replay Traffic
+End	Stop Record/Replay of Packet Traffic
+F7	Open Packet Traffic File...
+F8	Save Packet Traffic File As...
+Space	Toggle Pause Animation
+Ctrl + X	Cut Input Box Text
+Ctrl + C	Copy Input Box Text
+Ctrl + V	Paste Input Box Text
+Ctrl + K	Acknowledge All Anomalies
+O	Toggle Show OSD
+X	Export Selection Details in CSV File As...
+I	Show Selected Host Information
+G	Show Selection Information
+H	Show Help

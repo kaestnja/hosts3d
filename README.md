@@ -1,0 +1,542 @@
+# Hosts3D 1.16
+
+> 3D Real-Time Network Monitor (legacy project, modernized build workflow)  
+> Original upstream release: 10 May 2011, Del Castle
+
+## Website
+- http://hosts3d.sourceforge.net/
+
+## Project Status
+This repository is an independent, community-maintained continuation of the original Hosts3D 1.15 codebase.
+
+- Original upstream project and authorship remain credited to Del Castle.
+- This repository is not an official upstream by the original author.
+- The original SourceForge page is kept as historical reference.
+
+For attribution and maintenance context:
+- See `CREDITS.md`
+- See `CHANGELOG.md` (continuation history)
+- See `ChangeLog` (legacy upstream history up to 1.15)
+
+## What This Project Does
+`Hosts3D` visualizes hosts and packet traffic in a 3D scene.  
+`hsen` (Hosts3D Sensor) captures packet headers and sends compact packet metadata via UDP to `Hosts3D` (local or remote).
+
+Core capabilities:
+- Multiple sensors (`hsen`) feeding one or more `Hosts3D` instances
+- Hostname/service discovery from observed traffic
+- Configurable network layout and host grouping
+- Packet recording/replay (`.hpt`)
+- Filtering by host, protocol, and port
+
+## License
+GNU General Public License v2
+
+## Requirements
+
+### Hardware
+- Scroll mouse
+- OpenGL-capable graphics card with installed drivers
+
+### Software By Platform
+| Platform | Runtime | Build Toolchain |
+|---|---|---|
+| Linux | `libglfw`, `libpcap` | `g++`, `libglfw-dev`, `libpcap-dev` |
+| macOS | GLFW | GCC/Clang + GLFW |
+| FreeBSD | `hsen` supported | standard C/C++ toolchain |
+| Windows | Npcap/WinPcap-compatible runtime | MinGW (MSYS2) + GLFW + Wpcap/Npcap SDK files |
+
+## Build and Installation
+
+### Linux (legacy upstream flow)
+```bash
+./configure
+make
+sudo make install
+```
+
+Uninstall:
+```bash
+sudo make uninstall
+```
+
+Alternative manual binaries:
+```bash
+./compile-hsen
+./compile-hosts3d
+```
+
+### macOS (legacy upstream flow)
+```bash
+./compile-hsen
+./compile-mac-hosts3d
+```
+
+### FreeBSD (`hsen`)
+```bash
+./compile-hsen
+```
+
+### Windows 11 Quick Start (MSYS2 + MinGW32)
+> If `g++` is missing (`g++ is not recognized`), install toolchain first.
+
+```powershell
+winget install -e --id MSYS2.MSYS2
+C:\msys64\usr\bin\bash -lc "pacman -Syu --noconfirm"
+C:\msys64\usr\bin\bash -lc "pacman -S --needed --noconfirm mingw-w64-i686-gcc mingw-w64-i686-binutils make"
+```
+
+```powershell
+$env:Path = "C:\msys64\mingw32\bin;$env:Path"
+g++ --version
+g++ -dumpmachine
+```
+
+Expected target:
+```text
+i686-w64-mingw32
+```
+
+Build:
+```powershell
+cd C:\Users\kaestnja\source\repos\github.com\kaestnja\hosts3d
+.\compile-hosts3d.bat Release
+.\compile-hsen.bat Release
+```
+
+## Build Output Layout
+Build scripts place binaries into config/os/arch folders:
+
+| Binary | Release path | Debug path |
+|---|---|---|
+| Hosts3D | `Release/windows/x86/Hosts3D.exe` | `Debug/windows/x86/Hosts3D.exe` |
+| hsen | `Release/windows/x86/hsen.exe` | `Debug/windows/x86/hsen.exe` |
+
+Notes:
+- Scripts overwrite known targets but do not wipe the whole `Release`/`Debug` tree.
+- Local dependency layout for build scripts: see `third_party/README.md`.
+- Archived old binaries for comparison: `Original/windows/x86/`.
+- Portable Wireshark helper location: `Tools/Wireshark/`.
+
+## Start Helpers (Windows)
+```powershell
+.\start-Hosts3DW.bat Release x86 window
+.\start-Hosts3DW.bat Release x86 fullscreen
+.\start-hsenW.bat Release x86
+```
+
+If `start-hsenW.local.bat` is missing:
+- `start-hsenW.bat` creates `hsen-interfaces-<COMPUTERNAME>.txt`
+- it copies `start-hsenW.local.example.bat` to `start-hsenW.local.bat`
+- set `HSEN_IFACE` in `start-hsenW.local.bat`
+
+Example:
+```bat
+set "HSEN_IFACE=\Device\NPF_{E4ED794E-A66F-451C-851E-91226CD96BA4}"
+```
+
+## Runtime Dependencies and Common Errors
+
+### Error: `libwinpthread-1.dll was not found`
+- Re-run build scripts.
+- They auto-copy `libwinpthread-1.dll` to the target output folder.
+
+### `hsen.exe` packet-capture DLLs
+- `wpcap.dll` and `Packet.dll` are copied from local `third_party` first.
+- If missing there, scripts can copy from installed Npcap system paths.
+
+### Firewall
+`hsen` communicates with `Hosts3D` over UDP port `10111`.
+
+## Start Order and CLI
+Start order does not matter.  
+If `hsen` runs while `Hosts3D` is not listening, ICMP Port Unreachable (UDP 10111) can appear.
+
+### Hosts3D
+```text
+hosts3d [-f]
+  -f  full screen
+```
+
+### hsen
+```text
+hsen <id> <interface/file> [<destination>] [-p] [-d]
+  id          sensor id (1-255)
+  interface   interface name (or packet file)
+  destination Hosts3D IP/broadcast (default: localhost)
+  -p          promiscuous mode
+  -d          daemon mode (Linux/macOS)
+```
+
+Windows interface listing:
+```text
+hsen -d
+```
+
+## Safe Stop (Windows)
+PowerShell:
+```powershell
+Get-Process Hosts3D,hsen -ErrorAction SilentlyContinue | Stop-Process
+Get-Process Hosts3D,hsen -ErrorAction SilentlyContinue | Stop-Process -Force
+```
+
+cmd:
+```cmd
+taskkill /IM Hosts3D.exe /T
+taskkill /IM hsen.exe /T
+```
+
+## Data Files
+Runtime data directory:
+- Linux/macOS: `.hosts3d`
+- Windows: `hsd-data`
+
+Main files:
+
+| File | Purpose |
+|---|---|
+| `controls.txt` | generated controls/help text |
+| `settings-hsd` | settings blob |
+| `0network.hnl` | network layout on exit |
+| `1network.hnl`..`4network.hnl` | saved layouts |
+| `netpos.txt` | CIDR-to-position/color mapping |
+| `traffic.hpt` | packet traffic record |
+| `tmp-hinfo-hsd` | temporary host/selection info |
+| `tmp-netpos-hsd` | temporary net positions |
+| `tmp-flist-hsd` | temporary file list |
+
+## Net Positions (`netpos.txt`)
+Format:
+```text
+pos net x-position y-position z-position colour
+```
+
+Example:
+```text
+pos 123.123.123.123/32 10 0 -10 green
+```
+
+Host positioning axes:
+- Grey/Red: positive x
+- Blue/Green: negative x
+- Up: positive y
+- Down: negative y
+- Grey/Blue: positive z
+- Red/Green: negative z
+
+Allowed color tokens:
+- `default`, `orange`, `yellow`, `fluro`, `green`, `mint`, `aqua`, `blue`, `purple`, `violet`, `hold`
+
+`hold` keeps hosts in place (no color reassignment).
+
+## Visual Mapping (Current Code)
+This section reflects current implementation (`src/misc.h`, `src/objects.cpp`, `src/hosts3d.cpp`).
+
+### Palette (RGB)
+| Name | RGB |
+|---|---|
+| white | `255,255,255` |
+| bright red | `255,50,50` |
+| red | `200,50,50` |
+| orange | `220,170,50` |
+| yellow | `200,200,50` |
+| fluro | `170,220,50` |
+| green | `50,200,50` |
+| mint | `50,220,170` |
+| aqua | `50,200,200` |
+| sky (blue host tone) | `50,170,220` |
+| blue | `50,50,200` |
+| purple | `170,50,220` |
+| violet | `200,50,200` |
+| bright grey | `200,200,200` |
+| grey | `150,150,150` |
+| dull grey | `100,100,100` |
+
+### Host and Packet Visual Rules
+| Element | Mapping |
+|---|---|
+| Host colors | default/grey, orange, yellow, fluro, green, mint, aqua, blue(sky), purple, violet |
+| Selected host | bright red |
+| Multi-host collision object | red/yellow/green tones; selected variant in bright red tones |
+| ICMP packet | red |
+| TCP packet | green |
+| UDP packet | blue |
+| ARP packet | yellow |
+| Other/fragmented packet | grey |
+| Anomaly alert | bright red |
+| On-active alert | protocol color |
+| Link lines | dull grey |
+| OSD/text/labels/port labels | white |
+
+### 3D Object Types
+| Object | Purpose |
+|---|---|
+| Cross object | orientation/zone reference |
+| Host object | normal host marker |
+| Multiple-host object | host collision marker |
+| Packet object | animated packet marker |
+| Alert object (active) | expanding wireframe box |
+| Alert object (anomaly) | expanding anomaly wireframe marker |
+
+## Controls and Interaction
+Press `H` in Hosts3D to open the in-app help pane (`controls.txt` content).
+
+Source of truth:
+- `src/objects.cpp`: `checkControls()` writes `controls.txt`
+- `src/hosts3d.cpp`: `keyboardGL()`, `clickGL()`, `wheelGL()`, `motionGL()`
+
+Maintenance rule:
+- If controls change, update both `README.md` and `checkControls()` to keep docs and in-app help synchronized.
+
+Runtime behavior not explicitly listed in `controls.txt`:
+- Single-clicking a multi-host collision object cycles through hosts in that cluster.
+- Mouse wheel in 3D mode moves camera up/down directly (no modifier required).
+
+### Controls List (Verbatim From `checkControls()`)
+Legacy spelling is preserved for parity: `Persistant`.
+
+```text
+Left Mouse Button	Select Host
+	Click-and-Drag to Select Multiple Hosts
+	Click Selected Host to Toggle Persistant IP/Name
+Middle Mouse Button	Click-and-Drag to Change View
+Right Mouse Button	Show Menu
+Mouse Wheel	Move Up/Down
+Up/Down	Move Forward/Back
+Left/Right	Move Left/Right
+Shift + Up/Down/Left/Right	Move at Triple Speed
+Home	Recall Home View
+Ctrl + Home	Recall Alternate Home View
+Ctrl + F1-F4	Recall View Position 1-4
+Ctrl	Multi-Select
+Ctrl + A	Select All Hosts
+Ctrl + S	Invert Selection
+Q/E	Move Selection Up/Down
+W/S	Move Selection Forward/Back
+A/D	Move Selection Left/Right
+F	Find Hosts
+Tab	Select Next Host in Selection
+Ctrl + Tab	Select Previous Host in Selection
+T	Toggle Persistant IP/Name for Selection
+C	Cycle Show IP - IP/Name - Name Only
+Ctrl + D	Toggle Add Destination Hosts [D]
+M	Make Host
+N	Edit Hostname for Selected Host
+Ctrl + N	Select All Named Hosts
+R	Edit Remarks for Selected Host
+L	Press Twice with Different Selected Hosts for Link Line
+Ctrl + L	Delete Link Line (2nd Selected Host, Press L on 1st)
+Y	Automatic Link Lines for All Hosts
+Ctrl + Y	Toggle Automatic Link Lines for New Hosts [L]
+J	Automatic Link Lines for Selection
+Ctrl + J	Stop Automatic Link Lines for Selection
+Ctrl + R	Delete Link Lines for All Hosts
+P	Show Packets for Selection
+Ctrl + P	Stop Showing Packets for Selection
+U	Show Packets for All Hosts
+Ctrl + U	Toggle Show Packets for New Hosts [P]
+F1-F4	Show Packets from Sensor 1-4
+F5	Show Packets from All Sensors
+[  ]	Change Sensor to Show Packets from
+B	Toggle Show Simulated Broadcasts [B]
+-  +	Decrease/Increase Allowed Packets
+Ctrl + T	Toggle Show Packet Destination Port
+Z	Toggle Double Speed Packets [F]
+K	Packets Off
+Page Down	Record Packet Traffic
+Insert	Replay Recorded Packet Traffic
+Page Up	Skip to Next Packet during Replay Traffic
+End	Stop Record/Replay of Packet Traffic
+F7	Open Packet Traffic File...
+F8	Save Packet Traffic File As...
+Space	Toggle Pause Animation
+Ctrl + X	Cut Input Box Text
+Ctrl + C	Copy Input Box Text
+Ctrl + V	Paste Input Box Text
+Ctrl + K	Acknowledge All Anomalies
+O	Toggle Show OSD
+X	Export Selection Details in CSV File As...
+I	Show Selected Host Information
+G	Show Selection Information
+H	Show Help
+```
+
+## Right-Click Menu Map (1:1 From `mnuProcess()`)
+All labels below are taken from `src/hosts3d.cpp` menu construction code.
+
+### Main Menu
+| Menu | Items |
+|---|---|
+| `MAIN` | `Selected` (if a host is selected), `Selection`, `Anomalies`, `IP/Name`, `Packets`, `On-Active`, `View`, `Layout`, `Other`, `Exit` (fullscreen only) |
+
+### `Selected`
+| Item |
+|---|
+| `Information (I)` |
+| `Show Packets Only` |
+| `Move Here` |
+| `Go To` |
+| `Hostname (N)` |
+| `Remarks (R)` |
+| `Add Net Position` |
+
+### `Selection`
+| Item |
+|---|
+| `Information (G)` |
+| `Colour` |
+| `Lock` |
+| `Move To Zone` |
+| `Arrange` |
+| `Commands` |
+| `Reset` |
+| `Delete` |
+
+#### `Selection > Colour`
+`Grey`, `Orange`, `Yellow`, `Fluro`, `Green`, `Mint`, `Aqua`, `Blue`, `Purple`, `Violet`
+
+#### `Selection > Lock`
+`On`, `Off`
+
+#### `Selection > Move To Zone`
+`Grey`, `Blue`, `Green`, `Red`
+
+#### `Selection > Arrange`
+`Default`, `10x10`, `10x10 2xSpc`, `Into Nets`
+
+#### `Selection > Commands`
+`Command 1`, `Command 2`, `Command 3`, `Command 4`, `Set`
+
+#### `Selection > Reset`
+`Link Lines`, `Downloads`, `Uploads`, `Services`
+
+#### `Selection > Delete`
+`Confirm`
+
+### `Anomalies`
+| Item |
+|---|
+| `Select All` |
+| `Acknowledge` |
+| `Toggle Detection` |
+
+#### `Anomalies > Acknowledge`
+`Selection`, `All (Ctrl+K)`
+
+### `IP/Name`
+Conditional items depend on current display mode.
+
+| Possible item |
+|---|
+| `Show Selection` |
+| `Show All` |
+| `Show On-Active` |
+| `Show Off` |
+| `All Off` |
+
+### `Packets`
+| Item |
+|---|
+| `Show All (U)` |
+| `Protocol` |
+| `Port` |
+| `Select Showing` |
+| `Off (K)` |
+
+#### `Packets > Protocol`
+Conditional by active protocol filter.
+
+| Possible item |
+|---|
+| `All` |
+| `ICMP` |
+| `TCP` |
+| `UDP` |
+| `ARP` |
+| `Other` |
+
+#### `Packets > Port`
+| Possible item |
+|---|
+| `All` (if a port filter is active) |
+| `Enter` |
+
+### `On-Active`
+Conditional by active on-active mode.
+
+| Possible item |
+|---|
+| `Alert` |
+| `Show IP/Name` |
+| `Show Host` |
+| `Select` |
+| `Do Nothing` |
+
+### `View`
+| Item |
+|---|
+| `Recall` |
+| `Save` |
+
+#### `View > Recall`
+`Home (Ctrl+Home)`, `Pos 1 (Ctrl+F1)`, `Pos 2 (Ctrl+F2)`, `Pos 3 (Ctrl+F3)`, `Pos 4 (Ctrl+F4)`
+
+#### `View > Save`
+`Pos 1`, `Pos 2`, `Pos 3`, `Pos 4`
+
+### `Layout`
+| Item |
+|---|
+| `Restore` |
+| `Save` |
+| `Net Positions` |
+| `Clear` |
+
+#### `Layout > Restore`
+`File`, `Net 1`, `Net 2`, `Net 3`, `Net 4`
+
+#### `Layout > Save`
+`File`, `Net 1`, `Net 2`, `Net 3`, `Net 4`
+
+#### `Layout > Clear`
+`Confirm`
+
+### `Other`
+| Item |
+|---|
+| `Find Hosts (F)` |
+| `Select Inactive` |
+| `Local hsen` (non-Windows build only) |
+| `Help (H)` |
+| `About` |
+
+#### `Other > Select Inactive`
+`> 5 Minutes`, `> 1 Hour`, `> 1 Day`, `> 1 Week`, `> Other`
+
+#### `Other > Local hsen` (non-Windows only)
+`Start`, `Stop`
+
+## Hosts3D Help
+Press `H` to open help (`controls.txt`, generated from code).
+
+## Notes and Limits
+- IPv4 only
+- IP headers with options are ignored
+- Supports optionless GRE and VLAN 802.1Q encapsulation
+- Protocol `249` is used internally to identify ARP packets
+- Protocol `250` is used internally to identify fragmented IP packets
+- Default host creation is source-IP based; enable Add Destination Hosts to include destination IPs
+- Anomalies represent new hosts or new host services
+- Large menu operations on thousands of hosts can take minutes
+- Data files are architecture-specific (32-bit and 64-bit are not compatible)
+- On Windows, running configured system commands can stall Hosts3D until command completion
+
+## Troubleshooting Tip
+On Linux/macOS/FreeBSD, both `Hosts3D` and `hsen` log to syslog.
+
+## Reporting Bugs
+Open an issue in this repository with repro steps and platform/build details.
+- https://github.com/kaestnja/hosts3d/issues
+
+## Copyright
+Copyright (c) 2006-2011 Del Castle

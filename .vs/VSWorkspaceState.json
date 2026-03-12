@@ -1,0 +1,15 @@
+{
+  "ExpandedNodes": [
+    "",
+    "\\etc",
+    "\\etc\\default",
+    "\\etc\\init.d",
+    "\\etc\\pam.d",
+    "\\etc\\security",
+    "\\etc\\security\\console.apps",
+    "\\man",
+    "\\src"
+  ],
+  "SelectedNode": "\\etc\\security\\console.apps\\hsen",
+  "PreviewInSolutionExplorer": false
+}

@@ -1,0 +1,9 @@
+# Build artifacts
+src/*.o
+
+# Machine-local runtime/helper config
+start-hsenW.local.bat
+hsen-interfaces-*.txt
+
+# Local helper binaries (kept locally, not versioned)
+Tools/Wireshark/WiresharkPortable64_4.6.4.paf.exe

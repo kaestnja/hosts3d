@@ -1,0 +1,51 @@
+@echo off
+setlocal EnableExtensions
+cd /d "%~dp0"
+
+set "CONFIG=%~1"
+if "%CONFIG%"=="" set "CONFIG=Release"
+if /I not "%CONFIG%"=="Release" if /I not "%CONFIG%"=="Debug" (
+  echo Usage: %~nx0 [Release^|Debug] [x86^|x64] [window^|fullscreen]
+  exit /b 1
+)
+
+set "ARCH=%~2"
+if "%ARCH%"=="" set "ARCH=x86"
+if /I not "%ARCH%"=="x86" if /I not "%ARCH%"=="x64" (
+  echo Invalid architecture "%ARCH%". Use x86 or x64.
+  exit /b 1
+)
+
+set "VIEW=%~3"
+if "%VIEW%"=="" set "VIEW=window"
+if /I not "%VIEW%"=="window" if /I not "%VIEW%"=="fullscreen" (
+  echo Invalid view "%VIEW%". Use window or fullscreen.
+  exit /b 1
+)
+
+set "BINDIR=%CD%\%CONFIG%\windows\%ARCH%"
+set "EXE=%BINDIR%\Hosts3D.exe"
+
+if not exist "%EXE%" (
+  echo Missing "%EXE%"
+  echo Build first with compile-hosts3d.bat %CONFIG%
+  exit /b 1
+)
+
+for /f "tokens=2 delims= " %%i in ('tasklist ^| findstr /B /I "Hosts3D.exe"') do taskkill /F /PID %%i /T >NUL 2>NUL
+
+if /I "%VIEW%"=="fullscreen" (
+  start "Hosts3D (%CONFIG% %ARCH%)" /D "%BINDIR%" "%EXE%" -f
+) else (
+  start "Hosts3D (%CONFIG% %ARCH%)" /D "%BINDIR%" "%EXE%"
+)
+
+timeout /t 2 >NUL
+tasklist | findstr /B /I "Hosts3D.exe" >NUL
+if errorlevel 1 (
+  echo Hosts3D.exe did not start.
+  exit /b 1
+)
+
+echo Started Hosts3D from "%BINDIR%"
+exit /b 0
