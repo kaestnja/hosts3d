@@ -99,7 +99,8 @@ i686-w64-mingw32
 
 Build:
 ```powershell
-cd C:\Users\kaestnja\source\repos\github.com\kaestnja\hosts3d
+$repo = Join-Path $env:USERPROFILE "source\\repos\\github.com\\<your-github-user>\\hosts3d"
+Set-Location $repo
 .\compile-hosts3d.bat Release
 .\compile-hsen.bat Release
 ```
