@@ -1,0 +1,26 @@
+To compile you need the following libraries installed
+    libglfw-dev 
+    libpcap-dev
+
+Project status
+    This repository is an independent continuation of the original Hosts3D 1.15 project.
+    Original upstream authorship remains credited to Del Castle.
+    See CREDITS.md and CHANGELOG.md for continuation context.
+
+./configure
+make 
+make install
+
+Quick script builds:
+    ./compile-hosts3d [Release|Debug]
+    ./compile-hsen [Release|Debug]
+    ./compile-mac-hosts3d [Release|Debug]
+    compile-hosts3d.bat [Release|Debug]
+    compile-hsen.bat [Release|Debug]
+
+Script output layout:
+    Release/<os>/<arch>/
+    Debug/<os>/<arch>/
+
+Windows local third-party layout:
+    See third_party/README.md
