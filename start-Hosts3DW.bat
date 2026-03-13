@@ -2,21 +2,47 @@
 setlocal EnableExtensions
 cd /d "%~dp0"
 
-set "CONFIG=%~1"
-if "%CONFIG%"=="" set "CONFIG=Release"
-if /I not "%CONFIG%"=="Release" if /I not "%CONFIG%"=="Debug" (
-  echo Usage: %~nx0 [Release^|Debug] [x86^|x64] [window^|fullscreen]
-  exit /b 1
+set "ARG1=%~1"
+set "ARG2=%~2"
+set "ARG3=%~3"
+set "CONFIG=Release"
+set "ARCH=x86"
+set "VIEW=window"
+
+if /I "%ARG1%"=="Release" (
+  set "CONFIG=Release"
+  set "ARCH=%ARG2%"
+  set "VIEW=%ARG3%"
+) else if /I "%ARG1%"=="Debug" (
+  set "CONFIG=Debug"
+  set "ARCH=%ARG2%"
+  set "VIEW=%ARG3%"
+) else (
+  set "ARCH=%ARG1%"
+  set "VIEW=%ARG2%"
 )
 
-set "ARCH=%~2"
 if "%ARCH%"=="" set "ARCH=x86"
 if /I not "%ARCH%"=="x86" if /I not "%ARCH%"=="x64" (
-  echo Invalid architecture "%ARCH%". Use x86 or x64.
+  if /I "%ARCH%"=="window" (
+    set "VIEW=%ARCH%"
+    set "ARCH=x86"
+  ) else if /I "%ARCH%"=="fullscreen" (
+    set "VIEW=%ARCH%"
+    set "ARCH=x86"
+  ) else (
+    echo Usage: %~nx0 [Release^|Debug] [x86^|x64] [window^|fullscreen]
+    echo Defaults: Release x86 window
+    exit /b 1
+  )
+)
+
+if /I not "%CONFIG%"=="Release" if /I not "%CONFIG%"=="Debug" (
+  echo Usage: %~nx0 [Release^|Debug] [x86^|x64] [window^|fullscreen]
+  echo Defaults: Release x86 window
   exit /b 1
 )
 
-set "VIEW=%~3"
 if "%VIEW%"=="" set "VIEW=window"
 if /I not "%VIEW%"=="window" if /I not "%VIEW%"=="fullscreen" (
   echo Invalid view "%VIEW%". Use window or fullscreen.
