@@ -1,30 +1,57 @@
 @echo off
-setlocal
+setlocal EnableExtensions
 cd /d "%~dp0"
 
-set "CONFIG=%~1"
-if "%CONFIG%"=="" set "CONFIG=Release"
-if /I not "%CONFIG%"=="Release" if /I not "%CONFIG%"=="Debug" (
+set "CONFIG=Release"
+set "PAUSE_ON_EXIT=1"
+
+if /I "%~1"=="Release" set "CONFIG=Release"
+if /I "%~1"=="Debug" set "CONFIG=Debug"
+if /I "%~1"=="--no-pause" set "PAUSE_ON_EXIT=0"
+if /I "%~2"=="--no-pause" set "PAUSE_ON_EXIT=0"
+
+if not "%~1"=="" if /I not "%~1"=="Release" if /I not "%~1"=="Debug" if /I not "%~1"=="--no-pause" (
   echo Usage: %~nx0 [Release^|Debug]
-  exit /b 1
+  echo Default: Release
+  echo Optional: --no-pause
+  goto :fail
+)
+if not "%~2"=="" if /I not "%~2"=="--no-pause" (
+  echo Usage: %~nx0 [Release^|Debug]
+  echo Default: Release
+  echo Optional: --no-pause
+  goto :fail
 )
 
 set "GPP_EXE="
-for /f "delims=" %%i in ('where g++ 2^>NUL') do (
+for /f "delims=" %%i in ('where g++.exe 2^>NUL') do (
   set "GPP_EXE=%%i"
   goto :found_gpp_hosts3d
 )
+for %%i in (
+  "C:\msys64\mingw32\bin\g++.exe"
+  "C:\msys64\mingw64\bin\g++.exe"
+  "C:\msys64\ucrt64\bin\g++.exe"
+) do (
+  if not defined GPP_EXE if exist "%%~i" set "GPP_EXE=%%~fi"
+)
 :found_gpp_hosts3d
+for %%i in ("%GPP_EXE%") do if defined GPP_EXE if /I not "%%~xi"==".exe" set "GPP_EXE="
 if not defined GPP_EXE (
   echo Missing g++ in PATH.
-  echo Add your MinGW bin directory to PATH before running this script.
-  exit /b 1
+  echo Install MSYS2/MinGW or place g++.exe in one of these locations:
+  echo   C:\msys64\mingw32\bin
+  echo   C:\msys64\mingw64\bin
+  echo   C:\msys64\ucrt64\bin
+  goto :fail
 )
 for %%i in ("%GPP_EXE%") do set "MINGW_BIN=%%~dpi"
-for /f "delims=" %%i in ('g++ -dumpmachine 2^>NUL') do set "MACHINE=%%i"
+set "PATH=%MINGW_BIN%;%PATH%"
+echo Using "%GPP_EXE%"
+for /f "delims=" %%i in ('"%GPP_EXE%" -dumpmachine 2^>NUL') do set "MACHINE=%%i"
 if not defined MACHINE (
   echo Unable to detect compiler target with g++ -dumpmachine.
-  exit /b 1
+  goto :fail
 )
 set "ARCH=x86"
 echo %MACHINE% | findstr /I "x86_64 amd64" >NUL && set "ARCH=x64"
@@ -40,7 +67,7 @@ set "GLFW_BINDIR=third_party\glfw2\bin\windows\%ARCH%"
 if not exist "%GLFW_INCLUDE%\GL\glfw.h" (
   echo Missing "%GLFW_INCLUDE%\GL\glfw.h"
   echo Copy GLFW 2.x headers into third_party\glfw2\include\GL\
-  exit /b 1
+  goto :fail
 )
 
 set "GLFW_LIB_OPT="
@@ -49,21 +76,30 @@ if not defined GLFW_LIB_OPT if exist "%GLFW_LIBDIR%\libglfwdll.a" set "GLFW_LIB_
 if not defined GLFW_LIB_OPT (
   echo Missing GLFW import/static library in "%GLFW_LIBDIR%"
   echo Expected libglfw.a or libglfwdll.a
-  exit /b 1
+  goto :fail
 )
 
 g++ -Wall -O2 -I"%GLFW_INCLUDE%" -c -o src/llist.o src/llist.cpp
-if errorlevel 1 exit /b 1
+if errorlevel 1 goto :fail
 g++ -Wall -O2 -I"%GLFW_INCLUDE%" -c -o src/misc.o src/misc.cpp
-if errorlevel 1 exit /b 1
+if errorlevel 1 goto :fail
 g++ -Wall -O2 -I"%GLFW_INCLUDE%" -c -o src/glwin.o src/glwin.cpp
-if errorlevel 1 exit /b 1
+if errorlevel 1 goto :fail
 g++ -Wall -O2 -I"%GLFW_INCLUDE%" -c -o src/objects.o src/objects.cpp
-if errorlevel 1 exit /b 1
+if errorlevel 1 goto :fail
 g++ -Wall -O2 -I"%GLFW_INCLUDE%" -c -o src/hosts3d.o src/hosts3d.cpp
-if errorlevel 1 exit /b 1
+if errorlevel 1 goto :fail
 g++ -Wall -O2 -static-libgcc -static-libstdc++ -o "%OUTDIR%\Hosts3D.exe" src/llist.o src/misc.o src/glwin.o src/objects.o src/hosts3d.o -L"%GLFW_LIBDIR%" %GLFW_LIB_OPT% -lopengl32 -lglu32 -lws2_32
-if errorlevel 1 exit /b 1
+if errorlevel 1 goto :fail
 if exist "%GLFW_BINDIR%\glfw.dll" copy /Y "%GLFW_BINDIR%\glfw.dll" "%OUTDIR%\glfw.dll" >NUL
 if exist "%MINGW_BIN%libwinpthread-1.dll" copy /Y "%MINGW_BIN%libwinpthread-1.dll" "%OUTDIR%\libwinpthread-1.dll" >NUL
 echo Built "%OUTDIR%\Hosts3D.exe"
+goto :success
+
+:fail
+if "%PAUSE_ON_EXIT%"=="1" pause
+exit /b 1
+
+:success
+if "%PAUSE_ON_EXIT%"=="1" pause
+exit /b 0

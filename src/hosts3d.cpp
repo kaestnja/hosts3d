@@ -37,7 +37,14 @@
 
 FILE *pfile;  //packet traffic record file
 bool goRun = true, goSize = true, goAnim = true, mMove = false, mView = false, dAnom = false, refresh = false, animate = false, fullscn = false;
-int wWin = 580, hWin = 420, mBxx, mBxy, mPsx = 0, mPsy = 0, mWhl = 0, GLResult[6] = {0, 0, 0, 0, 0, 0};  //2D GUI result identification
+static const int DEFAULT_WIN_W = 1024;
+static const int DEFAULT_WIN_H = 600;
+static const int OSD_MIN_W = 300;
+static const int OSD_MIN_H = 220;
+static const int OSD_LINE_H = 13;
+static const int OSD_PKT_GAP_H = 13;
+static const int OSD_PKT_TEXT_LINES = 7;
+int wWin = DEFAULT_WIN_W, hWin = DEFAULT_WIN_H, mBxx, mBxy, mPsx = 0, mPsy = 0, mWhl = 0, GLResult[6] = {0, 0, 0, 0, 0, 0};  //2D GUI result identification
 time_t atime = 0, distm;  //packet traffic display time offset
 ptrc_type ptrc = stp;  //packet traffic state
 pkrc_type pkrp;  //packet traffic replay packet
@@ -350,6 +357,35 @@ void osdUpdate()
   strcat(osdtxt, sbuf);
 }
 
+struct pktlg_type
+{
+  unsigned char red, green, blue;
+  const char *name;
+};
+
+static void osdDrawPktLegend(int px, int py)
+{
+  static const pktlg_type legend[] =
+  {
+    {red[0], red[1], red[2], "ICMP"},
+    {green[0], green[1], green[2], "TCP"},
+    {blue[0], blue[1], blue[2], "UDP"},
+    {yellow[0], yellow[1], yellow[2], "ARP"},
+    {brgrey[0], brgrey[1], brgrey[2], "OTHER"}
+  };
+
+  py -= (OSD_PKT_TEXT_LINES * OSD_LINE_H) + OSD_PKT_GAP_H;
+  for (unsigned int cnt = 0; cnt < (sizeof(legend) / sizeof(legend[0])); cnt++)
+  {
+    glColor3ub(legend[cnt].red, legend[cnt].green, legend[cnt].blue);
+    glRasterPos2i(px, py - (cnt * OSD_LINE_H));
+    glBitmap(8, 8, 0.0, 0.0, 0.0, 0.0, bitmaps[16]);
+    glColor3ub(white[0], white[1], white[2]);
+    glRasterPos2i(px + 14, py - (cnt * OSD_LINE_H));
+    GLWin.DrawString((const unsigned char *)legend[cnt].name);
+  }
+}
+
 //destroy packets LL
 void pcktsDestroy(bool gh = false)
 {
@@ -615,6 +651,7 @@ void draw2D()
     glColor3ub(white[0], white[1], white[2]);
     glRasterPos2i(px, py);
     GLWin.DrawString((const unsigned char *)osdtxt);
+    osdDrawPktLegend(px, py);
     if (lnkht)
     {
       strcpy(sbuf, "Link Line");
@@ -696,7 +733,7 @@ void GLFWCALL resizeGL(int w, int h)
 {
   wWin = w;
   hWin = h;
-  goSize = ((wWin >= 300) && (hWin >= 160));  //don't draw OSD if window smaller than 300x160
+  goSize = ((wWin >= OSD_MIN_W) && (hWin >= OSD_MIN_H));  //don't draw OSD if window too small for the legend and status text
   glViewport(0, 0, wWin, hWin);
   glMatrixMode(GL_PROJECTION);
   glLoadIdentity();

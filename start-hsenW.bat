@@ -2,17 +2,31 @@
 setlocal EnableExtensions
 cd /d "%~dp0"
 
-set "CONFIG=%~1"
-if "%CONFIG%"=="" set "CONFIG=Release"
-if /I not "%CONFIG%"=="Release" if /I not "%CONFIG%"=="Debug" (
+set "ARG1=%~1"
+set "ARG2=%~2"
+set "CONFIG=Release"
+set "ARCH=x86"
+
+if /I "%ARG1%"=="Release" (
+  set "CONFIG=Release"
+  set "ARCH=%ARG2%"
+) else if /I "%ARG1%"=="Debug" (
+  set "CONFIG=Debug"
+  set "ARCH=%ARG2%"
+) else (
+  set "ARCH=%ARG1%"
+)
+
+if "%ARCH%"=="" set "ARCH=x86"
+if /I not "%ARCH%"=="x86" if /I not "%ARCH%"=="x64" (
   echo Usage: %~nx0 [Release^|Debug] [x86^|x64]
+  echo Defaults: Release x86
   exit /b 1
 )
 
-set "ARCH=%~2"
-if "%ARCH%"=="" set "ARCH=x86"
-if /I not "%ARCH%"=="x86" if /I not "%ARCH%"=="x64" (
-  echo Invalid architecture "%ARCH%". Use x86 or x64.
+if /I not "%CONFIG%"=="Release" if /I not "%CONFIG%"=="Debug" (
+  echo Usage: %~nx0 [Release^|Debug] [x86^|x64]
+  echo Defaults: Release x86
   exit /b 1
 )
 
