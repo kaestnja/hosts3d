@@ -15,6 +15,7 @@
    GNU General Public License for more details. */
 
 #include <ctype.h>  //tolower()
+#include <map>
 #include <math.h>  //cos(), sin(), sqrt()
 #include <signal.h>  //signal()
 #include <stdio.h>
@@ -41,6 +42,8 @@ FILE *pfile;  //packet traffic record file
 bool goRun = true, goSize = true, goAnim = true, mMove = false, mView = false, dAnom = false, refresh = false, animate = false, fullscn = false;
 static const int DEFAULT_WIN_W = 1024;
 static const int DEFAULT_WIN_H = 600;
+static const unsigned int DEFAULT_DYNAMIC_HOST_TTL_SECONDS = 300;
+static const unsigned int DEFAULT_DYNAMIC_HOST_CLEANUP_INTERVAL_SECONDS = 30;
 static const int OSD_MIN_W = 300;
 static const int OSD_MIN_H = 220;
 static const int OSD_LINE_H = 13;
@@ -60,9 +63,14 @@ host_type *seltd = 0, *lnkht = 0;  //selected host, link line host
 MyLL lnksLL, altsLL, pktsLL;  //dynamic data struct for links, alerts, packets
 MyHT hstsByIp; // data struct that arranges hosts by ip address
 MyHT hstsByPos; // data struct that arranges hosts by (x, y, z) co-ordinates
+std::map<unsigned long, bool> hostDynamicStateByIp;  //true = dynamic, false = static
 GLuint objsDraw;  //GL compiled objects
 MyGLWin GLWin;  //2D GUI
 bool useIpAddrForGlName; // if true, use the host's IP address as the 'name' for host GL objects. Otherwise use the host_type pointer.
+bool dynamicHostsEnabled = true;
+unsigned int dynamicHostTtlSeconds = DEFAULT_DYNAMIC_HOST_TTL_SECONDS;
+unsigned int dynamicHostCleanupIntervalSeconds = DEFAULT_DYNAMIC_HOST_CLEANUP_INTERVAL_SECONDS;
+time_t dynamicHostLastCleanup = 0;
 
 #ifdef __MINGW32__
 #define usleep(usec) (Sleep((usec) / 1000))
@@ -168,6 +176,12 @@ static void bindingLabel(int encoded, char *buf, size_t bufsz);
 static const char *menuLabelWithBinding(const char *title, keyact_type action);
 static keyact_type keyActionFromInput(int encoded);
 static void triggerKeyAction(keyact_type action);
+static bool hostIsDynamic(host_type *ht);
+static void hostSetDynamic(host_type *ht, bool dynamic);
+static void hostPromoteStatic(host_type *ht);
+static bool hostShouldPersist(host_type *ht);
+static void hostDeleteManaged(host_type *ht);
+static void dynamicHostsCleanupMaybe();
 
 void hsdStop(int sig)
 {
@@ -294,8 +308,51 @@ void moveCollision(host_type *cht)
   }
 }
 
+static unsigned long hostDynamicStateKey(in_addr ip)
+{
+  return (unsigned long) ip.s_addr;
+}
+
+static bool hostIsDynamic(host_type *ht)
+{
+  std::map<unsigned long, bool>::const_iterator it;
+  if (!ht) return false;
+  it = hostDynamicStateByIp.find(hostDynamicStateKey(ht->hip));
+  if (it == hostDynamicStateByIp.end()) return false;
+  return it->second;
+}
+
+static void hostSetDynamic(host_type *ht, bool dynamic)
+{
+  if (!ht) return;
+  hostDynamicStateByIp[hostDynamicStateKey(ht->hip)] = dynamic;
+}
+
+static void hostPromoteStatic(host_type *ht)
+{
+  hostSetDynamic(ht, false);
+}
+
+static bool hostShouldPersist(host_type *ht)
+{
+  return (ht && (!hostIsDynamic(ht) || ht->lck));
+}
+
+static void hostCollisionDetach(host_type *cht)
+{
+  host_type *ht;
+  if (!cht || !(ht = cht->col)) return;
+  if (ht->col == cht) ht->col = cht->col;
+  else
+  {
+    while (ht->col != cht) ht = ht->col;
+    ht->col = cht->col;
+  }
+  cht->col = 0;
+}
+
 //create host
-host_type *hostCreate(in_addr ip)
+host_type *hostCreate(in_addr ip, bool dynamic = true)
 {
   host_type host = {0, 0, 0, 0, 0, setts.anm, setts.nhp, 0, setts.nhl, 0, SPC, 0, SPC, 0, 0, 0, 0, ip, "", "", "", ""}, *ht;
   strcpy(host.htip, inet_ntoa(ip));
@@ -307,6 +364,7 @@ host_type *hostCreate(in_addr ip)
   if (hnet != 2) hostPos(ht, HPR, 1);
 
   newHostByIp(ht);
+  hostSetDynamic(ht, dynamic);
 
   if (hnet == 2) moveCollision(ht);
 
@@ -394,6 +452,7 @@ void pcktCreate(pkif_type *pkt, host_type *sht, host_type *dht, bool lk)
 
 void hostDestroyCb(void **data, long arg1, long arg2, long arg3, long arg4) {
   host_type *ht = *((host_type **) data);
+  hostDynamicStateByIp.erase(hostDynamicStateKey(ht->hip));
   delete ht;
   *data = 0;
 }
@@ -404,6 +463,7 @@ void hostsDestroy()
   hstsByIp.forEach(1, hostDestroyCb, 0, 0, 0, 0);
   hstsByIp.destroy();
   hstsByPos.destroy();
+  hostDynamicStateByIp.clear();
 }
 
 //destroy links LL
@@ -520,6 +580,7 @@ void allDestroy()
   alrtsDestroy();
   linksDestroy();
   hostsDestroy();
+  dynamicHostLastCleanup = 0;
 }
 
 static inline GLuint nameFromHostType (host_type *ht)
@@ -969,6 +1030,7 @@ void netLoad(const char *fl)
             host.col = 0;
 	    ht = new host_type(host);
 	    newHostByIp(ht);
+            hostSetDynamic(ht, false);
 	    hostByPositionPostMove(ht);
             moveCollision(ht);
           }
@@ -991,6 +1053,7 @@ void netLoad(const char *fl)
           host.col = 0;
           ht = new host_type(host);
 	  newHostByIp(ht);
+          hostSetDynamic(ht, false);
 	  hostByPositionPostMove(ht);
           moveCollision(ht);
         }
@@ -1001,24 +1064,22 @@ void netLoad(const char *fl)
   }
 }
 
+void netSaveCountCb(void **data, long arg1, long arg2, long arg3, long arg4)
+{
+  host_type *ht = *((host_type **) data);
+  unsigned int *count = (unsigned int *)(void *) arg1;
+  if (hostShouldPersist(ht)) (*count)++;
+}
+
 bool netSaveCb(void *data, long arg1, long arg2, long arg3, long arg4)
 {
   FILE *fp = (FILE *)(void *) arg1;
-  unsigned int hostscount = (unsigned int) arg2;
-  unsigned int *ptrcount = (unsigned int *)(void *) arg3;
   host_type *ht = (host_type *) data;
-  size_t htsz = sizeof(host_type), ipsz = sizeof(in_addr);
-
-  if (*ptrcount == hostscount) {
-    return false; // Will NOT halt the iteration
-  }
+  if (!hostShouldPersist(ht)) return false;
 
   if (fwrite(ht, sizeof(host_type), 1, fp) != 1) {
     return true; // Will halt the iteration
   }
-
-  (*ptrcount)++;
-
   return false;
 }
 
@@ -1028,12 +1089,12 @@ void netSave(const char* fl)
   FILE *net;
   if ((net = fopen(fl, "wb")))
   {
-    unsigned int hsts = hstsByIp.Num(), cnt = 0;
+    unsigned int hsts = 0;
+    hstsByIp.forEach(1, netSaveCountCb, (long)(void *) &hsts, 0, 0, 0);
     fputs("HN1", net);
     if (fwrite(&hsts, sizeof(hsts), 1, net) == 1)
     {
-      if (hstsByIp.firstThat(1, &netSaveCb, (long) net, (long) hsts,
-			     (long) &cnt, 0)) {
+      if (hstsByIp.firstThat(1, &netSaveCb, (long) net, 0, 0, 0)) {
 	// fwrite() failed in netSaveCb
 	fclose(net);
 	remove(fl);
@@ -1045,6 +1106,11 @@ void netSave(const char* fl)
       size_t ipsz = sizeof(in_addr);
       while ((lk = (link_type *)lnksLL.Read(1)))
       {
+        if (!hostShouldPersist(lk->sht) || !hostShouldPersist(lk->dht))
+        {
+          lnksLL.Next(1);
+          continue;
+        }
         if (fwrite(&lk->sht->hip, ipsz, 1, net) != 1) break;
         if (fwrite(&lk->dht->hip, ipsz, 1, net) != 1) break;
         if (fwrite(&lk->spr, 1, 1, net) != 1) break;  //spare (future use)
@@ -1159,6 +1225,7 @@ void btnProcess(int gs)
   {
     case HSD_EDTNAME: case HSD_EDTRMKS:
       strcpy((gr == HSD_EDTNAME ? seltd->htnm : seltd->htrm), gi1);
+      hostPromoteStatic(seltd);
       hostDetails();
       GLWin.Close();  //close all 2D GUI windows
       break;
@@ -1288,6 +1355,7 @@ void btnProcess(int gs)
         while (goHosts == 1) usleep(1000);
         setts.anm = false;  //don't create anomaly
         seltd = hostIP(mip, true);
+        hostPromoteStatic(seltd);
         setts.anm = anm;
         goHosts = 0;
         seltd->sld = 1;
@@ -1509,8 +1577,8 @@ void infoHost()
     fputs(htdtls, info);
     fprintf(info, "\n\nAnomaly: %s\nLast Sensor: %u\nLast Packet: %sShow Packets: %s\nDownloads: %s"
       , (seltd->anm ? "Yes" : "No"), seltd->lsn, ctime(&seltd->lpk), (seltd->shp ? "Yes" : "No"), formatBytes(seltd->dld, buf));
-    fprintf(info, "\nUploads: %s\nAuto Link Lines: %s\nLock: %s"
-      , formatBytes(seltd->uld, buf), (seltd->alk ? "Yes" : "No"), (seltd->lck ? "On" : "Off"));  //reuse buf
+    fprintf(info, "\nUploads: %s\nAuto Link Lines: %s\nLock: %s\nLifetime: %s"
+      , formatBytes(seltd->uld, buf), (seltd->alk ? "Yes" : "No"), (seltd->lck ? "On" : "Off"), (hostIsDynamic(seltd) ? "Dynamic" : "Static"));  //reuse buf
     if (seltd->svc[0] == -1) fprintf(info, "\n\nNO SERVICES");
     else
     {
@@ -1998,6 +2066,84 @@ static void triggerKeyAction(keyact_type action)
   if (keybinds[action].key) keyboardGL(keybinds[action].key, 2);
 }
 
+static void hostDeleteManaged(host_type *ht)
+{
+  pckt_type *pk;
+  alrt_type *al;
+  if (!ht) return;
+  if (seltd == ht) seltd = 0;
+  if (lnkht == ht) lnkht = 0;
+  pktsLL.Start(1);
+  while ((pk = (pckt_type *)pktsLL.Read(1)))
+  {
+    if (pk->ht == ht)
+    {
+      delete pk;
+      pktsLL.Delete(1);
+    }
+    else pktsLL.Next(1);
+  }
+  altsLL.Start(1);
+  while ((al = (alrt_type *)altsLL.Read(1)))
+  {
+    if (al->ht == ht)
+    {
+      delete al;
+      altsLL.Delete(1);
+    }
+    else altsLL.Next(1);
+  }
+  linkCreDel(ht, 0, 0, true);
+  hostByPositionPreMove(ht);
+  hostCollisionDetach(ht);
+  hostDynamicStateByIp.erase(hostDynamicStateKey(ht->hip));
+  delete ht;
+  refresh = true;
+}
+
+typedef struct DynamicHostCleanupCbData_
+{
+  time_t now;
+  bool deleted;
+} DynamicHostCleanupCbData;
+
+static void dynamicHostsCleanupCb(void **data, long arg1, long arg2, long arg3, long arg4)
+{
+  host_type *ht = *((host_type **) data);
+  DynamicHostCleanupCbData *cleanup = (DynamicHostCleanupCbData *)(void *) arg1;
+
+  if (!hostIsDynamic(ht) || ht->lck || ht->sld || !ht->lpk) return;
+  if ((cleanup->now - ht->lpk) < (time_t) dynamicHostTtlSeconds) return;
+
+  hostDeleteManaged(ht);
+  *data = 0;
+  cleanup->deleted = true;
+}
+
+static void dynamicHostsCleanupMaybe()
+{
+  DynamicHostCleanupCbData cleanup;
+  time_t now;
+
+  if (!dynamicHostsEnabled || goHosts) return;
+  if (!dynamicHostTtlSeconds) dynamicHostTtlSeconds = DEFAULT_DYNAMIC_HOST_TTL_SECONDS;
+  if (!dynamicHostCleanupIntervalSeconds) dynamicHostCleanupIntervalSeconds = DEFAULT_DYNAMIC_HOST_CLEANUP_INTERVAL_SECONDS;
+
+  time(&now);
+  if (dynamicHostLastCleanup && ((unsigned int)(now - dynamicHostLastCleanup) < dynamicHostCleanupIntervalSeconds)) return;
+  dynamicHostLastCleanup = now;
+
+  goHosts = 1;
+  while (goHosts == 1) usleep(1000);
+
+  cleanup.now = now;
+  cleanup.deleted = false;
+  hstsByIp.forEach(1, dynamicHostsCleanupCb, (long)(void *) &cleanup, 0, 0, 0);
+  goHosts = 0;
+
+  if (cleanup.deleted) osdUpdate();
+}
+
 void mnuKeyProcessLe9Cb(void **data, long arg1, long arg2, long arg3, long arg4)
 {
   host_type *ht = *((host_type **) data);
@@ -2082,21 +2228,8 @@ void mnuKeyProcessLe9Cb(void **data, long arg1, long arg2, long arg3, long arg4)
       break;
 
     case 9:  //delete selection
-      if (ht == lnkht)
-	lnkht = 0;
-
-      linkCreDel(ht, 0, 0, true);
-      hostByPositionPreMove(ht);
-      hostPos(ht, HPR, 1);
-      moveCollision(ht);
-      // Do NOT call hostByPositionPostMove(ht) here. The 'ht' is about to get
-      // deleted and therefore about to get deleted from the hstsByIp hash
-      // table. The 'hostByPositionPreMove()' call above will delete the ht from
-      // the hstsByPos hash table, so we are done cleaning the ht properly.
-
-      delete ht;
+      hostDeleteManaged(ht);
       *data = 0;
-
       break;
     }
   }
@@ -3372,6 +3505,18 @@ static bool settsLoadIni(const char *path)
     else if (!strcmp(key, "command2")) setStringValue(setts.cmd[1], sizeof(setts.cmd[1]), value);
     else if (!strcmp(key, "command3")) setStringValue(setts.cmd[2], sizeof(setts.cmd[2]), value);
     else if (!strcmp(key, "command4")) setStringValue(setts.cmd[3], sizeof(setts.cmd[3]), value);
+    else if (!strcmp(key, "dynamic_hosts_enabled"))
+    {
+      if (parseBoolValue(value, &flag)) dynamicHostsEnabled = flag;
+    }
+    else if (!strcmp(key, "dynamic_host_ttl_seconds"))
+    {
+      if (parseUnsignedIntValue(value, &ui) && ui) dynamicHostTtlSeconds = ui;
+    }
+    else if (!strcmp(key, "dynamic_host_cleanup_interval_seconds"))
+    {
+      if (parseUnsignedIntValue(value, &ui) && ui) dynamicHostCleanupIntervalSeconds = ui;
+    }
     else
     {
       bool matched = false;
@@ -3472,6 +3617,11 @@ static bool settsSaveIni(const char *path)
   fprintf(sts, "command2=%s\n", setts.cmd[1]);
   fprintf(sts, "command3=%s\n", setts.cmd[2]);
   fprintf(sts, "command4=%s\n\n", setts.cmd[3]);
+
+  fputs("[dynamic_hosts]\n", sts);
+  fprintf(sts, "dynamic_hosts_enabled=%d\n", (dynamicHostsEnabled ? 1 : 0));
+  fprintf(sts, "dynamic_host_ttl_seconds=%u\n", dynamicHostTtlSeconds);
+  fprintf(sts, "dynamic_host_cleanup_interval_seconds=%u\n\n", dynamicHostCleanupIntervalSeconds);
 
   fputs("[keybindings]\n", sts);
   for (unsigned char cnt = 0; cnt < kaCount; cnt++)
@@ -3958,6 +4108,7 @@ int main(int argc, char *argv[])
     if ((milliTime(0) - fps) > 40)  //25 FPS
     {
       if (setts.anm) dAnom = true;
+      dynamicHostsCleanupMaybe();
       if ((ptrc > hlt) || GLWin.On()) refresh = true;
       if (goAnim)
       {
