@@ -25,11 +25,13 @@
 #include <time.h>
 #ifdef __MINGW32__
 #include <getopt.h>  //getopt()
+#include <winsock2.h>
 #else
 #include <arpa/inet.h>  //inet_addr(), inet_ntoa()
 #include <errno.h>
 #include <fcntl.h>  //fcntl()
 #include <limits.h>
+#include <netdb.h>
 #include <syslog.h>  //syslog()
 #include <sys/wait.h>
 #include <unistd.h>  //close(), usleep()
@@ -210,6 +212,7 @@ static bool hostIsDynamic(host_type *ht);
 static void hostSetDynamic(host_type *ht, bool dynamic);
 static void hostPromoteStatic(host_type *ht);
 static bool hostShouldPersist(host_type *ht);
+void hostDetails();
 static void hostDeleteManaged(host_type *ht);
 static void dynamicHostsCleanupMaybe();
 static void settsSave();
@@ -373,6 +376,20 @@ static void hostPromoteStatic(host_type *ht)
 static bool hostShouldPersist(host_type *ht)
 {
   return (ht && (!hostIsDynamic(ht) || ht->lck));
+}
+
+static bool hostResolveName(host_type *ht)
+{
+  hostent *resolved;
+  if (!ht) return false;
+  resolved = gethostbyaddr((const char *)&ht->hip, sizeof(ht->hip), AF_INET);
+  if (!resolved || !resolved->h_name || !*resolved->h_name) return false;
+  strncpy(ht->htnm, resolved->h_name, sizeof(ht->htnm) - 1);
+  ht->htnm[sizeof(ht->htnm) - 1] = '\0';
+  hostPromoteStatic(ht);
+  if (seltd == ht) hostDetails();
+  refresh = true;
+  return true;
 }
 
 static void hostCollisionDetach(host_type *cht)
@@ -1246,6 +1263,31 @@ void btnProcessSlInActCb(void **data, long arg1, long arg2, long arg3,
   char *gi3 = (char *)(void *) arg4;
 
   ht->sld = ((itime - ht->lpk) > ((atoi(gi1) * 86400) + (atoi(gi2) * 360) + (atoi(gi3) * 60)));
+}
+
+typedef struct ResolveHostnamesCbData_
+{
+  unsigned int selected;
+  unsigned int resolved;
+  unsigned int existing;
+  unsigned int failed;
+} ResolveHostnamesCbData;
+
+static void resolveSelectedHostnamesCb(void **data, long arg1, long arg2,
+                                       long arg3, long arg4)
+{
+  host_type *ht = *((host_type **) data);
+  ResolveHostnamesCbData *rd = (ResolveHostnamesCbData *)(void *) arg1;
+
+  if (!ht || !ht->sld) return;
+  rd->selected++;
+  if (*ht->htnm)
+  {
+    rd->existing++;
+    return;
+  }
+  if (hostResolveName(ht)) rd->resolved++;
+  else rd->failed++;
 }
 
 //process 2D GUI button selected
@@ -2608,6 +2650,22 @@ void mnuProcess(int m)
       case 95:  //stop local hsen
         localHsenStopManaged(true);
         break;
+      case 96:  //resolve hostnames for selection
+      {
+        ResolveHostnamesCbData rd = {0, 0, 0, 0};
+        char mbuf[160];
+        waitShow();
+        hstsByIp.forEach(1, &resolveSelectedHostnamesCb, (long)(void *)&rd, 0, 0, 0);
+        GLWin.Close();
+        if (!rd.selected) messageBox("HOSTNAMES", "No hosts are selected.");
+        else
+        {
+          snprintf(mbuf, sizeof(mbuf), "Selected: %u  Resolved: %u  Already named: %u  Unresolved: %u",
+                   rd.selected, rd.resolved, rd.existing, rd.failed);
+          messageBox("HOSTNAMES", mbuf);
+        }
+        break;
+      }
       case 97: triggerKeyAction(kaShowHelp); break;  //2D GUI help
       case 98:  //about
         GLWin.CreateWin(-1, -1, 230, 138, "ABOUT");
@@ -2684,15 +2742,16 @@ void mnuProcess(int m)
         GLWin.AddMenu(114, "Add Net Position", 8, 0, 91);
         break;
       case 102:
-        GLWin.AddMenu(102, "SELECTION", 9, 2, 100);
-        GLWin.AddMenu(102, menuLabelWithBinding("Information", kaShowSelectionInformation), 9, 0, 46);  //6+(15x6)+6=102
-        GLWin.AddMenu(102, "Colour", 9, 1, 110);
-        GLWin.AddMenu(102, "Lock", 9, 1, 111);
-        GLWin.AddMenu(102, "Move To Zone", 9, 1, 112);
-        GLWin.AddMenu(102, "Arrange", 9, 1, 113);
-        GLWin.AddMenu(102, "Commands", 9, 1, 114);
-        GLWin.AddMenu(102, "Reset", 9, 1, 115);
-        GLWin.AddMenu(102, "Delete", 9, 1, 116);
+        GLWin.AddMenu(114, "SELECTION", 10, 2, 100);
+        GLWin.AddMenu(114, menuLabelWithBinding("Information", kaShowSelectionInformation), 10, 0, 46);
+        GLWin.AddMenu(114, "Resolve Hostnames", 10, 0, 96);
+        GLWin.AddMenu(114, "Colour", 10, 1, 110);
+        GLWin.AddMenu(114, "Lock", 10, 1, 111);
+        GLWin.AddMenu(114, "Move To Zone", 10, 1, 112);
+        GLWin.AddMenu(114, "Arrange", 10, 1, 113);
+        GLWin.AddMenu(114, "Commands", 10, 1, 114);
+        GLWin.AddMenu(114, "Reset", 10, 1, 115);
+        GLWin.AddMenu(114, "Delete", 10, 1, 116);
         break;
       case 103:
         GLWin.AddMenu(108, "ANOMALIES", 4, 2, 100);
