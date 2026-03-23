@@ -202,6 +202,7 @@ Main files:
 | `1network.hnl`..`4network.hnl` | saved layouts |
 | `netpos.txt` | CIDR-to-position/color mapping |
 | `traffic.hpt` | Hosts3D packet traffic record/replay data (not PCAP) |
+| `local-hsen-windows.state` | machine-local state file for managed Windows `hsen.exe` PIDs and process stamps |
 | `tmp-hinfo-hsd` | temporary host/selection info |
 | `tmp-netpos-hsd` | temporary net positions |
 | `tmp-flist-hsd` | temporary file list |
@@ -226,6 +227,15 @@ Dynamic/static hosts:
   - `dynamic_hosts_enabled=1`
   - `dynamic_host_ttl_seconds=300`
   - `dynamic_host_cleanup_interval_seconds=30`
+
+Windows local `hsen`:
+- `Other > Local hsen` can now discover local Windows capture interfaces by calling `hsen.exe -d`.
+- Target host for this local Windows mode is fixed to `127.0.0.1`.
+- Ethernet adapters are preselected by default; WLAN and other adapters are listed but start deselected.
+- `Save + Start` stores the current selection and launches one local `hsen.exe` process per selected interface.
+- `Stop` stops only the local `hsen.exe` processes that were started and tracked by Hosts3D.
+- The corresponding `settings.ini` keys are written under `[local_hsen_windows]`.
+- `start-hsenW.bat` remains the manual fallback for distributed/remote sensor setups.
 
 ## Net Positions (`netpos.txt`)
 Format:
@@ -538,15 +548,20 @@ Conditional by active on-active mode.
 |---|
 | `Find Hosts (F)` |
 | `Select Inactive` |
-| `Local hsen` (non-Windows build only) |
+| `Local hsen` |
 | `Help (H)` |
 | `About` |
 
 #### `Other > Select Inactive`
 `> 5 Minutes`, `> 1 Hour`, `> 1 Day`, `> 1 Week`, `> Other`
 
-#### `Other > Local hsen` (non-Windows only)
-`Start`, `Stop`
+#### `Other > Local hsen`
+- Windows:
+  - discovers interfaces via `hsen.exe -d`
+  - shows Ethernet/WLAN/Other adapters in a selection dialog
+  - `Save + Start`, `Stop`, `Refresh`, `Close`
+- non-Windows:
+  - `Start`, `Stop`
 
 ## Hosts3D Help
 Press `H` to open help (`controls.txt`, generated from code).
