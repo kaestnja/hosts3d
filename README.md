@@ -243,7 +243,7 @@ Notes:
 
 ### Dynamic and Static Hosts
 - Automatically discovered traffic hosts start as `dynamic`.
-- Hosts loaded from a saved layout, created manually, or manually edited (`Name`/`Remarks`) are treated as `static`.
+- Hosts loaded from a saved layout, created manually, manually edited (`Name`/`Remarks`), or named through `Selection > Resolve Hostnames` are treated as `static`.
 - Locked hosts are protected from dynamic cleanup and are also kept when layouts are saved.
 - Saved layouts (`0network.hnl`..`4network.hnl`) persist static and locked hosts only.
 - `[dynamic_hosts]` keys:
@@ -383,6 +383,7 @@ Shortcut suffixes in the running UI follow the current keybindings from `setting
 | Item |
 |---|
 | `Information (G)` |
+| `Resolve Hostnames` |
 | `Colour` |
 | `Lock` |
 | `Move To Zone` |
