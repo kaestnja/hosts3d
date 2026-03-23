@@ -20,6 +20,7 @@
 #include <stdio.h>
 #include <stdlib.h>  //abs(), atoi(), system()
 #include <string.h>
+#include <sys/stat.h>  //mkdir()
 #include <time.h>
 #ifdef __MINGW32__
 #include <getopt.h>  //getopt()
@@ -66,6 +67,107 @@ bool useIpAddrForGlName; // if true, use the host's IP address as the 'name' for
 #ifdef __MINGW32__
 #define usleep(usec) (Sleep((usec) / 1000))
 #endif
+
+#define CTRLKEY(key) ((key) + 512)
+
+enum keyact_type
+{
+  kaMoveForward, kaMoveBack, kaMoveLeft, kaMoveRight,
+  kaViewHome, kaViewHomeAlt, kaViewPos1, kaViewPos2, kaViewPos3, kaViewPos4,
+  kaSelectAll, kaInvertSelection, kaSelectNamed,
+  kaSelMoveUp, kaSelMoveDown, kaSelMoveForward, kaSelMoveBack, kaSelMoveLeft, kaSelMoveRight,
+  kaFindHosts, kaNextSelectedHost, kaPrevSelectedHost, kaToggleSelectionPersistant, kaCycleIpNameDisplay,
+  kaToggleAddDestinationHosts, kaMakeHost, kaEditHostname, kaEditRemarks,
+  kaCreateLinkLine, kaDeleteLinkLine, kaAutoLinksAll, kaToggleNewHostLinks, kaAutoLinksSelection, kaStopAutoLinksSelection, kaDeleteAllLinks,
+  kaShowSelectionPackets, kaHideSelectionPackets, kaShowAllPackets, kaToggleNewHostPackets,
+  kaShowSensor1Packets, kaShowSensor2Packets, kaShowSensor3Packets, kaShowSensor4Packets, kaShowAllSensorPackets, kaPrevSensorPackets, kaNextSensorPackets,
+  kaToggleBroadcasts, kaDecreasePacketLimit, kaIncreasePacketLimit, kaTogglePacketDestPort, kaTogglePacketSpeed, kaPacketsOff,
+  kaRecordPacketTraffic, kaReplayPacketTraffic, kaSkipReplayPacket, kaStopPacketTraffic, kaOpenPacketTrafficFile, kaSavePacketTrafficFile,
+  kaToggleAnimation, kaAcknowledgeAllAnomalies, kaToggleOsd, kaExportSelectionCsv, kaShowHostInformation, kaShowSelectionInformation, kaShowHelp,
+  kaCount
+};
+
+struct keybind_type
+{
+  const char *name;
+  int key;
+};
+
+static keybind_type keybinds[kaCount] =
+{
+  {"move_forward", GLFW_KEY_UP},
+  {"move_back", GLFW_KEY_DOWN},
+  {"move_left", GLFW_KEY_LEFT},
+  {"move_right", GLFW_KEY_RIGHT},
+  {"view_home", GLFW_KEY_HOME},
+  {"view_home_alt", CTRLKEY(GLFW_KEY_HOME)},
+  {"view_position_1", CTRLKEY(GLFW_KEY_F1)},
+  {"view_position_2", CTRLKEY(GLFW_KEY_F2)},
+  {"view_position_3", CTRLKEY(GLFW_KEY_F3)},
+  {"view_position_4", CTRLKEY(GLFW_KEY_F4)},
+  {"select_all_hosts", CTRLKEY('A')},
+  {"invert_selection", CTRLKEY('S')},
+  {"select_all_named_hosts", CTRLKEY('N')},
+  {"move_selection_up", 'Q'},
+  {"move_selection_down", 'E'},
+  {"move_selection_forward", 'W'},
+  {"move_selection_back", 'S'},
+  {"move_selection_left", 'A'},
+  {"move_selection_right", 'D'},
+  {"find_hosts", 'F'},
+  {"select_next_host_in_selection", GLFW_KEY_TAB},
+  {"select_previous_host_in_selection", CTRLKEY(GLFW_KEY_TAB)},
+  {"toggle_selection_persistant_ip_name", 'T'},
+  {"cycle_ip_name_display", 'C'},
+  {"toggle_add_destination_hosts", CTRLKEY('D')},
+  {"make_host", 'M'},
+  {"edit_selected_hostname", 'N'},
+  {"edit_selected_remarks", 'R'},
+  {"create_link_line", 'L'},
+  {"delete_link_line", CTRLKEY('L')},
+  {"auto_link_all_hosts", 'Y'},
+  {"toggle_auto_link_new_hosts", CTRLKEY('Y')},
+  {"auto_link_selection", 'J'},
+  {"stop_auto_link_selection", CTRLKEY('J')},
+  {"delete_all_link_lines", CTRLKEY('R')},
+  {"show_selection_packets", 'P'},
+  {"hide_selection_packets", CTRLKEY('P')},
+  {"show_all_packets", 'U'},
+  {"toggle_show_packets_new_hosts", CTRLKEY('U')},
+  {"show_sensor_1_packets", GLFW_KEY_F1},
+  {"show_sensor_2_packets", GLFW_KEY_F2},
+  {"show_sensor_3_packets", GLFW_KEY_F3},
+  {"show_sensor_4_packets", GLFW_KEY_F4},
+  {"show_all_sensor_packets", GLFW_KEY_F5},
+  {"show_previous_sensor_packets", '['},
+  {"show_next_sensor_packets", ']'},
+  {"toggle_broadcasts", 'B'},
+  {"decrease_packet_limit", '-'},
+  {"increase_packet_limit", '='},
+  {"toggle_show_packet_destination_port", CTRLKEY('T')},
+  {"toggle_packet_speed", 'Z'},
+  {"packets_off", 'K'},
+  {"record_packet_traffic", GLFW_KEY_PAGEDOWN},
+  {"replay_packet_traffic", GLFW_KEY_INSERT},
+  {"skip_replay_packet", GLFW_KEY_PAGEUP},
+  {"stop_packet_traffic", GLFW_KEY_END},
+  {"open_packet_traffic_file", GLFW_KEY_F7},
+  {"save_packet_traffic_file", GLFW_KEY_F8},
+  {"toggle_animation", GLFW_KEY_SPACE},
+  {"acknowledge_all_anomalies", CTRLKEY('K')},
+  {"toggle_osd", 'O'},
+  {"export_selection_csv", 'X'},
+  {"show_selected_host_information", 'I'},
+  {"show_selection_information", 'G'},
+  {"show_help", 'H'}
+};
+
+static void ensureHsdDataDir();
+static bool parseBindingValue(const char *value, int *out);
+static void bindingLabel(int encoded, char *buf, size_t bufsz);
+static const char *menuLabelWithBinding(const char *title, keyact_type action);
+static keyact_type keyActionFromInput(int encoded);
+static void triggerKeyAction(keyact_type action);
 
 void hsdStop(int sig)
 {
@@ -1453,34 +1555,34 @@ void infoSelection()
 void keyboardForEachCb(void **data, long arg1, long arg2, long arg3, long arg4)
 {
   host_type *ht = *((host_type **) data);
-  int key = (int) arg1;
+  keyact_type key = (keyact_type) arg1;
   int dx, dz;
   double angt;
 
-  if (key == 595) {
+  if (key == kaInvertSelection) {
     ht->sld = !ht->sld;  //invert selection, ctrl+s
-  } else if (key == 590) {
+  } else if (key == kaSelectNamed) {
     ht->sld = (*ht->htnm != '\0');  //select all named hosts, ctrl+n
   } else if (ht->sld) {
     switch (key) {
 
-    case 'T':
+    case kaToggleSelectionPersistant:
       ht->pip = !ht->pip;
       break;  //toggle selection persistant IP
 
-    case 'J':
+    case kaAutoLinksSelection:
       ht->alk = 1;
       break;  //automatic link lines for selection
 
-    case 586:
+    case kaStopAutoLinksSelection:
       ht->alk = 0;
       break;  //stop automatic link lines for selection, ctrl+j
 
-    case 'P':
+    case kaShowSelectionPackets:
       ht->shp = 1;
       break;  //show packets for selection
 
-    case 592:
+    case kaHideSelectionPackets:
       ht->shp = 0;
       break;  //stop showing packets for selection, ctrl+p
 
@@ -1490,16 +1592,16 @@ void keyboardForEachCb(void **data, long arg1, long arg2, long arg3, long arg4)
 
       hostByPositionPreMove(ht);
 
-      if (key == 'Q') {
+      if (key == kaSelMoveUp) {
 	ht->py += SPC;  //move selection up
-      } else if (key == 'E') {
+      } else if (key == kaSelMoveDown) {
 	ht->py -= SPC;  //move selection down
       } else {
-	if (key == 'W')
+	if (key == kaSelMoveForward)
 	  angt = setts.vws[0].ax * RAD;  //move selection forward
-	else if (key == 'A')
+	else if (key == kaSelMoveLeft)
 	  angt = (setts.vws[0].ax + 90.0) * RAD;  //move selection left
-	else if (key == 'D')
+	else if (key == kaSelMoveRight)
 	  angt = (setts.vws[0].ax - 90.0) * RAD;  //move selection right
 	else
 	  angt = (setts.vws[0].ax + 180.0) * RAD;  //move selection back
@@ -1533,9 +1635,21 @@ void GLFWCALL keyboardGL(int key, int action)
 {
   if (!action) return;
   if ((glfwGetKey(GLFW_KEY_LCTRL) || glfwGetKey(GLFW_KEY_RCTRL)) && (key != GLFW_KEY_LCTRL) && (key != GLFW_KEY_RCTRL)) key += 512;
+  keyact_type keyact = keyActionFromInput(key);
   if (GLWin.On())
   {
     char *clip;
+    if (((GLResult[0] % 100) == HSD_HSTINFO) && ((keyact == kaNextSelectedHost) || (keyact == kaPrevSelectedHost)))
+    {
+      hostTab((keyact == kaNextSelectedHost));
+      if (seltd)
+      {
+        GLWin.Scroll();  //start
+        infoHost();
+      }
+      refresh = true;
+      return;
+    }
     switch (key)
     {
       case 600:  //ctrl+x
@@ -1567,10 +1681,11 @@ void GLFWCALL keyboardGL(int key, int action)
   {
     int kymv = (glfwGetKey(GLFW_KEY_LSHIFT) || glfwGetKey(GLFW_KEY_RSHIFT) ? 3 : 1) * MOV;
     double angx, angy;
-    switch (key)
+    switch (keyact)
     {
-      case GLFW_KEY_UP: case GLFW_KEY_DOWN:
-        if (key == GLFW_KEY_DOWN) kymv *= -1;
+      case kaMoveForward:
+      case kaMoveBack:
+        if (keyact == kaMoveBack) kymv *= -1;
         angx = setts.vws[0].ax * RAD;
         angy = setts.vws[0].ay * RAD;
         setts.vws[0].ee.x += sin(angx) * kymv;
@@ -1580,28 +1695,44 @@ void GLFWCALL keyboardGL(int key, int action)
         setts.vws[0].ee.z += cos(angx) * cos(angy) * kymv;
         setts.vws[0].dr.z += cos(angx) * cos(angy) * kymv;
         break;
-      case GLFW_KEY_LEFT: case GLFW_KEY_RIGHT:  //move left/right
-        angx = (setts.vws[0].ax + (key == GLFW_KEY_LEFT ? 90.0 : -90.0)) * RAD;
+      case kaMoveLeft:
+      case kaMoveRight:  //move left/right
+        angx = (setts.vws[0].ax + (keyact == kaMoveLeft ? 90.0 : -90.0)) * RAD;
         setts.vws[0].ee.x += sin(angx) * kymv;
         setts.vws[0].dr.x += sin(angx) * kymv;
         setts.vws[0].ee.z += cos(angx) * kymv;
         setts.vws[0].dr.z += cos(angx) * kymv;
         break;
-      case GLFW_KEY_HOME: case 812: setts.vws[0] = (key == GLFW_KEY_HOME ? vwdef[0] : vwdef[1]); break;  //recall default views
-      case 770: case 771: case 772: case 773: memcpy(&setts.vws[0], &setts.vws[key - 769], sizeof(view_type)); break;  //recall view position 1-4, ctrl+f1-f4
-      case 577: hostsSet(0, 1); break;  //select all hosts, ht->sld, ctrl+a
-      case 'Q': case 'E': case 'W': case 'A': case 'D': case 'S':
+      case kaViewHome: setts.vws[0] = vwdef[0]; break;  //recall default view
+      case kaViewHomeAlt: setts.vws[0] = vwdef[1]; break;  //recall alternate default view
+      case kaViewPos1: memcpy(&setts.vws[0], &setts.vws[1], sizeof(view_type)); break;
+      case kaViewPos2: memcpy(&setts.vws[0], &setts.vws[2], sizeof(view_type)); break;
+      case kaViewPos3: memcpy(&setts.vws[0], &setts.vws[3], sizeof(view_type)); break;
+      case kaViewPos4: memcpy(&setts.vws[0], &setts.vws[4], sizeof(view_type)); break;
+      case kaSelectAll: hostsSet(0, 1); break;  //select all hosts, ht->sld
+      case kaSelMoveUp:
+      case kaSelMoveDown:
+      case kaSelMoveForward:
+      case kaSelMoveBack:
+      case kaSelMoveLeft:
+      case kaSelMoveRight:
         goHosts = 1;
         while (goHosts == 1) usleep(1000);
-      case 595: case 590: case 'T': case 'J': case 586: case 'P': case 592:
-        if ((key == 595) || (key == 590)) seltd = 0;
+      case kaInvertSelection:
+      case kaSelectNamed:
+      case kaToggleSelectionPersistant:
+      case kaAutoLinksSelection:
+      case kaStopAutoLinksSelection:
+      case kaShowSelectionPackets:
+      case kaHideSelectionPackets:
+        if ((keyact == kaInvertSelection) || (keyact == kaSelectNamed)) seltd = 0;
 	// Since the keyboardForEachCb callback changes the hosts' positions,
 	// we cannot iterate (forEach) over the hstsByPos hash-table; instead
 	// we walk over the hstsByIp hash-table.
-	hstsByIp.forEach(1, &keyboardForEachCb, (long) key, 0, 0, 0);
+	hstsByIp.forEach(1, &keyboardForEachCb, (long) keyact, 0, 0, 0);
         goHosts = 0;
         break;
-      case 'F':  //2D GUI find hosts
+      case kaFindHosts:  //2D GUI find hosts
         GLWin.CreateWin(-1, -1, 350, 220, "FIND HOSTS");
         GLWin.AddLabel(10, 15, "IP/Net:");
         GLWin.AddLabel(202, 15, "(CIDR Notation for Net)");
@@ -1619,26 +1750,29 @@ void GLFWCALL keyboardGL(int key, int action)
         GLWin.AddButton(210, 160, GLWIN_DEL, "Clear");
         GLWin.AddButton(280, 160, GLWIN_CLOSE, "Close");
         break;
-      case GLFW_KEY_TAB: case 805: hostTab((key == GLFW_KEY_TAB)); break;  //select next/prev host in selection
-      case 'C':  //cycle show IP - IP/name - name only
+      case kaNextSelectedHost:
+      case kaPrevSelectedHost:
+        hostTab((keyact == kaNextSelectedHost));
+        break;  //select next/prev host in selection
+      case kaCycleIpNameDisplay:  //cycle show IP - IP/name - name only
         if (setts.sipn == ips) setts.sipn = ins;
         else if (setts.sipn == ins) setts.sipn = nms;
         else setts.sipn = ips;
         osdUpdate();
         break;
-      case 580:  //toggle add destination hosts, ctrl+d
+      case kaToggleAddDestinationHosts:  //toggle add destination hosts
         setts.adh = !setts.adh;
         if (setts.adh && setts.bct) setts.bct = 0;
         osdUpdate();
         break;
-      case 'M':  //make host
+      case kaMakeHost:  //make host
         GLWin.CreateWin(-1, -1, 230, 100, "MAKE HOST");
         GLWin.AddLabel(10, 15, "Enter IP Address:");
         GLResult[0] = (GLWin.AddInput(118, 10, 15, 15, "") * 100) + HSD_MAKEHST;
         GLWin.AddButton(102, 40, GLWIN_OK, "OK", true, true);
         GLWin.AddButton(154, 40, GLWIN_CLOSE, "Cancel");
         break;
-      case 'N':  //edit selected host hostname
+      case kaEditHostname:  //edit selected host hostname
         if (!seltd) break;
         GLWin.CreateWin(-1, -1, 320, 116, seltd->htip);
         GLWin.AddLabel(10, 10, "Edit Hostname:");
@@ -1646,7 +1780,7 @@ void GLFWCALL keyboardGL(int key, int action)
         GLWin.AddButton(192, 56, GLWIN_OK, "OK", true, true);
         GLWin.AddButton(244, 56, GLWIN_CLOSE, "Cancel");
         break;
-      case 'R':  //edit selected host remarks
+      case kaEditRemarks:  //edit selected host remarks
         if (!seltd) break;
         GLWin.CreateWin(-1, -1, 320, 116, seltd->htip);
         GLWin.AddLabel(10, 10, "Edit Remarks:");
@@ -1654,7 +1788,8 @@ void GLFWCALL keyboardGL(int key, int action)
         GLWin.AddButton(192, 56, GLWIN_OK, "OK", true, true);
         GLWin.AddButton(244, 56, GLWIN_CLOSE, "Cancel");
         break;
-      case 'L': case 588:  //create/delete start/end link line with selected host, ctrl+l
+      case kaCreateLinkLine:
+      case kaDeleteLinkLine:  //create/delete start/end link line with selected host
         if (seltd)
         {
           if (lnkht)
@@ -1663,7 +1798,7 @@ void GLFWCALL keyboardGL(int key, int action)
             {
               goHosts = 1;
               while (goHosts == 1) usleep(1000);
-              linkCreDel(lnkht, seltd, 0, (key == 588));
+              linkCreDel(lnkht, seltd, 0, (keyact == kaDeleteLinkLine));
               goHosts = 0;
             }
             lnkht = 0;
@@ -1672,16 +1807,16 @@ void GLFWCALL keyboardGL(int key, int action)
         }
         else lnkht = 0;
         break;
-      case 'Y':  //automatic link lines for all hosts
+      case kaAutoLinksAll:  //automatic link lines for all hosts
         setts.nhl = 1;
         hostsSet(4, 1);  //ht->alk
         osdUpdate();
         break;
-      case 601:  //toggle automatic link lines for new hosts, ctrl+y
+      case kaToggleNewHostLinks:  //toggle automatic link lines for new hosts
         setts.nhl = !setts.nhl;
         osdUpdate();
         break;
-      case 594:  //delete link lines for all hosts, ctrl+r
+      case kaDeleteAllLinks:  //delete link lines for all hosts
         setts.nhl = 0;
         hostsSet(4, 0);  //ht->alk
         goHosts = 1;
@@ -1690,59 +1825,71 @@ void GLFWCALL keyboardGL(int key, int action)
         goHosts = 0;
         osdUpdate();
         break;
-      case 'U':  //show packets for all hosts
+      case kaShowAllPackets:  //show packets for all hosts
         setts.nhp = 1;
         hostsSet(3, 1);  //ht->shp
         osdUpdate();
         break;
-      case 597:  //toggle show packets for new hosts, ctrl+u
+      case kaToggleNewHostPackets:  //toggle show packets for new hosts
         setts.nhp = !setts.nhp;
         osdUpdate();
         break;
-      case GLFW_KEY_F1: case GLFW_KEY_F2: case GLFW_KEY_F3: case GLFW_KEY_F4:
-        setts.sen = key - 257;
+      case kaShowSensor1Packets:
+        setts.sen = 1;
         pcktsDestroy(true);
         break;
-      case GLFW_KEY_F5:  //show packets from all hsen
+      case kaShowSensor2Packets:
+        setts.sen = 2;
+        pcktsDestroy(true);
+        break;
+      case kaShowSensor3Packets:
+        setts.sen = 3;
+        pcktsDestroy(true);
+        break;
+      case kaShowSensor4Packets:
+        setts.sen = 4;
+        pcktsDestroy(true);
+        break;
+      case kaShowAllSensorPackets:  //show packets from all hsen
         setts.sen = 0;
         osdUpdate();
         break;
-      case '[':  //decrement hsen to show packets from
+      case kaPrevSensorPackets:  //decrement hsen to show packets from
         setts.sen--;
         pcktsDestroy(true);
         break;
-      case ']':  //increment hsen to show packets from
+      case kaNextSensorPackets:  //increment hsen to show packets from
         setts.sen++;
         pcktsDestroy(true);
         break;
-      case 'B':  //toggle broadcasts
+      case kaToggleBroadcasts:  //toggle broadcasts
         setts.bct = !setts.bct;
         if (setts.bct && setts.adh) setts.adh = 0;
         osdUpdate();
         break;
-      case '-':  //decrement number of packets allowed on screen before drop
+      case kaDecreasePacketLimit:  //decrement number of packets allowed on screen before drop
         if (!setts.pks) break;
         setts.pks -= 100;
         osdUpdate();
         break;
-      case '=':  //increment number of packets allowed on screen before drop
+      case kaIncreasePacketLimit:  //increment number of packets allowed on screen before drop
         if (setts.pks < 1000000)
         {
           setts.pks += 100;
           osdUpdate();
         }
         break;
-      case 596: setts.pdp = !setts.pdp; break;  //toggle packet destination port, ctrl+t
-      case 'Z':  //toggle packet speed
+      case kaTogglePacketDestPort: setts.pdp = !setts.pdp; break;  //toggle packet destination port
+      case kaTogglePacketSpeed:  //toggle packet speed
         setts.fsp = !setts.fsp;
         osdUpdate();
         break;
-      case 'K':  //packets off
+      case kaPacketsOff:  //packets off
         setts.nhp = 0;
         hostsSet(3, 0);  //ht->shp
         pcktsDestroy(true);
         break;
-      case GLFW_KEY_PAGEDOWN:  //packet traffic record
+      case kaRecordPacketTraffic:  //packet traffic record
         if (ptrc > hlt) ptrc = hlt;
         while (ptrc == hlt) usleep(1000);
         if ((pfile = fopen(hsddata("traffic.hpt"), "wb")))
@@ -1752,7 +1899,7 @@ void GLFWCALL keyboardGL(int key, int action)
           ptrc = rec;
         }
         break;
-      case GLFW_KEY_INSERT:  //packet traffic replay
+      case kaReplayPacketTraffic:  //packet traffic replay
         if (ptrc > hlt) ptrc = hlt;
         while (ptrc == hlt) usleep(1000);
         if ((pfile = fopen(hsddata("traffic.hpt"), "rb")))
@@ -1768,8 +1915,8 @@ void GLFWCALL keyboardGL(int key, int action)
           else fclose(pfile);
         }
         break;
-      case GLFW_KEY_PAGEUP: if (ptrc == rpy) offsetReset(); break;  //packet traffic replay - jump to next packet
-      case GLFW_KEY_END:  //packet traffic record/replay stop
+      case kaSkipReplayPacket: if (ptrc == rpy) offsetReset(); break;  //packet traffic replay - jump to next packet
+      case kaStopPacketTraffic:  //packet traffic record/replay stop
         if (ptrc == rec) ptrc = hlt;
         else if (ptrc == rpy)
         {
@@ -1778,9 +1925,10 @@ void GLFWCALL keyboardGL(int key, int action)
           goHosts = 0;
         }
         break;
-      case GLFW_KEY_F7: case GLFW_KEY_F8:  //2D GUI open/save packet traffic file
+      case kaOpenPacketTrafficFile:
+      case kaSavePacketTrafficFile:  //2D GUI open/save packet traffic file
         filelistCreate(hsddata("tmp-flist-hsd"), ".hpt");
-        if (key == GLFW_KEY_F7)
+        if (keyact == kaOpenPacketTrafficFile)
         {
           GLWin.CreateWin(-1, -1, 332, 234, "OPEN PACKET TRAFFIC FILE...", true, true);
           GLResult[0] = (GLWin.AddInput(10, 26, 50, 251, "") * 100) + HSD_HPTOPEN;
@@ -1795,10 +1943,10 @@ void GLFWCALL keyboardGL(int key, int action)
         GLWin.AddButton(128, 60, GLWIN_OK, "OK", false, true);
         GLWin.AddButton(76, 60, GLWIN_CLOSE, "Cancel", false, false);
         break;
-      case GLFW_KEY_SPACE: goAnim = !goAnim; break;  //toggle animation
-      case 587: hostsSet(2, 0); break;  //acknowledge all anomalies, ht->anm, ctrl+k
-      case 'O': setts.osd = !setts.osd; break;  //toggle OSD
-      case 'X':  //export selection details in CSV file
+      case kaToggleAnimation: goAnim = !goAnim; break;  //toggle animation
+      case kaAcknowledgeAllAnomalies: hostsSet(2, 0); break;  //acknowledge all anomalies
+      case kaToggleOsd: setts.osd = !setts.osd; break;  //toggle OSD
+      case kaExportSelectionCsv:  //export selection details in CSV file
         filelistCreate(hsddata("tmp-flist-hsd"), ".csv");
         GLWin.CreateWin(-1, -1, 332, 234, "EXPORT SELECTION DETAILS IN CSV FILE AS...", true, true);
         GLWin.AddLabel(10, 10, "Enter File Name:");
@@ -1807,14 +1955,14 @@ void GLFWCALL keyboardGL(int key, int action)
         GLWin.AddButton(128, 60, GLWIN_OK, "OK", false, true);
         GLWin.AddButton(76, 60, GLWIN_CLOSE, "Cancel", false, false);
         break;
-      case 'I':  //2D GUI selected host info
+      case kaShowHostInformation:  //2D GUI selected host info
         if (!seltd) break;
         infoHost();
         GLWin.CreateWin(-2, -2, 352, 277, "HOST INFORMATION", true, true);
         GLWin.AddView(10, 10, 10, 10, 10, hsddata("tmp-hinfo-hsd"));
         GLResult[0] = HSD_HSTINFO;
         break;
-      case 'G':  //2D GUI selection info
+      case kaShowSelectionInformation:  //2D GUI selection info
         infoSelection();
         GLWin.CreateWin(-2, -2, 352, 270, "SELECTION INFORMATION", true, true);
         GLWin.AddButton(10, 6, GLWIN_MISC1, "Selection");
@@ -1823,7 +1971,7 @@ void GLFWCALL keyboardGL(int key, int action)
         GLWin.AddView(10, 42, 10, 10, 17, hsddata("tmp-hinfo-hsd"));
         GLResult[0] = 0;
         break;
-      case 'H':  //2D GUI help
+      case kaShowHelp:  //2D GUI help
         GLWin.CreateWin(-2, -2, 352, 271, "HELP", true, true);
         GLWin.AddBitmap(10, 10, red[0], red[1], red[2], bitmaps[16]);
         GLWin.AddLabel(23, 10, "ICMP");
@@ -1838,9 +1986,16 @@ void GLFWCALL keyboardGL(int key, int action)
         GLWin.AddView(10, 30, 10, 10, 28, hsddata("controls.txt"));
         GLResult[0] = 0;
         break;
+      default:
+        break;
     }
   }
   refresh = true;
+}
+
+static void triggerKeyAction(keyact_type action)
+{
+  if (keybinds[action].key) keyboardGL(keybinds[action].key, 2);
 }
 
 void mnuKeyProcessLe9Cb(void **data, long arg1, long arg2, long arg3, long arg4)
@@ -2115,10 +2270,10 @@ void mnuProcess(int m)
         }
         goHosts = 0;
         break;
-      case 40: keyboardGL('I', 2); break;  //2D GUI selected host info
+      case 40: triggerKeyAction(kaShowHostInformation); break;  //2D GUI selected host info
       case 41:  //show selected host packets only
         if (!seltd) break;
-        keyboardGL('K', 2);  //packets off
+        triggerKeyAction(kaPacketsOff);  //packets off
         seltd->shp = 1;  //show packets
         break;
       case 42:  //move selected host here
@@ -2151,10 +2306,10 @@ void mnuProcess(int m)
           setts.vws[0] = tview;
         }
         break;
-      case 44: keyboardGL('N', 2); break;  //edit selected host hostname
-      case 45: keyboardGL('R', 2); break;  //edit selected host remarks
-      case 46: keyboardGL('G', 2); break;  //2D GUI selection info
-      case 47: keyboardGL(587, 2); break;  //acknowledge all anomalies, ctrl+k
+      case 44: triggerKeyAction(kaEditHostname); break;  //edit selected host hostname
+      case 45: triggerKeyAction(kaEditRemarks); break;  //edit selected host remarks
+      case 46: triggerKeyAction(kaShowSelectionInformation); break;  //2D GUI selection info
+      case 47: triggerKeyAction(kaAcknowledgeAllAnomalies); break;  //acknowledge all anomalies
       case 48:  //toggle anomaly detection
         setts.anm = !setts.anm;
         dAnom = setts.anm;
@@ -2195,7 +2350,7 @@ void mnuProcess(int m)
         setts.sona = don;
         osdUpdate();
         break;
-      case 60: keyboardGL('U', 2); break;  //show packets for all hosts
+      case 60: triggerKeyAction(kaShowAllPackets); break;  //show packets for all hosts
       case 61:  //show all protocols packets
         setts.pr = 0;
         osdUpdate();
@@ -2234,9 +2389,12 @@ void mnuProcess(int m)
         GLWin.AddButton(30, 40, GLWIN_OK, "OK", true, true);
         GLWin.AddButton(82, 40, GLWIN_CLOSE, "Cancel");
         break;
-      case 69: keyboardGL('K', 2); break;  //packets off
-      case 70: keyboardGL(GLFW_KEY_HOME, 2); break;  //recall default views
-      case 71: case 72: case 73: case 74: keyboardGL(m + 699, 2); break;  //recall view position 1-4, ctrl+f1-f4
+      case 69: triggerKeyAction(kaPacketsOff); break;  //packets off
+      case 70: triggerKeyAction(kaViewHomeAlt); break;  //recall alternate home view
+      case 71: triggerKeyAction(kaViewPos1); break;  //recall view position 1
+      case 72: triggerKeyAction(kaViewPos2); break;  //recall view position 2
+      case 73: triggerKeyAction(kaViewPos3); break;  //recall view position 3
+      case 74: triggerKeyAction(kaViewPos4); break;  //recall view position 4
       case 75: case 76: case 77: case 78: memcpy(&setts.vws[m - 74], &setts.vws[0], sizeof(view_type)); break;  //save current view as view position 1-4
       case 80: case 85:  //2D GUI open/save network layout file
         filelistCreate(hsddata("tmp-flist-hsd"), ".hnl");
@@ -2285,7 +2443,7 @@ void mnuProcess(int m)
         allDestroy();
         goHosts = 0;
         break;
-      case 93: keyboardGL('F', 2); break;  //2D GUI find hosts
+      case 93: triggerKeyAction(kaFindHosts); break;  //2D GUI find hosts
 #ifndef __MINGW32__
       case 94:  //start local hsen
         GLWin.CreateWin(-1, -1, 320, 254, "START LOCAL hsen");
@@ -2312,7 +2470,7 @@ void mnuProcess(int m)
         GLWin.AddButton(244, 56, GLWIN_CLOSE, "Cancel");
         break;
 #endif
-      case 97: keyboardGL('H', 2); break;  //2D GUI help
+      case 97: triggerKeyAction(kaShowHelp); break;  //2D GUI help
       case 98:  //about
         GLWin.CreateWin(-1, -1, 230, 138, "ABOUT");
         GLWin.AddLabel(10, 10, "Hosts3D 1.16");
@@ -2378,17 +2536,17 @@ void mnuProcess(int m)
         break;
       case 101:
         GLWin.AddMenu(114, "SELECTED", 8, 2, 100);
-        GLWin.AddMenu(114, "Information (I)", 8, 0, 40);
+        GLWin.AddMenu(114, menuLabelWithBinding("Information", kaShowHostInformation), 8, 0, 40);
         GLWin.AddMenu(114, "Show Packets Only", 8, 0, 41);  //6+(17x6)+6=114
         GLWin.AddMenu(114, "Move Here", 8, 0, 42);
         GLWin.AddMenu(114, "Go To", 8, 0, 43);
-        GLWin.AddMenu(114, "Hostname (N)", 8, 0, 44);
-        GLWin.AddMenu(114, "Remarks (R)", 8, 0, 45);
+        GLWin.AddMenu(114, menuLabelWithBinding("Hostname", kaEditHostname), 8, 0, 44);
+        GLWin.AddMenu(114, menuLabelWithBinding("Remarks", kaEditRemarks), 8, 0, 45);
         GLWin.AddMenu(114, "Add Net Position", 8, 0, 91);
         break;
       case 102:
         GLWin.AddMenu(102, "SELECTION", 9, 2, 100);
-        GLWin.AddMenu(102, "Information (G)", 9, 0, 46);  //6+(15x6)+6=102
+        GLWin.AddMenu(102, menuLabelWithBinding("Information", kaShowSelectionInformation), 9, 0, 46);  //6+(15x6)+6=102
         GLWin.AddMenu(102, "Colour", 9, 1, 110);
         GLWin.AddMenu(102, "Lock", 9, 1, 111);
         GLWin.AddMenu(102, "Move To Zone", 9, 1, 112);
@@ -2413,11 +2571,11 @@ void mnuProcess(int m)
         break;
       case 105:
         GLWin.AddMenu(96, "PACKETS", 6, 2, 100);
-        GLWin.AddMenu(96, "Show All (U)", 6, 0, 60);
+        GLWin.AddMenu(96, menuLabelWithBinding("Show All", kaShowAllPackets), 6, 0, 60);
         GLWin.AddMenu(96, "Protocol", 6, 1, 118);
         GLWin.AddMenu(96, "Port", 6, (setts.prt ? 1 : 0), (setts.prt ? 119 : 68));
         GLWin.AddMenu(96, "Select Showing", 6, 0, 32);  //6+(14x6)+6=96
-        GLWin.AddMenu(96, "Off (K)", 6, 0, 69);
+        GLWin.AddMenu(96, menuLabelWithBinding("Off", kaPacketsOff), 6, 0, 69);
         break;
       case 106:
         GLWin.AddMenu(84, "ON-ACTIVE", 6, 2, 100);
@@ -2441,12 +2599,12 @@ void mnuProcess(int m)
         break;
       case 109:
         GLWin.AddMenu(118, "OTHER", 6, 2, 100);
-        GLWin.AddMenu(118, "Find Hosts (F)", 6, 0, 93);
+        GLWin.AddMenu(118, menuLabelWithBinding("Find Hosts", kaFindHosts), 6, 0, 93);
         GLWin.AddMenu(118, "Select Inactive", 6, 1, 125);  //6+(15x6)+12+10=118
 #ifndef __MINGW32__
         GLWin.AddMenu(118, "Local hsen", 6, 1, 126);
 #endif
-        GLWin.AddMenu(118, "Help (H)", 6, 0, 97);
+        GLWin.AddMenu(118, menuLabelWithBinding("Help", kaShowHelp), 6, 0, 97);
         GLWin.AddMenu(118, "About", 6, 0, 98);
         break;
       case 110:
@@ -2503,7 +2661,7 @@ void mnuProcess(int m)
       case 117:
         GLWin.AddMenu(94, "ACKNOWLEDGE", 3, 2, 103);  //6+(11x6)+12+10=94
         GLWin.AddMenu(94, "Selection", 3, 0, 26);
-        GLWin.AddMenu(94, "All (Ctrl+K)", 3, 0, 47);
+        GLWin.AddMenu(94, menuLabelWithBinding("All", kaAcknowledgeAllAnomalies), 3, 0, 47);
         break;
       case 118:
         GLWin.AddMenu(76, "PROTOCOL", 7, 2, 105);  //6+(8x6)+12+10=76
@@ -2521,11 +2679,11 @@ void mnuProcess(int m)
         break;
       case 120:
         GLWin.AddMenu(108, "RECALL", 6, 2, 107);
-        GLWin.AddMenu(108, "Home (Ctrl+Home)", 6, 0, 70);  //6+(16x6)+6=108
-        GLWin.AddMenu(108, "Pos 1 (Ctrl+F1)", 6, 0, 71);
-        GLWin.AddMenu(108, "Pos 2 (Ctrl+F2)", 6, 0, 72);
-        GLWin.AddMenu(108, "Pos 3 (Ctrl+F3)", 6, 0, 73);
-        GLWin.AddMenu(108, "Pos 4 (Ctrl+F4)", 6, 0, 74);
+        GLWin.AddMenu(108, menuLabelWithBinding("Home", kaViewHomeAlt), 6, 0, 70);  //6+(16x6)+6=108
+        GLWin.AddMenu(108, menuLabelWithBinding("Pos 1", kaViewPos1), 6, 0, 71);
+        GLWin.AddMenu(108, menuLabelWithBinding("Pos 2", kaViewPos2), 6, 0, 72);
+        GLWin.AddMenu(108, menuLabelWithBinding("Pos 3", kaViewPos3), 6, 0, 73);
+        GLWin.AddMenu(108, menuLabelWithBinding("Pos 4", kaViewPos4), 6, 0, 74);
         break;
       case 121:
         GLWin.AddMenu(52, "SAVE", 5, 2, 107);  //6+(4x6)+12+10=52
@@ -2956,6 +3114,168 @@ static bool parseSonaValue(const char *value, sona_type *out)
   return true;
 }
 
+static void ensureHsdDataDir()
+{
+  char datapath[256];
+  strcpy(datapath, hsddata(""));
+  if (fileExists(datapath)) return;
+#ifdef __MINGW32__
+  mkdir(datapath);
+#else
+  mkdir(datapath, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH);  //drwxr-xr-x
+#endif
+}
+
+static void compactBindingToken(const char *src, char *dst, size_t dstsz)
+{
+  size_t pos = 0;
+  while (*src && (pos < (dstsz - 1)))
+  {
+    if (!isspace((unsigned char)*src) && (*src != '_') && (*src != '-')) dst[pos++] = toupper((unsigned char)*src);
+    src++;
+  }
+  dst[pos] = '\0';
+}
+
+static int keyCodeFromToken(const char *token)
+{
+  if (!token || !*token) return 0;
+  if ((strlen(token) == 1) && strchr("ABCDEFGHIJKLMNOPQRSTUVWXYZ[]=-", token[0])) return token[0];
+  if ((strlen(token) == 1) && isdigit((unsigned char)token[0])) return token[0];
+  if (!strcmp(token, "UP")) return GLFW_KEY_UP;
+  if (!strcmp(token, "DOWN")) return GLFW_KEY_DOWN;
+  if (!strcmp(token, "LEFT")) return GLFW_KEY_LEFT;
+  if (!strcmp(token, "RIGHT")) return GLFW_KEY_RIGHT;
+  if (!strcmp(token, "HOME")) return GLFW_KEY_HOME;
+  if (!strcmp(token, "TAB")) return GLFW_KEY_TAB;
+  if (!strcmp(token, "SPACE")) return GLFW_KEY_SPACE;
+  if (!strcmp(token, "INSERT")) return GLFW_KEY_INSERT;
+  if (!strcmp(token, "END")) return GLFW_KEY_END;
+  if (!strcmp(token, "PAGEUP") || !strcmp(token, "PGUP")) return GLFW_KEY_PAGEUP;
+  if (!strcmp(token, "PAGEDOWN") || !strcmp(token, "PGDOWN") || !strcmp(token, "PGDN")) return GLFW_KEY_PAGEDOWN;
+  if (!strcmp(token, "PLUS") || !strcmp(token, "EQUAL") || !strcmp(token, "EQUALS")) return '=';
+  if (!strcmp(token, "MINUS") || !strcmp(token, "DASH")) return '-';
+  if (!strcmp(token, "LEFTBRACKET") || !strcmp(token, "OPENBRACKET")) return '[';
+  if (!strcmp(token, "RIGHTBRACKET") || !strcmp(token, "CLOSEBRACKET")) return ']';
+  if ((token[0] == 'F') && isdigit((unsigned char)token[1]) && !token[2])
+  {
+    switch (token[1])
+    {
+    case '1': return GLFW_KEY_F1;
+    case '2': return GLFW_KEY_F2;
+    case '3': return GLFW_KEY_F3;
+    case '4': return GLFW_KEY_F4;
+    case '5': return GLFW_KEY_F5;
+    case '6': return GLFW_KEY_F6;
+    case '7': return GLFW_KEY_F7;
+    case '8': return GLFW_KEY_F8;
+    }
+  }
+  return 0;
+}
+
+static bool parseBindingValue(const char *value, int *out)
+{
+  char compact[64], *keytxt = compact;
+  bool ctrl = false;
+  compactBindingToken(value, compact, sizeof(compact));
+  if (!*keytxt) return false;
+  if (!strcmp(keytxt, "NONE") || !strcmp(keytxt, "DISABLED"))
+  {
+    *out = 0;
+    return true;
+  }
+  if (!strncmp(keytxt, "CTRL+", 5))
+  {
+    ctrl = true;
+    keytxt += 5;
+  }
+  int keycode = keyCodeFromToken(keytxt);
+  if (!keycode) return false;
+  *out = (ctrl ? CTRLKEY(keycode) : keycode);
+  return true;
+}
+
+static const char *keyCodeName(int key)
+{
+  static char single[2];
+  switch (key)
+  {
+  case GLFW_KEY_UP: return "Up";
+  case GLFW_KEY_DOWN: return "Down";
+  case GLFW_KEY_LEFT: return "Left";
+  case GLFW_KEY_RIGHT: return "Right";
+  case GLFW_KEY_HOME: return "Home";
+  case GLFW_KEY_TAB: return "Tab";
+  case GLFW_KEY_SPACE: return "Space";
+  case GLFW_KEY_INSERT: return "Insert";
+  case GLFW_KEY_END: return "End";
+  case GLFW_KEY_PAGEUP: return "Page Up";
+  case GLFW_KEY_PAGEDOWN: return "Page Down";
+  case GLFW_KEY_F1: return "F1";
+  case GLFW_KEY_F2: return "F2";
+  case GLFW_KEY_F3: return "F3";
+  case GLFW_KEY_F4: return "F4";
+  case GLFW_KEY_F5: return "F5";
+  case GLFW_KEY_F6: return "F6";
+  case GLFW_KEY_F7: return "F7";
+  case GLFW_KEY_F8: return "F8";
+  case '[': return "[";
+  case ']': return "]";
+  case '-': return "Minus";
+  case '=': return "Plus";
+  default:
+    if (((key >= 'A') && (key <= 'Z')) || ((key >= '0') && (key <= '9')))
+    {
+      single[0] = (char) key;
+      single[1] = '\0';
+      return single;
+    }
+    return "Unknown";
+  }
+}
+
+static void bindingLabel(int encoded, char *buf, size_t bufsz)
+{
+  if (!encoded)
+  {
+    strncpy(buf, "Disabled", bufsz - 1);
+    buf[bufsz - 1] = '\0';
+    return;
+  }
+  if (encoded >= 512)
+  {
+    snprintf(buf, bufsz, "Ctrl + %s", keyCodeName(encoded - 512));
+    return;
+  }
+  snprintf(buf, bufsz, "%s", keyCodeName(encoded));
+}
+
+static const char *menuLabelWithBinding(const char *title, keyact_type action)
+{
+  static char labels[8][96];
+  static unsigned char idx = 0;
+  char binding[32];
+  idx = (idx + 1) % 8;
+  if (!keybinds[action].key)
+  {
+    snprintf(labels[idx], sizeof(labels[idx]), "%s", title);
+    return labels[idx];
+  }
+  bindingLabel(keybinds[action].key, binding, sizeof(binding));
+  snprintf(labels[idx], sizeof(labels[idx]), "%s (%s)", title, binding);
+  return labels[idx];
+}
+
+static keyact_type keyActionFromInput(int encoded)
+{
+  for (unsigned char cnt = 0; cnt < kaCount; cnt++)
+  {
+    if (keybinds[cnt].key && (keybinds[cnt].key == encoded)) return (keyact_type) cnt;
+  }
+  return kaCount;
+}
+
 static bool settsLoadIni(const char *path)
 {
   FILE *sts;
@@ -2974,6 +3294,7 @@ static bool settsLoadIni(const char *path)
     unsigned short us;
     unsigned int ui;
     double dbl;
+    int binding;
     pos_type pos;
     sipn_type sipn;
     sips_type sips;
@@ -3053,6 +3374,17 @@ static bool settsLoadIni(const char *path)
     else if (!strcmp(key, "command4")) setStringValue(setts.cmd[3], sizeof(setts.cmd[3]), value);
     else
     {
+      bool matched = false;
+      for (unsigned char cnt = 0; cnt < kaCount; cnt++)
+      {
+        if (!strcmp(key, keybinds[cnt].name))
+        {
+          if (parseBindingValue(value, &binding)) keybinds[cnt].key = binding;
+          matched = true;
+          break;
+        }
+      }
+      if (matched) continue;
       unsigned char vwn;
       if (!strncmp(key, "view", 4) && isdigit((unsigned char)key[4]) && (key[5] == '.'))
       {
@@ -3141,6 +3473,15 @@ static bool settsSaveIni(const char *path)
   fprintf(sts, "command3=%s\n", setts.cmd[2]);
   fprintf(sts, "command4=%s\n\n", setts.cmd[3]);
 
+  fputs("[keybindings]\n", sts);
+  for (unsigned char cnt = 0; cnt < kaCount; cnt++)
+  {
+    char label[32];
+    bindingLabel(keybinds[cnt].key, label, sizeof(label));
+    fprintf(sts, "%s=%s\n", keybinds[cnt].name, label);
+  }
+  fputc('\n', sts);
+
   fputs("[views]\n", sts);
   for (unsigned char cnt = 0; cnt < 5; cnt++)
   {
@@ -3160,11 +3501,13 @@ static bool settsSaveIni(const char *path)
 void settsLoad()
 {
   char inipath[256], legacypath[256];
+  ensureHsdDataDir();
   strcpy(inipath, hsddata("settings.ini"));
   strcpy(legacypath, hsddata("settings-hsd"));
 
   if (settsLoadIni(inipath))
   {
+    settsSaveIni(inipath);
     if (fileExists(legacypath)) remove(legacypath);
     return;
   }
@@ -3181,9 +3524,118 @@ void settsLoad()
 void settsSave()
 {
   char inipath[256], legacypath[256];
+  ensureHsdDataDir();
   strcpy(inipath, hsddata("settings.ini"));
   strcpy(legacypath, hsddata("settings-hsd"));
   if (settsSaveIni(inipath) && fileExists(legacypath)) remove(legacypath);
+}
+
+static void controlLine(FILE *ctls, const char *binding, const char *desc)
+{
+  fprintf(ctls, "%s\t%s\n", binding, desc);
+}
+
+static void controlLineKey(FILE *ctls, keyact_type action, const char *desc)
+{
+  char label[32];
+  bindingLabel(keybinds[action].key, label, sizeof(label));
+  controlLine(ctls, label, desc);
+}
+
+static void controlLinePair(FILE *ctls, keyact_type first, keyact_type second, const char *desc)
+{
+  char left[32], right[32], binding[72];
+  bindingLabel(keybinds[first].key, left, sizeof(left));
+  bindingLabel(keybinds[second].key, right, sizeof(right));
+  snprintf(binding, sizeof(binding), "%s/%s", left, right);
+  controlLine(ctls, binding, desc);
+}
+
+//check for controls file, create it
+void checkControls()
+{
+  FILE *ctls;
+  char movef[32], moveb[32], movel[32], mover[32], shiftmv[160];
+  ensureHsdDataDir();
+  if ((ctls = fopen(hsddata("controls.txt"), "w")))
+  {
+    controlLine(ctls, "Left Mouse Button", "Select Host");
+    controlLine(ctls, "", "Click-and-Drag to Select Multiple Hosts");
+    controlLine(ctls, "", "Click Selected Host to Toggle Persistant IP/Name");
+    controlLine(ctls, "Middle Mouse Button", "Click-and-Drag to Change View");
+    controlLine(ctls, "Right Mouse Button", "Show Menu");
+    controlLine(ctls, "Mouse Wheel", "Move Up/Down");
+    controlLinePair(ctls, kaMoveForward, kaMoveBack, "Move Forward/Back");
+    controlLinePair(ctls, kaMoveLeft, kaMoveRight, "Move Left/Right");
+    bindingLabel(keybinds[kaMoveForward].key, movef, sizeof(movef));
+    bindingLabel(keybinds[kaMoveBack].key, moveb, sizeof(moveb));
+    bindingLabel(keybinds[kaMoveLeft].key, movel, sizeof(movel));
+    bindingLabel(keybinds[kaMoveRight].key, mover, sizeof(mover));
+    snprintf(shiftmv, sizeof(shiftmv), "Shift + %s/%s/%s/%s", movef, moveb, movel, mover);
+    controlLine(ctls, shiftmv, "Move at Triple Speed");
+    controlLineKey(ctls, kaViewHome, "Recall Home View");
+    controlLineKey(ctls, kaViewHomeAlt, "Recall Alternate Home View");
+    controlLineKey(ctls, kaViewPos1, "Recall View Position 1");
+    controlLineKey(ctls, kaViewPos2, "Recall View Position 2");
+    controlLineKey(ctls, kaViewPos3, "Recall View Position 3");
+    controlLineKey(ctls, kaViewPos4, "Recall View Position 4");
+    controlLine(ctls, "Ctrl", "Multi-Select");
+    controlLineKey(ctls, kaSelectAll, "Select All Hosts");
+    controlLineKey(ctls, kaInvertSelection, "Invert Selection");
+    controlLinePair(ctls, kaSelMoveUp, kaSelMoveDown, "Move Selection Up/Down");
+    controlLinePair(ctls, kaSelMoveForward, kaSelMoveBack, "Move Selection Forward/Back");
+    controlLinePair(ctls, kaSelMoveLeft, kaSelMoveRight, "Move Selection Left/Right");
+    controlLineKey(ctls, kaFindHosts, "Find Hosts");
+    controlLineKey(ctls, kaNextSelectedHost, "Select Next Host in Selection");
+    controlLineKey(ctls, kaPrevSelectedHost, "Select Previous Host in Selection");
+    controlLineKey(ctls, kaToggleSelectionPersistant, "Toggle Persistant IP/Name for Selection");
+    controlLineKey(ctls, kaCycleIpNameDisplay, "Cycle Show IP - IP/Name - Name Only");
+    controlLineKey(ctls, kaToggleAddDestinationHosts, "Toggle Add Destination Hosts [D]");
+    controlLineKey(ctls, kaMakeHost, "Make Host");
+    controlLineKey(ctls, kaEditHostname, "Edit Hostname for Selected Host");
+    controlLineKey(ctls, kaSelectNamed, "Select All Named Hosts");
+    controlLineKey(ctls, kaEditRemarks, "Edit Remarks for Selected Host");
+    controlLineKey(ctls, kaCreateLinkLine, "Press Twice with Different Selected Hosts for Link Line");
+    controlLineKey(ctls, kaDeleteLinkLine, "Delete Link Line (2nd Selected Host, Press Link on 1st)");
+    controlLineKey(ctls, kaAutoLinksAll, "Automatic Link Lines for All Hosts");
+    controlLineKey(ctls, kaToggleNewHostLinks, "Toggle Automatic Link Lines for New Hosts [L]");
+    controlLineKey(ctls, kaAutoLinksSelection, "Automatic Link Lines for Selection");
+    controlLineKey(ctls, kaStopAutoLinksSelection, "Stop Automatic Link Lines for Selection");
+    controlLineKey(ctls, kaDeleteAllLinks, "Delete Link Lines for All Hosts");
+    controlLineKey(ctls, kaShowSelectionPackets, "Show Packets for Selection");
+    controlLineKey(ctls, kaHideSelectionPackets, "Stop Showing Packets for Selection");
+    controlLineKey(ctls, kaShowAllPackets, "Show Packets for All Hosts");
+    controlLineKey(ctls, kaToggleNewHostPackets, "Toggle Show Packets for New Hosts [P]");
+    controlLineKey(ctls, kaShowSensor1Packets, "Show Packets from Sensor 1");
+    controlLineKey(ctls, kaShowSensor2Packets, "Show Packets from Sensor 2");
+    controlLineKey(ctls, kaShowSensor3Packets, "Show Packets from Sensor 3");
+    controlLineKey(ctls, kaShowSensor4Packets, "Show Packets from Sensor 4");
+    controlLineKey(ctls, kaShowAllSensorPackets, "Show Packets from All Sensors");
+    controlLinePair(ctls, kaPrevSensorPackets, kaNextSensorPackets, "Change Sensor to Show Packets from");
+    controlLineKey(ctls, kaToggleBroadcasts, "Toggle Show Simulated Broadcasts [B]");
+    controlLineKey(ctls, kaDecreasePacketLimit, "Decrease Allowed Packets");
+    controlLineKey(ctls, kaIncreasePacketLimit, "Increase Allowed Packets");
+    controlLineKey(ctls, kaTogglePacketDestPort, "Toggle Show Packet Destination Port");
+    controlLineKey(ctls, kaTogglePacketSpeed, "Toggle Double Speed Packets [F]");
+    controlLineKey(ctls, kaPacketsOff, "Packets Off");
+    controlLineKey(ctls, kaRecordPacketTraffic, "Record Packet Traffic");
+    controlLineKey(ctls, kaReplayPacketTraffic, "Replay Recorded Packet Traffic");
+    controlLineKey(ctls, kaSkipReplayPacket, "Skip to Next Packet during Replay Traffic");
+    controlLineKey(ctls, kaStopPacketTraffic, "Stop Record/Replay of Packet Traffic");
+    controlLineKey(ctls, kaOpenPacketTrafficFile, "Open Packet Traffic File...");
+    controlLineKey(ctls, kaSavePacketTrafficFile, "Save Packet Traffic File As...");
+    controlLineKey(ctls, kaToggleAnimation, "Toggle Pause Animation");
+    controlLine(ctls, "Ctrl + X", "Cut Input Box Text");
+    controlLine(ctls, "Ctrl + C", "Copy Input Box Text");
+    controlLine(ctls, "Ctrl + V", "Paste Input Box Text");
+    controlLineKey(ctls, kaAcknowledgeAllAnomalies, "Acknowledge All Anomalies");
+    controlLineKey(ctls, kaToggleOsd, "Toggle Show OSD");
+    controlLineKey(ctls, kaExportSelectionCsv, "Export Selection Details in CSV File As...");
+    controlLineKey(ctls, kaShowHostInformation, "Show Selected Host Information");
+    controlLineKey(ctls, kaShowSelectionInformation, "Show Selection Information");
+    controlLineKey(ctls, kaShowHelp, "Show Help");
+    fclose(ctls);
+  }
 }
 
 //compile GL objects
@@ -3478,8 +3930,8 @@ int main(int argc, char *argv[])
     glfwTerminate();
     return 1;
   }
-  checkControls();  //check for controls file
   settsLoad();  //load settings
+  checkControls();  //write controls file from current settings
   osdUpdate();
   netLoad(hsddata("0network.hnl"));  //load network layout 0
   if (goHosts) goHosts = 0;

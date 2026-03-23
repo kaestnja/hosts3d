@@ -201,7 +201,7 @@ Main files:
 | `0network.hnl` | network layout on exit |
 | `1network.hnl`..`4network.hnl` | saved layouts |
 | `netpos.txt` | CIDR-to-position/color mapping |
-| `traffic.hpt` | packet traffic record |
+| `traffic.hpt` | Hosts3D packet traffic record/replay data (not PCAP) |
 | `tmp-hinfo-hsd` | temporary host/selection info |
 | `tmp-netpos-hsd` | temporary net positions |
 | `tmp-flist-hsd` | temporary file list |
@@ -209,6 +209,12 @@ Main files:
 Notes:
 - `settings.ini` is plain text and can be reviewed or edited with Hosts3D closed.
 - If a legacy `settings-hsd` binary file is found, Hosts3D imports it once into `settings.ini`.
+- `traffic.hpt` contains Hosts3D/hsen packet metadata for Record/Replay; it is not a Wireshark-compatible capture format.
+
+Keyboard customization:
+- Keyboard bindings live in the `[keybindings]` section of `settings.ini`.
+- `controls.txt` is regenerated from the current bindings when Hosts3D starts.
+- Supported examples: `F7`, `Page Down`, `Insert`, `Ctrl + K`, `Tab`, `Plus`, `Minus`, `[` and `]`.
 
 ## Net Positions (`netpos.txt`)
 Format:
@@ -287,17 +293,19 @@ This section reflects current implementation (`src/misc.h`, `src/objects.cpp`, `
 Press `H` in Hosts3D to open the in-app help pane (`controls.txt` content).
 
 Source of truth:
-- `src/objects.cpp`: `checkControls()` writes `controls.txt`
+- `settings.ini`: `[keybindings]` stores the current keyboard mapping
+- `src/hosts3d.cpp`: `checkControls()` writes `controls.txt`
 - `src/hosts3d.cpp`: `keyboardGL()`, `clickGL()`, `wheelGL()`, `motionGL()`
 
 Maintenance rule:
-- If controls change, update both `README.md` and `checkControls()` to keep docs and in-app help synchronized.
+- If default controls or help descriptions change, update both `README.md` and `checkControls()` to keep docs and in-app help synchronized.
 
 Runtime behavior not explicitly listed in `controls.txt`:
 - Single-clicking a multi-host collision object cycles through hosts in that cluster.
 - Mouse wheel in 3D mode moves camera up/down directly (no modifier required).
+- The in-app help reflects the current bindings from `settings.ini`; the list below shows the default mapping.
 
-### Controls List (Verbatim From `checkControls()`)
+### Default Controls List
 Legacy spelling is preserved for parity: `Persistant`.
 
 ```text
@@ -312,7 +320,10 @@ Left/Right	Move Left/Right
 Shift + Up/Down/Left/Right	Move at Triple Speed
 Home	Recall Home View
 Ctrl + Home	Recall Alternate Home View
-Ctrl + F1-F4	Recall View Position 1-4
+Ctrl + F1	Recall View Position 1
+Ctrl + F2	Recall View Position 2
+Ctrl + F3	Recall View Position 3
+Ctrl + F4	Recall View Position 4
 Ctrl	Multi-Select
 Ctrl + A	Select All Hosts
 Ctrl + S	Invert Selection
@@ -330,7 +341,7 @@ N	Edit Hostname for Selected Host
 Ctrl + N	Select All Named Hosts
 R	Edit Remarks for Selected Host
 L	Press Twice with Different Selected Hosts for Link Line
-Ctrl + L	Delete Link Line (2nd Selected Host, Press L on 1st)
+Ctrl + L	Delete Link Line (2nd Selected Host, Press Link on 1st)
 Y	Automatic Link Lines for All Hosts
 Ctrl + Y	Toggle Automatic Link Lines for New Hosts [L]
 J	Automatic Link Lines for Selection
@@ -340,11 +351,15 @@ P	Show Packets for Selection
 Ctrl + P	Stop Showing Packets for Selection
 U	Show Packets for All Hosts
 Ctrl + U	Toggle Show Packets for New Hosts [P]
-F1-F4	Show Packets from Sensor 1-4
+F1	Show Packets from Sensor 1
+F2	Show Packets from Sensor 2
+F3	Show Packets from Sensor 3
+F4	Show Packets from Sensor 4
 F5	Show Packets from All Sensors
-[  ]	Change Sensor to Show Packets from
+[ / ]	Change Sensor to Show Packets from
 B	Toggle Show Simulated Broadcasts [B]
--  +	Decrease/Increase Allowed Packets
+Minus	Decrease Allowed Packets
+Plus	Increase Allowed Packets
 Ctrl + T	Toggle Show Packet Destination Port
 Z	Toggle Double Speed Packets [F]
 K	Packets Off
@@ -368,6 +383,7 @@ H	Show Help
 
 ## Right-Click Menu Map (1:1 From `mnuProcess()`)
 All labels below are taken from `src/hosts3d.cpp` menu construction code.
+Shortcut suffixes in the running UI follow the current keybindings from `settings.ini`; the labels below show the default mapping.
 
 ### Main Menu
 | Menu | Items |

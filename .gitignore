@@ -11,10 +11,15 @@ Tools/Wireshark/WiresharkPortable64_4.6.4.paf.exe
 
 # Machine-local Hosts3D runtime data
 **/hsd-data/0network.hnl
+**/hsd-data/1network.hnl
+**/hsd-data/2network.hnl
+**/hsd-data/3network.hnl
+**/hsd-data/4network.hnl
 **/hsd-data/controls.txt
 **/hsd-data/netpos.txt
 **/hsd-data/settings.ini
 **/hsd-data/settings-hsd
+**/hsd-data/traffic.hpt
 **/hsd-data/tmp-hinfo-hsd
 **/hsd-data/tmp-netpos-hsd
 **/hsd-data/tmp-flist-hsd
