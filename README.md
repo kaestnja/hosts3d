@@ -210,11 +210,22 @@ Notes:
 - `settings.ini` is plain text and can be reviewed or edited with Hosts3D closed.
 - If a legacy `settings-hsd` binary file is found, Hosts3D imports it once into `settings.ini`.
 - `traffic.hpt` contains Hosts3D/hsen packet metadata for Record/Replay; it is not a Wireshark-compatible capture format.
+- Runtime host lifetime/cleanup behavior is configured in the `[dynamic_hosts]` section of `settings.ini`.
 
 Keyboard customization:
 - Keyboard bindings live in the `[keybindings]` section of `settings.ini`.
 - `controls.txt` is regenerated from the current bindings when Hosts3D starts.
 - Supported examples: `F7`, `Page Down`, `Insert`, `Ctrl + K`, `Tab`, `Plus`, `Minus`, `[` and `]`.
+
+Dynamic/static hosts:
+- Automatically discovered traffic hosts start as `dynamic`.
+- Hosts loaded from a saved layout, created manually, or manually edited (`Name`/`Remarks`) are treated as `static`.
+- Locked hosts are protected from dynamic cleanup and are also kept when layouts are saved.
+- Saved layouts (`0network.hnl`..`4network.hnl`) persist static and locked hosts only.
+- `[dynamic_hosts]` keys:
+  - `dynamic_hosts_enabled=1`
+  - `dynamic_host_ttl_seconds=300`
+  - `dynamic_host_cleanup_interval_seconds=30`
 
 ## Net Positions (`netpos.txt`)
 Format:
@@ -548,6 +559,7 @@ Press `H` to open help (`controls.txt`, generated from code).
 - Protocol `250` is used internally to identify fragmented IP packets
 - Default host creation is source-IP based; enable Add Destination Hosts to include destination IPs
 - Anomalies represent new hosts or new host services
+- Dynamic hosts are aged out by inactivity according to `[dynamic_hosts]` in `settings.ini`
 - Large menu operations on thousands of hosts can take minutes
 - `settings.ini` is plain text and portable across 32-bit/64-bit builds
 - Legacy binary layout/traffic files such as `.hnl` and `.hpt` remain architecture-specific
