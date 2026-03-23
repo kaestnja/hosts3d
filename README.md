@@ -197,7 +197,7 @@ Main files:
 | File | Purpose |
 |---|---|
 | `controls.txt` | generated controls/help text |
-| `settings-hsd` | settings blob |
+| `settings.ini` | human-readable runtime settings |
 | `0network.hnl` | network layout on exit |
 | `1network.hnl`..`4network.hnl` | saved layouts |
 | `netpos.txt` | CIDR-to-position/color mapping |
@@ -205,6 +205,10 @@ Main files:
 | `tmp-hinfo-hsd` | temporary host/selection info |
 | `tmp-netpos-hsd` | temporary net positions |
 | `tmp-flist-hsd` | temporary file list |
+
+Notes:
+- `settings.ini` is plain text and can be reviewed or edited with Hosts3D closed.
+- If a legacy `settings-hsd` binary file is found, Hosts3D imports it once into `settings.ini`.
 
 ## Net Positions (`netpos.txt`)
 Format:
@@ -529,7 +533,8 @@ Press `H` to open help (`controls.txt`, generated from code).
 - Default host creation is source-IP based; enable Add Destination Hosts to include destination IPs
 - Anomalies represent new hosts or new host services
 - Large menu operations on thousands of hosts can take minutes
-- Data files are architecture-specific (32-bit and 64-bit are not compatible)
+- `settings.ini` is plain text and portable across 32-bit/64-bit builds
+- Legacy binary layout/traffic files such as `.hnl` and `.hpt` remain architecture-specific
 - On Windows, running configured system commands can stall Hosts3D until command completion
 
 ## Troubleshooting Tip

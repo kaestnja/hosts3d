@@ -14,6 +14,7 @@
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details. */
 
+#include <ctype.h>  //tolower()
 #include <math.h>  //cos(), sin(), sqrt()
 #include <signal.h>  //signal()
 #include <stdio.h>
@@ -2794,40 +2795,395 @@ void GLFWCALL motionGL(int x, int y)
 }
 
 //load settings
-void settsLoad()
+static bool strEqNoCase(const char *left, const char *right)
+{
+  while (*left && *right)
+  {
+    if (tolower((unsigned char)*left) != tolower((unsigned char)*right)) return false;
+    left++;
+    right++;
+  }
+  return (!*left && !*right);
+}
+
+static char *trimWs(char *txt)
+{
+  char *end;
+  while (*txt && isspace((unsigned char)*txt)) txt++;
+  if (!*txt) return txt;
+  end = txt + strlen(txt) - 1;
+  while ((end >= txt) && isspace((unsigned char)*end))
+  {
+    *end = '\0';
+    end--;
+  }
+  return txt;
+}
+
+static bool parseBoolValue(const char *value, bool *out)
+{
+  if (strEqNoCase(value, "1") || strEqNoCase(value, "true") || strEqNoCase(value, "yes") || strEqNoCase(value, "on"))
+  {
+    *out = true;
+    return true;
+  }
+  if (strEqNoCase(value, "0") || strEqNoCase(value, "false") || strEqNoCase(value, "no") || strEqNoCase(value, "off"))
+  {
+    *out = false;
+    return true;
+  }
+  return false;
+}
+
+static bool parseUnsignedCharValue(const char *value, unsigned char *out)
+{
+  char *end;
+  unsigned long parsed = strtoul(value, &end, 10);
+  if (end == value) return false;
+  end = trimWs(end);
+  if (*end || (parsed > 255)) return false;
+  *out = (unsigned char) parsed;
+  return true;
+}
+
+static bool parseUnsignedShortValue(const char *value, unsigned short *out)
+{
+  char *end;
+  unsigned long parsed = strtoul(value, &end, 10);
+  if (end == value) return false;
+  end = trimWs(end);
+  if (*end || (parsed > 65535)) return false;
+  *out = (unsigned short) parsed;
+  return true;
+}
+
+static bool parseUnsignedIntValue(const char *value, unsigned int *out)
+{
+  char *end;
+  unsigned long parsed = strtoul(value, &end, 10);
+  if (end == value) return false;
+  end = trimWs(end);
+  if (*end) return false;
+  *out = (unsigned int) parsed;
+  return true;
+}
+
+static bool parseDoubleValue(const char *value, double *out)
+{
+  char *end;
+  double parsed = strtod(value, &end);
+  if (end == value) return false;
+  end = trimWs(end);
+  if (*end) return false;
+  *out = parsed;
+  return true;
+}
+
+static bool parsePosValue(const char *value, pos_type *out)
+{
+  double x, y, z;
+  if (sscanf(value, " %lf , %lf , %lf ", &x, &y, &z) != 3) return false;
+  out->x = x;
+  out->y = y;
+  out->z = z;
+  return true;
+}
+
+static void setStringValue(char *dst, size_t dstsz, const char *src)
+{
+  strncpy(dst, src, dstsz - 1);
+  dst[dstsz - 1] = '\0';
+}
+
+static const char *sipnToString(sipn_type mode)
+{
+  switch (mode)
+  {
+  case ips: return "ip";
+  case ins: return "ip_and_name";
+  default: return "name_only";
+  }
+}
+
+static bool parseSipnValue(const char *value, sipn_type *out)
+{
+  if (strEqNoCase(value, "ip")) *out = ips;
+  else if (strEqNoCase(value, "ip_and_name")) *out = ins;
+  else if (strEqNoCase(value, "name_only")) *out = nms;
+  else return false;
+  return true;
+}
+
+static const char *sipsToString(sips_type mode)
+{
+  switch (mode)
+  {
+  case sel: return "selection";
+  case all: return "all";
+  default: return "off";
+  }
+}
+
+static bool parseSipsValue(const char *value, sips_type *out)
+{
+  if (strEqNoCase(value, "off")) *out = off;
+  else if (strEqNoCase(value, "selection")) *out = sel;
+  else if (strEqNoCase(value, "all")) *out = all;
+  else return false;
+  return true;
+}
+
+static const char *sonaToString(sona_type mode)
+{
+  switch (mode)
+  {
+  case alt: return "alert";
+  case ipn: return "show_ip_name";
+  case hst: return "show_host";
+  case slt: return "select_host";
+  default: return "do_nothing";
+  }
+}
+
+static bool parseSonaValue(const char *value, sona_type *out)
+{
+  if (strEqNoCase(value, "do_nothing")) *out = don;
+  else if (strEqNoCase(value, "alert")) *out = alt;
+  else if (strEqNoCase(value, "show_ip_name")) *out = ipn;
+  else if (strEqNoCase(value, "show_host")) *out = hst;
+  else if (strEqNoCase(value, "select_host")) *out = slt;
+  else return false;
+  return true;
+}
+
+static bool settsLoadIni(const char *path)
 {
   FILE *sts;
-  if ((sts = fopen(hsddata("settings-hsd"), "rb")))
+  char line[1024];
+  if (!(sts = fopen(path, "r"))) return false;
+  while (fgets(line, sizeof(line), sts))
   {
-    fseek(sts , 0 , SEEK_END);
-    if (ftell(sts) == sizeof(setts))
+    char *entry = trimWs(line);
+    if (!*entry || (*entry == '#') || (*entry == ';') || (*entry == '[')) continue;
+    char *sep = strchr(entry, '=');
+    if (!sep) continue;
+    *sep = '\0';
+    char *key = trimWs(entry), *value = trimWs(sep + 1);
+    bool flag;
+    unsigned char uc;
+    unsigned short us;
+    unsigned int ui;
+    double dbl;
+    pos_type pos;
+    sipn_type sipn;
+    sips_type sips;
+    sona_type sona;
+    if (!strcmp(key, "show_osd"))
     {
-      rewind(sts);
-      if (fread(&setts, sizeof(setts), 1, sts) == 1)
+      if (parseBoolValue(value, &flag)) setts.osd = flag;
+    }
+    else if (!strcmp(key, "show_broadcast_hosts"))
+    {
+      if (parseBoolValue(value, &flag)) setts.bct = flag;
+    }
+    else if (!strcmp(key, "fast_packets"))
+    {
+      if (parseBoolValue(value, &flag)) setts.fsp = flag;
+    }
+    else if (!strcmp(key, "add_destination_hosts"))
+    {
+      if (parseBoolValue(value, &flag)) setts.adh = flag;
+    }
+    else if (!strcmp(key, "anomaly_detection"))
+    {
+      if (parseBoolValue(value, &flag)) setts.anm = flag;
+    }
+    else if (!strcmp(key, "new_host_links"))
+    {
+      if (parseBoolValue(value, &flag)) setts.nhl = flag;
+    }
+    else if (!strcmp(key, "new_host_packets"))
+    {
+      if (parseBoolValue(value, &flag)) setts.nhp = flag;
+    }
+    else if (!strcmp(key, "show_packet_destination_port"))
+    {
+      if (parseBoolValue(value, &flag)) setts.pdp = flag;
+    }
+    else if (!strcmp(key, "start_hsen_promiscuous"))
+    {
+      if (parseBoolValue(value, &flag)) setts.hspm = flag;
+    }
+    else if (!strcmp(key, "sensor_filter"))
+    {
+      if (parseUnsignedCharValue(value, &uc)) setts.sen = uc;
+    }
+    else if (!strcmp(key, "protocol_filter"))
+    {
+      if (parseUnsignedCharValue(value, &uc)) setts.pr = uc;
+    }
+    else if (!strcmp(key, "port_filter"))
+    {
+      if (parseUnsignedShortValue(value, &us)) setts.prt = us;
+    }
+    else if (!strcmp(key, "packet_limit"))
+    {
+      if (parseUnsignedIntValue(value, &ui)) setts.pks = ui;
+    }
+    else if (!strcmp(key, "display_mode"))
+    {
+      if (parseSipnValue(value, &sipn)) setts.sipn = sipn;
+    }
+    else if (!strcmp(key, "display_scope"))
+    {
+      if (parseSipsValue(value, &sips)) setts.sips = sips;
+    }
+    else if (!strcmp(key, "on_active_action"))
+    {
+      if (parseSonaValue(value, &sona)) setts.sona = sona;
+    }
+    else if (!strcmp(key, "hsen_start_command")) setStringValue(setts.hsst, sizeof(setts.hsst), value);
+    else if (!strcmp(key, "hsen_sensor_id")) setStringValue(setts.hsid, sizeof(setts.hsid), value);
+    else if (!strcmp(key, "hsen_interface")) setStringValue(setts.hsif, sizeof(setts.hsif), value);
+    else if (!strcmp(key, "hsen_host")) setStringValue(setts.hshd, sizeof(setts.hshd), value);
+    else if (!strcmp(key, "hsen_stop_command")) setStringValue(setts.hssp, sizeof(setts.hssp), value);
+    else if (!strcmp(key, "command1")) setStringValue(setts.cmd[0], sizeof(setts.cmd[0]), value);
+    else if (!strcmp(key, "command2")) setStringValue(setts.cmd[1], sizeof(setts.cmd[1]), value);
+    else if (!strcmp(key, "command3")) setStringValue(setts.cmd[2], sizeof(setts.cmd[2]), value);
+    else if (!strcmp(key, "command4")) setStringValue(setts.cmd[3], sizeof(setts.cmd[3]), value);
+    else
+    {
+      unsigned char vwn;
+      if (!strncmp(key, "view", 4) && isdigit((unsigned char)key[4]) && (key[5] == '.'))
       {
-        fclose(sts);
-        return;
+        vwn = (unsigned char)(key[4] - '0');
+        if (vwn < 5)
+        {
+          const char *field = key + 6;
+          if (!strcmp(field, "ax"))
+          {
+            if (parseDoubleValue(value, &dbl)) setts.vws[vwn].ax = dbl;
+          }
+          else if (!strcmp(field, "ay"))
+          {
+            if (parseDoubleValue(value, &dbl)) setts.vws[vwn].ay = dbl;
+          }
+          else if (!strcmp(field, "eye"))
+          {
+            if (parsePosValue(value, &pos)) setts.vws[vwn].ee = pos;
+          }
+          else if (!strcmp(field, "look_at"))
+          {
+            if (parsePosValue(value, &pos)) setts.vws[vwn].dr = pos;
+          }
+        }
       }
     }
-    fclose(sts);
   }
-  remove(hsddata("settings-hsd"));
+  fclose(sts);
+  return true;
+}
+
+static bool settsLoadLegacy(const char *path)
+{
+  FILE *sts;
+  if (!(sts = fopen(path, "rb"))) return false;
+  fseek(sts, 0, SEEK_END);
+  if (ftell(sts) == sizeof(setts))
+  {
+    rewind(sts);
+    if (fread(&setts, sizeof(setts), 1, sts) == 1)
+    {
+      fclose(sts);
+      return true;
+    }
+  }
+  fclose(sts);
+  return false;
+}
+
+static bool settsSaveIni(const char *path)
+{
+  FILE *sts;
+  if (!(sts = fopen(path, "w"))) return false;
+  fputs("# Hosts3D settings\n", sts);
+  fputs("# Generated automatically. Edit with Hosts3D closed.\n\n", sts);
+  fputs("[display]\n", sts);
+  fprintf(sts, "show_osd=%d\n", (setts.osd ? 1 : 0));
+  fprintf(sts, "show_broadcast_hosts=%d\n", (setts.bct ? 1 : 0));
+  fprintf(sts, "fast_packets=%d\n", (setts.fsp ? 1 : 0));
+  fprintf(sts, "add_destination_hosts=%d\n", (setts.adh ? 1 : 0));
+  fprintf(sts, "anomaly_detection=%d\n", (setts.anm ? 1 : 0));
+  fprintf(sts, "new_host_links=%d\n", (setts.nhl ? 1 : 0));
+  fprintf(sts, "new_host_packets=%d\n", (setts.nhp ? 1 : 0));
+  fprintf(sts, "show_packet_destination_port=%d\n", (setts.pdp ? 1 : 0));
+  fprintf(sts, "packet_limit=%u\n", setts.pks);
+  fprintf(sts, "display_mode=%s\n", sipnToString(setts.sipn));
+  fprintf(sts, "display_scope=%s\n", sipsToString(setts.sips));
+  fprintf(sts, "on_active_action=%s\n\n", sonaToString(setts.sona));
+
+  fputs("[filters]\n", sts);
+  fprintf(sts, "sensor_filter=%u\n", setts.sen);
+  fprintf(sts, "protocol_filter=%u\n", setts.pr);
+  fprintf(sts, "port_filter=%u\n\n", setts.prt);
+
+  fputs("[hsen]\n", sts);
+  fprintf(sts, "start_hsen_promiscuous=%d\n", (setts.hspm ? 1 : 0));
+  fprintf(sts, "hsen_start_command=%s\n", setts.hsst);
+  fprintf(sts, "hsen_sensor_id=%s\n", setts.hsid);
+  fprintf(sts, "hsen_interface=%s\n", setts.hsif);
+  fprintf(sts, "hsen_host=%s\n", setts.hshd);
+  fprintf(sts, "hsen_stop_command=%s\n\n", setts.hssp);
+
+  fputs("[commands]\n", sts);
+  fprintf(sts, "command1=%s\n", setts.cmd[0]);
+  fprintf(sts, "command2=%s\n", setts.cmd[1]);
+  fprintf(sts, "command3=%s\n", setts.cmd[2]);
+  fprintf(sts, "command4=%s\n\n", setts.cmd[3]);
+
+  fputs("[views]\n", sts);
+  for (unsigned char cnt = 0; cnt < 5; cnt++)
+  {
+    fprintf(sts, "view%u.ax=%.6f\n", cnt, setts.vws[cnt].ax);
+    fprintf(sts, "view%u.ay=%.6f\n", cnt, setts.vws[cnt].ay);
+    fprintf(sts, "view%u.eye=%.6f, %.6f, %.6f\n", cnt, setts.vws[cnt].ee.x, setts.vws[cnt].ee.y, setts.vws[cnt].ee.z);
+    fprintf(sts, "view%u.look_at=%.6f, %.6f, %.6f\n", cnt, setts.vws[cnt].dr.x, setts.vws[cnt].dr.y, setts.vws[cnt].dr.z);
+  }
+  if (fclose(sts) == EOF)
+  {
+    remove(path);
+    return false;
+  }
+  return true;
+}
+
+void settsLoad()
+{
+  char inipath[256], legacypath[256];
+  strcpy(inipath, hsddata("settings.ini"));
+  strcpy(legacypath, hsddata("settings-hsd"));
+
+  if (settsLoadIni(inipath))
+  {
+    if (fileExists(legacypath)) remove(legacypath);
+    return;
+  }
+  if (settsLoadLegacy(legacypath))
+  {
+    if (settsSaveIni(inipath)) remove(legacypath);
+    return;
+  }
+  if (fileExists(legacypath)) remove(legacypath);
+  if (!fileExists(inipath)) settsSaveIni(inipath);
 }
 
 //save settings
 void settsSave()
 {
-  FILE *sts;
-  if ((sts = fopen(hsddata("settings-hsd"), "wb")))
-  {
-    if (fwrite(&setts, sizeof(setts), 1, sts) != 1)
-    {
-      fclose(sts);
-      remove(hsddata("settings-hsd"));
-      return;
-    }
-    fclose(sts);
-  }
+  char inipath[256], legacypath[256];
+  strcpy(inipath, hsddata("settings.ini"));
+  strcpy(legacypath, hsddata("settings-hsd"));
+  if (settsSaveIni(inipath) && fileExists(legacypath)) remove(legacypath);
 }
 
 //compile GL objects
