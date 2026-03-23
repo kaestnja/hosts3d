@@ -3,22 +3,7 @@
 > 3D Real-Time Network Monitor (legacy project, modernized build workflow)  
 > Original upstream release: 10 May 2011, Del Castle
 
-## Website
-- http://hosts3d.sourceforge.net/
-
-## Project Status
-This repository is an independent, community-maintained continuation of the original Hosts3D 1.15 codebase.
-
-- Original upstream project and authorship remain credited to Del Castle.
-- This repository is not an official upstream by the original author.
-- The original SourceForge page is kept as historical reference.
-
-For attribution and maintenance context:
-- See `CREDITS.md`
-- See `CHANGELOG.md` (continuation history)
-- See `ChangeLog` (legacy upstream history up to 1.15)
-
-## What This Project Does
+## Overview
 `Hosts3D` visualizes hosts and packet traffic in a 3D scene.  
 `hsen` (Hosts3D Sensor) captures packet headers and sends compact packet metadata via UDP to `Hosts3D` (local or remote).
 
@@ -29,10 +14,36 @@ Core capabilities:
 - Packet recording/replay (`.hpt`)
 - Filtering by host, protocol, and port
 
-## License
-GNU General Public License v2
+This README is organized for practical use:
+1. get the build working
+2. start `Hosts3D`
+3. connect one or more local sensors
+4. adjust settings and controls
+5. use the later sections as reference
+
+## Quick Start
+If your main goal is to get the project running again, use this order:
+
+1. Build `Hosts3D` and `hsen`
+2. Start `Hosts3D`
+3. Right-click in the 3D view to open the main menu, then choose `Local hsen`
+4. Select one or more capture interfaces
+5. Click `Save + Start`
+
+Recommended paths:
+- Windows 11:
+  - install the MinGW/MSYS2 toolchain once
+  - run `.\compile-hosts3d.bat`
+  - run `.\compile-hsen.bat`
+  - start `.\start-Hosts3DW.bat`
+  - in Hosts3D, right-click to open the main menu, then choose `Local hsen`
+- Linux/macOS:
+  - build with the platform commands below
+  - if local capture needs privileges, set `hsen_start_command=sudo -n hsen` in `settings.ini`
+  - start `Hosts3D`, right-click to open the main menu, then choose `Local hsen`
 
 ## Requirements
+Use the platform-specific subsection that matches the machine you are building on.
 
 ### Hardware
 - Scroll mouse
@@ -46,7 +57,7 @@ GNU General Public License v2
 | FreeBSD | `hsen` supported | standard C/C++ toolchain |
 | Windows | Npcap/WinPcap-compatible runtime | MinGW (MSYS2) + GLFW + Wpcap/Npcap SDK files |
 
-## Build and Installation
+## Build
 
 ### Linux (legacy upstream flow)
 ```bash
@@ -60,7 +71,7 @@ Uninstall:
 sudo make uninstall
 ```
 
-Alternative manual binaries:
+Alternative manual build commands:
 ```bash
 ./compile-hsen
 ./compile-hosts3d
@@ -77,7 +88,7 @@ Alternative manual binaries:
 ./compile-hsen
 ```
 
-### Windows 11 Quick Start (MSYS2 + MinGW32)
+### Windows 11 Build (MSYS2 + MinGW32)
 > If `g++` is missing (`g++ is not recognized`), install toolchain first.
 
 ```powershell
@@ -101,8 +112,8 @@ Build:
 ```powershell
 $repo = Join-Path $env:USERPROFILE "source\\repos\\github.com\\<your-github-user>\\hosts3d"
 Set-Location $repo
-.\compile-hosts3d.bat Release
-.\compile-hsen.bat Release
+.\compile-hosts3d.bat
+.\compile-hsen.bat
 ```
 
 ## Build Output Layout
@@ -119,12 +130,15 @@ Notes:
 - Archived old binaries for comparison: `Original/windows/x86/`.
 - Portable Wireshark helper location: `Tools/Wireshark/`.
 
-## Start Helpers (Windows)
+## Manual Start Helpers (Windows, Optional)
 ```powershell
-.\start-Hosts3DW.bat Release x86 window
-.\start-Hosts3DW.bat Release x86 fullscreen
-.\start-hsenW.bat Release x86
+.\start-Hosts3DW.bat
+.\start-Hosts3DW.bat fullscreen
+.\start-hsenW.bat
 ```
+
+Use these helpers when you want the old script-driven workflow or a manual/distributed setup.  
+For normal local use, the built-in `Local hsen` dialog is now the preferred path.
 
 If `start-hsenW.local.bat` is missing:
 - `start-hsenW.bat` creates `hsen-interfaces-<COMPUTERNAME>.txt`
@@ -149,7 +163,7 @@ set "HSEN_IFACE=\Device\NPF_{E4ED794E-A66F-451C-851E-91226CD96BA4}"
 ### Firewall
 `hsen` communicates with `Hosts3D` over UDP port `10111`.
 
-## Start Order and CLI
+## Running and CLI
 Start order does not matter.  
 If `hsen` runs while `Hosts3D` is not listening, ICMP Port Unreachable (UDP 10111) can appear.
 
@@ -176,6 +190,11 @@ hsen -l
 ```
 
 ## Safe Stop (Windows)
+Preferred for GUI-managed local sensors:
+- use `Local hsen > Stop` in Hosts3D
+
+Fallback from the shell:
+
 PowerShell:
 ```powershell
 Get-Process Hosts3D,hsen -ErrorAction SilentlyContinue | Stop-Process
@@ -189,6 +208,8 @@ taskkill /IM hsen.exe /T
 ```
 
 ## Data Files
+These are the files most users are most likely to encounter during normal operation.
+
 Runtime data directory:
 - Linux/macOS: `.hosts3d`
 - Windows: `hsd-data`
@@ -215,12 +236,12 @@ Notes:
 - `traffic.hpt` contains Hosts3D/hsen packet metadata for Record/Replay; it is not a Wireshark-compatible capture format.
 - Runtime host lifetime/cleanup behavior is configured in the `[dynamic_hosts]` section of `settings.ini`.
 
-Keyboard customization:
+### Keyboard Customization
 - Keyboard bindings live in the `[keybindings]` section of `settings.ini`.
 - `controls.txt` is regenerated from the current bindings when Hosts3D starts.
 - Supported examples: `F7`, `Page Down`, `Insert`, `Ctrl + K`, `Tab`, `Plus`, `Minus`, `[` and `]`.
 
-Dynamic/static hosts:
+### Dynamic and Static Hosts
 - Automatically discovered traffic hosts start as `dynamic`.
 - Hosts loaded from a saved layout, created manually, or manually edited (`Name`/`Remarks`) are treated as `static`.
 - Locked hosts are protected from dynamic cleanup and are also kept when layouts are saved.
@@ -230,8 +251,9 @@ Dynamic/static hosts:
   - `dynamic_host_ttl_seconds=300`
   - `dynamic_host_cleanup_interval_seconds=30`
 
-Local `hsen`:
+### Local `hsen`
 - `Local hsen` now uses the same GUI on Windows and Linux.
+- Open it by right-clicking in the 3D view and choosing `Local hsen`.
 - Interface discovery is done by calling `hsen -l`.
 - Target host for local GUI-managed sensors is fixed to `127.0.0.1`.
 - Ethernet adapters are preselected by default; WLAN and other adapters are listed but start deselected.
@@ -241,80 +263,9 @@ Local `hsen`:
 - On Linux/macOS, `hsen_start_command` in `[hsen]` is still used as the launcher when you need something like `sudo -n hsen`.
 - `start-hsenW.bat` remains the manual fallback for distributed/remote sensor setups.
 
-## Net Positions (`netpos.txt`)
-Format:
-```text
-pos net x-position y-position z-position colour
-```
-
-Example:
-```text
-pos 123.123.123.123/32 10 0 -10 green
-```
-
-Host positioning axes:
-- Grey/Red: positive x
-- Blue/Green: negative x
-- Up: positive y
-- Down: negative y
-- Grey/Blue: positive z
-- Red/Green: negative z
-
-Allowed color tokens:
-- `default`, `orange`, `yellow`, `fluro`, `green`, `mint`, `aqua`, `blue`, `purple`, `violet`, `hold`
-
-`hold` keeps hosts in place (no color reassignment).
-
-## Visual Mapping (Current Code)
-This section reflects current implementation (`src/misc.h`, `src/objects.cpp`, `src/hosts3d.cpp`).
-
-### Palette (RGB)
-| Name | RGB |
-|---|---|
-| white | `255,255,255` |
-| bright red | `255,50,50` |
-| red | `200,50,50` |
-| orange | `220,170,50` |
-| yellow | `200,200,50` |
-| fluro | `170,220,50` |
-| green | `50,200,50` |
-| mint | `50,220,170` |
-| aqua | `50,200,200` |
-| sky (blue host tone) | `50,170,220` |
-| blue | `50,50,200` |
-| purple | `170,50,220` |
-| violet | `200,50,200` |
-| bright grey | `200,200,200` |
-| grey | `150,150,150` |
-| dull grey | `100,100,100` |
-
-### Host and Packet Visual Rules
-| Element | Mapping |
-|---|---|
-| Host colors | default/grey, orange, yellow, fluro, green, mint, aqua, blue(sky), purple, violet |
-| Selected host | bright red |
-| Multi-host collision object | red/yellow/green tones; selected variant in bright red tones |
-| ICMP packet | red |
-| TCP packet | green |
-| UDP packet | blue |
-| ARP packet | yellow |
-| Other/fragmented packet | grey |
-| Anomaly alert | bright red |
-| On-active alert | protocol color |
-| Link lines | dull grey |
-| OSD/text/labels/port labels | white |
-
-### 3D Object Types
-| Object | Purpose |
-|---|---|
-| Cross object | orientation/zone reference |
-| Host object | normal host marker |
-| Multiple-host object | host collision marker |
-| Packet object | animated packet marker |
-| Alert object (active) | expanding wireframe box |
-| Alert object (anomaly) | expanding anomaly wireframe marker |
-
 ## Controls and Interaction
+This is the main usage section for moving around the scene and operating the UI.
+
 Press `H` in Hosts3D to open the in-app help pane (`controls.txt` content).
 
 Source of truth:
@@ -407,6 +358,8 @@ H	Show Help
 ```
 
 ## Right-Click Menu Map (1:1 From `mnuProcess()`)
+This section is reference material for the current menu tree. You do not need it to get the program running.
+
 All labels below are taken from `src/hosts3d.cpp` menu construction code.
 Shortcut suffixes in the running UI follow the current keybindings from `settings.ini`; the labels below show the default mapping.
 
@@ -563,10 +516,85 @@ Conditional by active on-active mode.
 - shows Ethernet/WLAN/Other adapters in a selection dialog
 - `Save + Start`, `Stop`, `Refresh`, `Close`
 
-## Hosts3D Help
+## Net Positions (`netpos.txt`)
+This is an advanced layout feature. Use it when you want known networks to appear in predictable positions and colors.
+
+Format:
+```text
+pos net x-position y-position z-position colour
+```
+
+Example:
+```text
+pos 123.123.123.123/32 10 0 -10 green
+```
+
+Host positioning axes:
+- Grey/Red: positive x
+- Blue/Green: negative x
+- Up: positive y
+- Down: negative y
+- Grey/Blue: positive z
+- Red/Green: negative z
+
+Allowed color tokens:
+- `default`, `orange`, `yellow`, `fluro`, `green`, `mint`, `aqua`, `blue`, `purple`, `violet`, `hold`
+
+`hold` keeps hosts in place (no color reassignment).
+
+## Visual Mapping (Current Code)
+This section helps you map what you see on-screen back to the current implementation (`src/misc.h`, `src/objects.cpp`, `src/hosts3d.cpp`).
+
+### Palette (RGB)
+| Name | RGB |
+|---|---|
+| white | `255,255,255` |
+| bright red | `255,50,50` |
+| red | `200,50,50` |
+| orange | `220,170,50` |
+| yellow | `200,200,50` |
+| fluro | `170,220,50` |
+| green | `50,200,50` |
+| mint | `50,220,170` |
+| aqua | `50,200,200` |
+| sky (blue host tone) | `50,170,220` |
+| blue | `50,50,200` |
+| purple | `170,50,220` |
+| violet | `200,50,200` |
+| bright grey | `200,200,200` |
+| grey | `150,150,150` |
+| dull grey | `100,100,100` |
+
+### Host and Packet Visual Rules
+| Element | Mapping |
+|---|---|
+| Host colors | default/grey, orange, yellow, fluro, green, mint, aqua, blue(sky), purple, violet |
+| Selected host | bright red |
+| Multi-host collision object | red/yellow/green tones; selected variant in bright red tones |
+| ICMP packet | red |
+| TCP packet | green |
+| UDP packet | blue |
+| ARP packet | yellow |
+| Other/fragmented packet | grey |
+| Anomaly alert | bright red |
+| On-active alert | protocol color |
+| Link lines | dull grey |
+| OSD/text/labels/port labels | white |
+
+### 3D Object Types
+| Object | Purpose |
+|---|---|
+| Cross object | orientation/zone reference |
+| Host object | normal host marker |
+| Multiple-host object | host collision marker |
+| Packet object | animated packet marker |
+| Alert object (active) | expanding wireframe box |
+| Alert object (anomaly) | expanding anomaly wireframe marker |
+
+## In-App Help
 Press `H` to open help (`controls.txt`, generated from code).
 
-## Notes and Limits
+## Behavior and Limits
 - IPv4 only
 - IP headers with options are ignored
 - Supports optionless GRE and VLAN 802.1Q encapsulation
@@ -582,6 +610,21 @@ Press `H` to open help (`controls.txt`, generated from code).
 
 ## Troubleshooting Tip
 On Linux/macOS/FreeBSD, both `Hosts3D` and `hsen` log to syslog.
+
+## Project Continuation and Historical Reference
+This repository is an independent, community-maintained continuation of the original Hosts3D 1.15 codebase.
+
+- Original upstream project and authorship remain credited to Del Castle.
+- This repository is not an official upstream by the original author.
+- Historical upstream reference: http://hosts3d.sourceforge.net/
+
+For attribution and maintenance context:
+- See `CREDITS.md`
+- See `CHANGELOG.md` (continuation history)
+- See `ChangeLog` (legacy upstream history up to 1.15)
+
+## License
+GNU General Public License v2
 
 ## Reporting Bugs
 Open an issue in this repository with repro steps and platform/build details.
