@@ -13,6 +13,7 @@ Tools/Wireshark/WiresharkPortable64_4.6.4.paf.exe
 **/hsd-data/0network.hnl
 **/hsd-data/controls.txt
 **/hsd-data/netpos.txt
+**/hsd-data/settings.ini
 **/hsd-data/settings-hsd
 **/hsd-data/tmp-hinfo-hsd
 **/hsd-data/tmp-netpos-hsd
