@@ -34,10 +34,8 @@
 #define HSD_PKTSPRT  0x0D  //packets port
 #define HSD_SETCMDS  0x0E  //set commands
 #define HSD_SLINACT  0x0F  //select inactive
-#ifndef __MINGW32__
 #define HSD_HSENRUN  0x10  //run hsen
 #define HSD_HSENSTP  0x11  //stop hsen
-#endif
 
 const int SPC = 32, MOV = 3, HPR = 20, SELBUF = 50000, SVCS = 32;  //host spacing, movement spacing, hosts per row, host selection buffer, services per host
 const double DEPTH = 8192.0;  //perseptive depth
