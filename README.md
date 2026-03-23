@@ -161,7 +161,8 @@ hosts3d [-f]
 
 ### hsen
 ```text
-hsen <id> <interface/file> [<destination>] [-p] [-d]
+hsen [-l] <id> <interface/file> [<destination>] [-p] [-d]
+  -l          list capture interfaces
   id          sensor id (1-255)
   interface   interface name (or packet file)
   destination Hosts3D IP/broadcast (default: localhost)
@@ -169,9 +170,9 @@ hsen <id> <interface/file> [<destination>] [-p] [-d]
   -d          daemon mode (Linux/macOS)
 ```
 
-Windows interface listing:
+Interface listing:
 ```text
-hsen -d
+hsen -l
 ```
 
 ## Safe Stop (Windows)
@@ -202,7 +203,8 @@ Main files:
 | `1network.hnl`..`4network.hnl` | saved layouts |
 | `netpos.txt` | CIDR-to-position/color mapping |
 | `traffic.hpt` | Hosts3D packet traffic record/replay data (not PCAP) |
-| `local-hsen-windows.state` | machine-local state file for managed Windows `hsen.exe` PIDs and process stamps |
+| `local-hsen.state` | machine-local state file for managed local `hsen` PIDs/process stamps on Linux/macOS |
+| `local-hsen-windows.state` | machine-local state file for managed local `hsen.exe` PIDs/process stamps on Windows |
 | `tmp-hinfo-hsd` | temporary host/selection info |
 | `tmp-netpos-hsd` | temporary net positions |
 | `tmp-flist-hsd` | temporary file list |
@@ -228,13 +230,15 @@ Dynamic/static hosts:
   - `dynamic_host_ttl_seconds=300`
   - `dynamic_host_cleanup_interval_seconds=30`
 
-Windows local `hsen`:
-- `Other > Local hsen` can now discover local Windows capture interfaces by calling `hsen.exe -d`.
-- Target host for this local Windows mode is fixed to `127.0.0.1`.
+Local `hsen`:
+- `Local hsen` now uses the same GUI on Windows and Linux.
+- Interface discovery is done by calling `hsen -l`.
+- Target host for local GUI-managed sensors is fixed to `127.0.0.1`.
 - Ethernet adapters are preselected by default; WLAN and other adapters are listed but start deselected.
-- `Save + Start` stores the current selection and launches one local `hsen.exe` process per selected interface.
-- `Stop` stops only the local `hsen.exe` processes that were started and tracked by Hosts3D.
-- The corresponding `settings.ini` keys are written under `[local_hsen_windows]`.
+- `Save + Start` stores the current selection and launches one local `hsen` process per selected interface.
+- `Stop` stops only the local `hsen` processes that were started and tracked by Hosts3D.
+- The corresponding `settings.ini` keys are written under `[local_hsen]`.
+- On Linux/macOS, `hsen_start_command` in `[hsen]` is still used as the launcher when you need something like `sudo -n hsen`.
 - `start-hsenW.bat` remains the manual fallback for distributed/remote sensor setups.
 
 ## Net Positions (`netpos.txt`)
@@ -409,7 +413,7 @@ Shortcut suffixes in the running UI follow the current keybindings from `setting
 ### Main Menu
 | Menu | Items |
 |---|---|
-| `MAIN` | `Selected` (if a host is selected), `Selection`, `Anomalies`, `IP/Name`, `Packets`, `On-Active`, `View`, `Layout`, `Other`, `Exit` (fullscreen only) |
+| `MAIN` | `Selected` (if a host is selected), `Selection`, `Anomalies`, `IP/Name`, `Packets`, `On-Active`, `View`, `Layout`, `Other`, `Local hsen`, `Exit` (fullscreen only) |
 
 ### `Selected`
 | Item |
@@ -548,20 +552,16 @@ Conditional by active on-active mode.
 |---|
 | `Find Hosts (F)` |
 | `Select Inactive` |
-| `Local hsen` |
 | `Help (H)` |
 | `About` |
 
 #### `Other > Select Inactive`
 `> 5 Minutes`, `> 1 Hour`, `> 1 Day`, `> 1 Week`, `> Other`
 
-#### `Other > Local hsen`
-- Windows:
-  - discovers interfaces via `hsen.exe -d`
-  - shows Ethernet/WLAN/Other adapters in a selection dialog
-  - `Save + Start`, `Stop`, `Refresh`, `Close`
-- non-Windows:
-  - `Start`, `Stop`
+### `Local hsen`
+- discovers interfaces via `hsen -l`
+- shows Ethernet/WLAN/Other adapters in a selection dialog
+- `Save + Start`, `Stop`, `Refresh`, `Close`
 
 ## Hosts3D Help
 Press `H` to open help (`controls.txt`, generated from code).

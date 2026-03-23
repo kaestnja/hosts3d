@@ -2,7 +2,7 @@
 .SH NAME
 hsen \- hosts3d sensor
 .SH SYNOPSIS
-.B hsen \fIid interface/file \fR[\fIdestination\fR] [\fB\-p\fR] [\fB\-d\fR]
+.B hsen \fR[\fB\-l\fR] \fIid interface/file \fR[\fIdestination\fR] [\fB\-p\fR] [\fB\-d\fR]
 .SH DESCRIPTION
 .B hsen
 is a packet capture agent which reads and sends packet header
@@ -22,6 +22,9 @@ Read packets from pcap file.  Standard input is used if file is "\-".
 .TP 13
 .I destination
 Hosts3D IP or broadcast address (default localhost).
+.TP
+.B \-l
+Display capture interfaces.
 .TP
 .B \-p
 Enable promiscuous mode (default disable).
