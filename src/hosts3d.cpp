@@ -27,8 +27,11 @@
 #include <getopt.h>  //getopt()
 #else
 #include <arpa/inet.h>  //inet_addr(), inet_ntoa()
+#include <errno.h>
 #include <fcntl.h>  //fcntl()
+#include <limits.h>
 #include <syslog.h>  //syslog()
+#include <sys/wait.h>
 #include <unistd.h>  //close(), usleep()
 #endif
 
@@ -76,7 +79,6 @@ unsigned int dynamicHostTtlSeconds = DEFAULT_DYNAMIC_HOST_TTL_SECONDS;
 unsigned int dynamicHostCleanupIntervalSeconds = DEFAULT_DYNAMIC_HOST_CLEANUP_INTERVAL_SECONDS;
 time_t dynamicHostLastCleanup = 0;
 
-#ifdef __MINGW32__
 struct localhsen_if_type
 {
   char id[256];
@@ -88,7 +90,7 @@ struct localhsen_if_type
 
 struct localhsen_pid_type
 {
-  DWORD pid;
+  unsigned long pid;
   unsigned long long created;
 };
 
@@ -99,7 +101,6 @@ bool localHsenWindowsPromisc = false;
 int localHsenUiAutostart = -1, localHsenUiPromisc = -1;
 int localHsenUiIfaceChecks[LOCAL_HSEN_MAX_INTERFACES];
 int localHsenUiIfaceSensors[LOCAL_HSEN_MAX_INTERFACES];
-#endif
 
 #ifdef __MINGW32__
 #define usleep(usec) (Sleep((usec) / 1000))
@@ -212,14 +213,12 @@ static bool hostShouldPersist(host_type *ht);
 static void hostDeleteManaged(host_type *ht);
 static void dynamicHostsCleanupMaybe();
 static void settsSave();
-#ifdef __MINGW32__
 static void localHsenDialogOpen();
 static bool localHsenStopManaged(bool showmsg = false);
 static bool localHsenSaveUiState();
 static bool localHsenStartSelected(bool showmsg = false);
 static bool localHsenDiscoverInterfaces(bool keepSelections = true);
 static void localHsenAutostartMaybe();
-#endif
 
 void hsdStop(int sig)
 {
@@ -1533,7 +1532,6 @@ void btnProcess(int gs)
       else messageBox("ERROR", "Enter Days, Hours or Minutes!");
       break;
     case HSD_HSENRUN:
-#ifdef __MINGW32__
       if (gs == GLWIN_MISC1)
       {
         if (!localHsenSaveUiState()) break;
@@ -1551,42 +1549,9 @@ void btnProcess(int gs)
         settsSave();
         if (localHsenStartSelected(true)) GLWin.Close();
       }
-#else
-      gi2 = GLWin.GetInput(GLResult[1]);  //get input text
-      gi3 = GLWin.GetInput(GLResult[2]);
-      gi4 = GLWin.GetInput(GLResult[3]);
-      if (*gi2 && *gi3)
-      {
-        strcpy(setts.hsst, gi1);
-        strcpy(setts.hsid, gi2);
-        strcpy(setts.hsif, gi3);
-        strcpy(setts.hshd, gi4);
-        setts.hspm = GLWin.GetCheck(GLResult[4]);
-        unsigned char sen = atoi(setts.hsid);
-        if (sen)
-        {
-          char scmd[407];
-          sprintf(scmd, "%s %s %s %s %s", setts.hsst, setts.hsid, setts.hsif, setts.hshd, (setts.hspm ? "-p" : ""));
-          if (system(scmd)) messageBox("ERROR", "Start hsen Failed!");
-          else GLWin.Close();  //close all 2D GUI windows
-        }
-        else messageBox("ERROR", "Invalid Sensor ID!");
-      }
-      else messageBox("ERROR", "Enter Sensor ID and Interface/File!");
-#endif
       break;
     case HSD_HSENSTP:
-#ifdef __MINGW32__
       localHsenStopManaged(true);
-#else
-      if (*gi1)
-      {
-        strcpy(setts.hssp, gi1);
-        if (system(setts.hssp)) messageBox("ERROR", "Stop hsen Failed!");
-        else GLWin.Close();  //close all 2D GUI windows
-      }
-      else messageBox("ERROR", "Enter Stop hsen Command!");
-#endif
       break;
   }
 }
@@ -2638,36 +2603,10 @@ void mnuProcess(int m)
         break;
       case 93: triggerKeyAction(kaFindHosts); break;  //2D GUI find hosts
       case 94:  //start local hsen
-#ifdef __MINGW32__
         localHsenDialogOpen();
-#else
-        GLWin.CreateWin(-1, -1, 320, 254, "START LOCAL hsen");
-        GLResult[3] = GLWin.AddInput(10, 164, 15, 15, setts.hshd);
-        GLWin.AddLabel(10, 10, "Command:");
-        GLResult[0] = (GLWin.AddInput(10, 26, 48, 127, setts.hsst) * 100) + HSD_HSENRUN;
-        GLWin.AddLabel(10, 56, "Sensor ID:");
-        GLResult[1] = GLWin.AddInput(10, 72, 3, 3, setts.hsid);
-        GLWin.AddLabel(52, 77, "(1-255)");
-        GLWin.AddLabel(182, 77, "Promiscuous Mode:");
-        GLResult[4] = GLWin.AddCheck(290, 72, setts.hspm);
-        GLWin.AddLabel(10, 102, "Interface/File:  (eth1, ppp0, wlan0, etc.)");
-        GLWin.AddLabel(10, 148, "Hosts3D Destination:");
-        GLWin.AddLabel(124, 169, "(Blank = localhost)");
-        GLResult[2] = GLWin.AddInput(10, 118, 48, 255, setts.hsif);  //last for focus
-        GLWin.AddButton(174, 194, GLWIN_OK, "Start", true, true);
-        GLWin.AddButton(244, 194, GLWIN_CLOSE, "Cancel");
-#endif
         break;
       case 95:  //stop local hsen
-#ifdef __MINGW32__
         localHsenStopManaged(true);
-#else
-        GLWin.CreateWin(-1, -1, 320, 116, "STOP LOCAL hsen");
-        GLWin.AddLabel(10, 10, "Command:");
-        GLResult[0] = (GLWin.AddInput(10, 26, 48, 255, setts.hssp) * 100) + HSD_HSENSTP;
-        GLWin.AddButton(180, 56, GLWIN_OK, "Stop", true, true);
-        GLWin.AddButton(244, 56, GLWIN_CLOSE, "Cancel");
-#endif
         break;
       case 97: triggerKeyAction(kaShowHelp); break;  //2D GUI help
       case 98:  //about
@@ -2721,17 +2660,18 @@ void mnuProcess(int m)
         break;
       case 99: goRun = false; break;  //exit
       case 100:
-        GLWin.AddMenu(82, "MAIN", 11, 0, 0);  //nothing
-        if (seltd) GLWin.AddMenu(82, "Selected", 11, 1, 101);
-        GLWin.AddMenu(82, "Selection", 11, 1, 102);  //6+(9x6)+12+10=82
-        GLWin.AddMenu(82, "Anomalies", 11, 1, 103);
-        GLWin.AddMenu(82, "IP/Name", 11, 1, 104);
-        GLWin.AddMenu(82, "Packets", 11, 1, 105);
-        GLWin.AddMenu(82, "On-Active", 11, 1, 106);
-        GLWin.AddMenu(82, "View", 11, 1, 107);
-        GLWin.AddMenu(82, "Layout", 11, 1, 108);
-        GLWin.AddMenu(82, "Other", 11, 1, 109);
-        if (fullscn) GLWin.AddMenu(82, "Exit", 11, 0, 99);
+        GLWin.AddMenu(88, "MAIN", 12, 0, 0);  //nothing
+        if (seltd) GLWin.AddMenu(88, "Selected", 12, 1, 101);
+        GLWin.AddMenu(88, "Selection", 12, 1, 102);  //6+(10x6)+12+10=88
+        GLWin.AddMenu(88, "Anomalies", 12, 1, 103);
+        GLWin.AddMenu(88, "IP/Name", 12, 1, 104);
+        GLWin.AddMenu(88, "Packets", 12, 1, 105);
+        GLWin.AddMenu(88, "On-Active", 12, 1, 106);
+        GLWin.AddMenu(88, "View", 12, 1, 107);
+        GLWin.AddMenu(88, "Layout", 12, 1, 108);
+        GLWin.AddMenu(88, "Other", 12, 1, 109);
+        GLWin.AddMenu(88, "Local hsen", 12, 0, 94);
+        if (fullscn) GLWin.AddMenu(88, "Exit", 12, 0, 99);
         break;
       case 101:
         GLWin.AddMenu(114, "SELECTED", 8, 2, 100);
@@ -2797,16 +2737,11 @@ void mnuProcess(int m)
         GLWin.AddMenu(90, "Clear", 5, 1, 124);
         break;
       case 109:
-        GLWin.AddMenu(118, "OTHER", 6, 2, 100);
-        GLWin.AddMenu(118, menuLabelWithBinding("Find Hosts", kaFindHosts), 6, 0, 93);
-        GLWin.AddMenu(118, "Select Inactive", 6, 1, 125);  //6+(15x6)+12+10=118
-#ifdef __MINGW32__
-        GLWin.AddMenu(118, "Local hsen", 6, 0, 94);
-#else
-        GLWin.AddMenu(118, "Local hsen", 6, 1, 126);
-#endif
-        GLWin.AddMenu(118, menuLabelWithBinding("Help", kaShowHelp), 6, 0, 97);
-        GLWin.AddMenu(118, "About", 6, 0, 98);
+        GLWin.AddMenu(118, "OTHER", 5, 2, 100);
+        GLWin.AddMenu(118, menuLabelWithBinding("Find Hosts", kaFindHosts), 5, 0, 93);
+        GLWin.AddMenu(118, "Select Inactive", 5, 1, 125);  //6+(15x6)+12+10=118
+        GLWin.AddMenu(118, menuLabelWithBinding("Help", kaShowHelp), 5, 0, 97);
+        GLWin.AddMenu(118, "About", 5, 0, 98);
         break;
       case 110:
         GLWin.AddMenu(64, "COLOUR", 11, 2, 102);  //6+(6x6)+12+10=64
@@ -2921,13 +2856,6 @@ void mnuProcess(int m)
         GLWin.AddMenu(118, "> 1 Week", 6, 0, 36);
         GLWin.AddMenu(118, "> Other", 6, 0, 37);
         break;
-#ifndef __MINGW32__
-      case 126:
-        GLWin.AddMenu(88, "LOCAL hsen", 3, 2, 109);  //6+(10x6)+12+10=88
-        GLWin.AddMenu(88, "Start", 3, 0, 94);
-        GLWin.AddMenu(88, "Stop", 3, 0, 95);
-        break;
-#endif
     }
   }
 }
@@ -2992,12 +2920,14 @@ void GLFWCALL clickGL(int button, int action)
           case GLWIN_OK: case GLWIN_DEL: case GLWIN_CLOSE: case GLWIN_ITMUP: case GLWIN_ITMDN: btnProcess(gs); break;  //process 2D GUI button selected
           case GLWIN_MNUITM: mnuProcess(GLWin.GetSelected()); break;
           case GLWIN_MISC1:
-            GLWin.Scroll();  //start
-            infoSelection();  //generate selection info
-            break;
           case GLWIN_MISC2:
-            GLWin.Scroll();  //start
-            infoGeneral();  //generate general info
+            if ((GLResult[0] % 100) == HSD_HSENRUN) btnProcess(gs);
+            else
+            {
+              GLWin.Scroll();  //start
+              if (gs == GLWIN_MISC1) infoSelection();  //generate selection info
+              else infoGeneral();  //generate general info
+            }
             break;
         }
       }
@@ -3327,7 +3257,6 @@ static void ensureHsdDataDir()
 #endif
 }
 
-#ifdef __MINGW32__
 static bool textContainsNoCase(const char *text, const char *pattern)
 {
   if (!text || !pattern || !*pattern) return false;
@@ -3356,21 +3285,26 @@ static void localHsenResetUiNames()
   }
 }
 
-static const char *localHsenClassify(const char *name)
+static const char *localHsenClassify(const char *id, const char *name)
 {
-  if (textContainsNoCase(name, "wi-fi") || textContainsNoCase(name, "wifi") ||
-      textContainsNoCase(name, "wireless") || textContainsNoCase(name, "wlan") ||
+  char txt[544];
+  snprintf(txt, sizeof(txt), "%s %s", (id ? id : ""), (name ? name : ""));
+
+  if (textContainsNoCase(txt, "wi-fi") || textContainsNoCase(txt, "wifi") ||
+      textContainsNoCase(txt, "wireless") || textContainsNoCase(txt, "wlan") ||
       textContainsNoCase(name, "802.11")) return "wlan";
 
-  if (textContainsNoCase(name, "wan miniport") || textContainsNoCase(name, "loopback") ||
-      textContainsNoCase(name, "bluetooth") || textContainsNoCase(name, "virtual") ||
-      textContainsNoCase(name, "vpn") || textContainsNoCase(name, "tunnel") ||
-      textContainsNoCase(name, "hyper-v") || textContainsNoCase(name, "vmware") ||
-      textContainsNoCase(name, "virtualbox") || textContainsNoCase(name, "npcap") ||
-      textContainsNoCase(name, "miniport")) return "other";
+  if ((id && !strcmp(id, "lo")) || textContainsNoCase(txt, "wan miniport") ||
+      textContainsNoCase(txt, "loopback") || textContainsNoCase(txt, "bluetooth") ||
+      textContainsNoCase(txt, "virtual") || textContainsNoCase(txt, "vpn") ||
+      textContainsNoCase(txt, "tunnel") || textContainsNoCase(txt, "hyper-v") ||
+      textContainsNoCase(txt, "vmware") || textContainsNoCase(txt, "virtualbox") ||
+      textContainsNoCase(txt, "npcap") || textContainsNoCase(txt, "miniport")) return "other";
 
-  if (textContainsNoCase(name, "ethernet") || textContainsNoCase(name, "gigabit") ||
-      textContainsNoCase(name, "gbe")) return "ethernet";
+  if (textContainsNoCase(txt, "ethernet") || textContainsNoCase(txt, "gigabit") ||
+      textContainsNoCase(txt, "gbe")) return "ethernet";
+  if (id && (!strncmp(id, "eth", 3) || !strncmp(id, "en", 2) || !strncmp(id, "em", 2) ||
+             !strncmp(id, "bond", 4))) return "ethernet";
 
   return "other";
 }
@@ -3412,16 +3346,32 @@ static unsigned char localHsenNextSensorId(const localhsen_if_type *arr, unsigne
 
 static void localHsenStatePath(char *path, size_t pathsz)
 {
+#ifdef __MINGW32__
   setStringValue(path, pathsz, hsddata("local-hsen-windows.state"));
+#else
+  setStringValue(path, pathsz, hsddata("local-hsen.state"));
+#endif
+}
+
+static void localHsenLegacyStatePath(char *path, size_t pathsz)
+{
+#ifdef __MINGW32__
+  setStringValue(path, pathsz, hsddata("local-hsen.state"));
+#else
+  if (pathsz) *path = '\0';
+#endif
 }
 
 static void localHsenStateClear()
 {
-  char path[256];
+  char path[256], legacy[256];
   localHsenStatePath(path, sizeof(path));
   if (fileExists(path)) remove(path);
+  localHsenLegacyStatePath(legacy, sizeof(legacy));
+  if (*legacy && fileExists(legacy)) remove(legacy);
 }
 
+#ifdef __MINGW32__
 static unsigned long long localHsenProcessCreateStamp(HANDLE proc)
 {
   FILETIME created, exited, kernel, user;
@@ -3431,13 +3381,40 @@ static unsigned long long localHsenProcessCreateStamp(HANDLE proc)
   stamp.HighPart = created.dwHighDateTime;
   return stamp.QuadPart;
 }
+#else
+static unsigned long long localHsenProcessCreateStamp(unsigned long pid)
+{
+#ifdef __linux__
+  FILE *fp;
+  char path[64], line[4096], *tok, *rp;
+  unsigned int field = 3;
+  snprintf(path, sizeof(path), "/proc/%lu/stat", pid);
+  if (!(fp = fopen(path, "r"))) return 0;
+  if (!fgets(line, sizeof(line), fp))
+  {
+    fclose(fp);
+    return 0;
+  }
+  fclose(fp);
+  rp = strrchr(line, ')');
+  if (!rp || (rp[1] != ' ')) return 0;
+  tok = strtok(rp + 2, " ");
+  while (tok)
+  {
+    if (field == 22) return strtoull(tok, 0, 10);
+    tok = strtok(0, " ");
+    field++;
+  }
+#endif
+  return 0;
+}
+#endif
 
-static unsigned char localHsenStateLoad(localhsen_pid_type *pids, unsigned char maxpids)
+static unsigned char localHsenStateLoadPath(const char *path, localhsen_pid_type *pids, unsigned char maxpids)
 {
   FILE *fp;
-  char path[256], line[128], *txt, *end;
+  char line[128], *txt, *end;
   unsigned char count = 0;
-  localHsenStatePath(path, sizeof(path));
   if (!(fp = fopen(path, "r"))) return 0;
   while ((count < maxpids) && fgets(line, sizeof(line), fp))
   {
@@ -3450,15 +3427,27 @@ static unsigned char localHsenStateLoad(localhsen_pid_type *pids, unsigned char 
     unsigned long pid = strtoul(txt, &end, 10);
     end = trimWs(end);
     if (*end || !pid) continue;
-    unsigned long long stamp = _strtoui64(trimWs(stampTxt), &end, 10);
+    unsigned long long stamp = strtoull(trimWs(stampTxt), &end, 10);
     end = trimWs(end);
-    if (*end || !stamp) continue;
-    pids[count].pid = (DWORD) pid;
+    if (*end) continue;
+    pids[count].pid = pid;
     pids[count].created = stamp;
     count++;
   }
   fclose(fp);
   return count;
+}
+
+static unsigned char localHsenStateLoad(localhsen_pid_type *pids, unsigned char maxpids)
+{
+  char path[256], legacy[256];
+  unsigned char count;
+  localHsenStatePath(path, sizeof(path));
+  count = localHsenStateLoadPath(path, pids, maxpids);
+  if (count) return count;
+  localHsenLegacyStatePath(legacy, sizeof(legacy));
+  if (*legacy && strcmp(path, legacy)) return localHsenStateLoadPath(legacy, pids, maxpids);
+  return 0;
 }
 
 static bool localHsenStateSave(const localhsen_pid_type *pids, unsigned char count)
@@ -3478,6 +3467,7 @@ static bool localHsenStateSave(const localhsen_pid_type *pids, unsigned char cou
 
 static bool localHsenExeInfo(char *exepath, size_t exepathsz, char *workdir, size_t workdirsz)
 {
+#ifdef __MINGW32__
   char modpath[MAX_PATH];
   DWORD got = GetModuleFileNameA(0, modpath, sizeof(modpath));
   char *slash;
@@ -3488,20 +3478,57 @@ static bool localHsenExeInfo(char *exepath, size_t exepathsz, char *workdir, siz
   if (workdir) setStringValue(workdir, workdirsz, modpath);
   snprintf(exepath, exepathsz, "%s\\hsen.exe", modpath);
   return fileExists(exepath);
+#else
+  char modpath[PATH_MAX];
+  char *slash;
+#ifdef __linux__
+  ssize_t got = readlink("/proc/self/exe", modpath, sizeof(modpath) - 1);
+  if ((got > 0) && (got < (ssize_t)sizeof(modpath)))
+  {
+    modpath[got] = '\0';
+    slash = strrchr(modpath, '/');
+    if (slash)
+    {
+      *slash = '\0';
+      if (workdir) setStringValue(workdir, workdirsz, modpath);
+      snprintf(exepath, exepathsz, "%s/hsen", modpath);
+      if (fileExists(exepath)) return true;
+    }
+  }
+#endif
+  if (workdir)
+  {
+    if (!getcwd(modpath, sizeof(modpath))) setStringValue(modpath, sizeof(modpath), ".");
+    setStringValue(workdir, workdirsz, modpath);
+  }
+  setStringValue(exepath, exepathsz, "hsen");
+  return true;
+#endif
 }
 
-static bool localHsenProcessLooksManaged(HANDLE proc)
+static bool localHsenProcessLooksManaged(
+#ifdef __MINGW32__
+  HANDLE proc
+#else
+  unsigned long pid
+#endif
+)
 {
+#ifdef __MINGW32__
   char path[MAX_PATH], *base;
   DWORD pathsz = sizeof(path);
   if (!QueryFullProcessImageNameA(proc, 0, path, &pathsz)) return false;
   base = strrchr(path, '\\');
   base = (base ? (base + 1) : path);
   return strEqNoCase(base, "hsen.exe");
+#else
+  return (pid > 0);
+#endif
 }
 
 static bool localHsenRunAndCaptureDiscovery(char *output, size_t outsz)
 {
+#ifdef __MINGW32__
   SECURITY_ATTRIBUTES sa = {sizeof(sa), 0, TRUE};
   STARTUPINFOA si;
   PROCESS_INFORMATION pi;
@@ -3521,7 +3548,7 @@ static bool localHsenRunAndCaptureDiscovery(char *output, size_t outsz)
   si.hStdOutput = wr;
   si.hStdError = wr;
   si.wShowWindow = SW_HIDE;
-  snprintf(cmd, sizeof(cmd), "\"%s\" -d", exepath);
+  snprintf(cmd, sizeof(cmd), "\"%s\" -l", exepath);
   ok = CreateProcessA(0, cmd, 0, 0, TRUE, CREATE_NO_WINDOW, 0, workdir, &si, &pi);
   CloseHandle(wr);
   if (!ok)
@@ -3541,6 +3568,25 @@ static bool localHsenRunAndCaptureDiscovery(char *output, size_t outsz)
   CloseHandle(pi.hProcess);
   CloseHandle(rd);
   return true;
+#else
+  FILE *pp;
+  char exepath[512], workdir[512], cmd[1024], line[512];
+  size_t got = 0, len;
+  output[0] = '\0';
+  if (!localHsenExeInfo(exepath, sizeof(exepath), workdir, sizeof(workdir))) return false;
+  snprintf(cmd, sizeof(cmd), "\"%s\" -l 2>&1", exepath);
+  if (!(pp = popen(cmd, "r"))) return false;
+  while (fgets(line, sizeof(line), pp) && ((got + 1) < outsz))
+  {
+    len = strlen(line);
+    if ((got + len) >= outsz) len = outsz - got - 1;
+    memcpy(output + got, line, len);
+    got += len;
+  }
+  output[got] = '\0';
+  pclose(pp);
+  return true;
+#endif
 }
 
 static bool localHsenDiscoverInterfaces(bool keepSelections)
@@ -3579,7 +3625,7 @@ static bool localHsenDiscoverInterfaces(bool keepSelections)
     memset(dst, 0, sizeof(*dst));
     setStringValue(dst->id, sizeof(dst->id), id);
     setStringValue(dst->name, sizeof(dst->name), (*name ? name : id));
-    setStringValue(dst->klass, sizeof(dst->klass), localHsenClassify(dst->name));
+    setStringValue(dst->klass, sizeof(dst->klass), localHsenClassify(dst->id, dst->name));
     savedIdx = (keepSelections ? localHsenFindById(saved, savedCount, dst->id) : -1);
     if (savedIdx != -1)
     {
@@ -3633,6 +3679,7 @@ static bool localHsenStopManaged(bool showmsg)
   bool stopped = false, failed = false;
   for (unsigned char cnt = 0; cnt < count; cnt++)
   {
+#ifdef __MINGW32__
     HANDLE proc = OpenProcess(PROCESS_TERMINATE | SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pids[cnt].pid);
     if (!proc) continue;
     if (!localHsenProcessLooksManaged(proc))
@@ -3658,6 +3705,25 @@ static bool localHsenStopManaged(bool showmsg)
       stopped = true;
     }
     CloseHandle(proc);
+#else
+    pid_t pid = (pid_t) pids[cnt].pid;
+    unsigned long long stamp = localHsenProcessCreateStamp(pids[cnt].pid);
+    if (!localHsenProcessLooksManaged(pids[cnt].pid)) continue;
+    if (pids[cnt].created && stamp && (stamp != pids[cnt].created)) continue;
+    if ((kill(pid, 0) == -1) && (errno == ESRCH)) continue;
+    if (kill(pid, SIGTERM) == -1) failed = true;
+    else
+    {
+      for (unsigned char tries = 0; tries < 30; tries++)
+      {
+        int status;
+        pid_t rc = waitpid(pid, &status, WNOHANG);
+        if ((rc == pid) || ((rc == -1) && (errno == ECHILD))) break;
+        usleep(100000);
+      }
+      stopped = true;
+    }
+#endif
   }
   localHsenStateClear();
   if (showmsg)
@@ -3669,8 +3735,9 @@ static bool localHsenStopManaged(bool showmsg)
   return !failed;
 }
 
-static bool localHsenLaunchOne(const localhsen_if_type *iface, DWORD *pidOut)
+static bool localHsenLaunchOne(const localhsen_if_type *iface, unsigned long *pidOut)
 {
+#ifdef __MINGW32__
   STARTUPINFOA si;
   PROCESS_INFORMATION pi;
   char exepath[512], workdir[512], cmd[1400];
@@ -3682,10 +3749,38 @@ static bool localHsenLaunchOne(const localhsen_if_type *iface, DWORD *pidOut)
   si.wShowWindow = SW_HIDE;
   snprintf(cmd, sizeof(cmd), "\"%s\" %u \"%s\" 127.0.0.1%s", exepath, iface->sensorId, iface->id, (localHsenWindowsPromisc ? " -p" : ""));
   if (!CreateProcessA(0, cmd, 0, 0, FALSE, CREATE_NO_WINDOW, 0, workdir, &si, &pi)) return false;
-  *pidOut = pi.dwProcessId;
+  *pidOut = (unsigned long) pi.dwProcessId;
   CloseHandle(pi.hThread);
   CloseHandle(pi.hProcess);
   return true;
+#else
+  pid_t pid;
+  char exepath[512], workdir[512], cmd[1600];
+  const char *basecmd;
+  if (!localHsenExeInfo(exepath, sizeof(exepath), workdir, sizeof(workdir))) return false;
+  if (*setts.hsst && !textContainsNoCase(setts.hsst, "<sudo command>")) basecmd = setts.hsst;
+  else basecmd = exepath;
+  snprintf(cmd, sizeof(cmd), "%s %u \"%s\" 127.0.0.1%s", basecmd, iface->sensorId, iface->id, (localHsenWindowsPromisc ? " -p" : ""));
+  pid = fork();
+  if (pid == -1) return false;
+  if (!pid)
+  {
+    int nullfd = open("/dev/null", O_RDWR);
+    if (nullfd != -1)
+    {
+      dup2(nullfd, 0);
+      dup2(nullfd, 1);
+      dup2(nullfd, 2);
+      if (nullfd > 2) close(nullfd);
+    }
+    if (*workdir) chdir(workdir);
+    setsid();
+    execl("/bin/sh", "sh", "-c", cmd, (char *) 0);
+    _exit(127);
+  }
+  *pidOut = (unsigned long) pid;
+  return true;
+#endif
 }
 
 static bool localHsenStartSelected(bool showmsg)
@@ -3696,17 +3791,20 @@ static bool localHsenStartSelected(bool showmsg)
   localHsenStopManaged(false);
   for (unsigned char cnt = 0; cnt < localHsenIfCount; cnt++)
   {
-    DWORD pid;
-    HANDLE proc;
+    unsigned long pid;
     if (!localHsenIfs[cnt].selected) continue;
     anySelected = true;
     if (!localHsenLaunchOne(&localHsenIfs[cnt], &pid)) failed = true;
     else
     {
-      proc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
       pids[count].pid = pid;
+#ifdef __MINGW32__
+      HANDLE proc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, (DWORD) pid);
       pids[count].created = (proc ? localHsenProcessCreateStamp(proc) : 0);
       if (proc) CloseHandle(proc);
+#else
+      pids[count].created = localHsenProcessCreateStamp(pid);
+#endif
       count++;
     }
   }
@@ -3742,7 +3840,7 @@ static void localHsenDialogOpen()
   rowTop = 74;
   if (!localHsenIfCount)
   {
-    GLWin.AddLabel(10, rowTop, (discovered ? "No interfaces found." : "Interface scan failed. Check hsen.exe."));
+    GLWin.AddLabel(10, rowTop, (discovered ? "No interfaces found." : "Interface scan failed. Check hsen."));
   }
   for (unsigned char cnt = 0; cnt < localHsenIfCount; cnt++)
   {
@@ -3767,7 +3865,6 @@ static void localHsenAutostartMaybe()
   if (!localHsenDiscoverInterfaces(true)) return;
   localHsenStartSelected(false);
 }
-#endif
 
 static void compactBindingToken(const char *src, char *dst, size_t dstsz)
 {
@@ -4015,24 +4112,25 @@ static bool settsLoadIni(const char *path)
     else if (!strcmp(key, "command2")) setStringValue(setts.cmd[1], sizeof(setts.cmd[1]), value);
     else if (!strcmp(key, "command3")) setStringValue(setts.cmd[2], sizeof(setts.cmd[2]), value);
     else if (!strcmp(key, "command4")) setStringValue(setts.cmd[3], sizeof(setts.cmd[3]), value);
-#ifdef __MINGW32__
-    else if (!strcmp(key, "local_hsen_windows_autostart"))
+    else if (!strcmp(key, "local_hsen_autostart") || !strcmp(key, "local_hsen_windows_autostart"))
     {
       if (parseBoolValue(value, &flag)) localHsenWindowsAutostart = flag;
     }
-    else if (!strcmp(key, "local_hsen_windows_promiscuous"))
+    else if (!strcmp(key, "local_hsen_promiscuous") || !strcmp(key, "local_hsen_windows_promiscuous"))
     {
       if (parseBoolValue(value, &flag)) localHsenWindowsPromisc = flag;
     }
-    else if (!strcmp(key, "local_hsen_windows_interface_count"))
+    else if (!strcmp(key, "local_hsen_interface_count") || !strcmp(key, "local_hsen_windows_interface_count"))
     {
       if (parseUnsignedCharValue(value, &uc) && (uc <= LOCAL_HSEN_MAX_INTERFACES)) localHsenIfCount = uc;
     }
-    else if (!strncmp(key, "local_hsen_windows_interface", 27))
+    else if (!strncmp(key, "local_hsen_interface", 20) || !strncmp(key, "local_hsen_windows_interface", 27))
     {
       unsigned int idx;
       char field[32];
-      if ((sscanf(key, "local_hsen_windows_interface%u_%31s", &idx, field) == 2) && (idx < LOCAL_HSEN_MAX_INTERFACES))
+      int matched = sscanf(key, "local_hsen_interface%u_%31s", &idx, field);
+      if ((matched != 2) && (sscanf(key, "local_hsen_windows_interface%u_%31s", &idx, field) == 2)) matched = 2;
+      if ((matched == 2) && (idx < LOCAL_HSEN_MAX_INTERFACES))
       {
         localhsen_if_type *iface = &localHsenIfs[idx];
         if ((idx + 1) > localHsenIfCount) localHsenIfCount = (unsigned char) idx + 1;
@@ -4049,7 +4147,6 @@ static bool settsLoadIni(const char *path)
         }
       }
     }
-#endif
     else if (!strcmp(key, "dynamic_hosts_enabled"))
     {
       if (parseBoolValue(value, &flag)) dynamicHostsEnabled = flag;
@@ -4168,21 +4265,19 @@ static bool settsSaveIni(const char *path)
   fprintf(sts, "dynamic_host_ttl_seconds=%u\n", dynamicHostTtlSeconds);
   fprintf(sts, "dynamic_host_cleanup_interval_seconds=%u\n\n", dynamicHostCleanupIntervalSeconds);
 
-#ifdef __MINGW32__
-  fputs("[local_hsen_windows]\n", sts);
-  fprintf(sts, "local_hsen_windows_autostart=%d\n", (localHsenWindowsAutostart ? 1 : 0));
-  fprintf(sts, "local_hsen_windows_promiscuous=%d\n", (localHsenWindowsPromisc ? 1 : 0));
-  fprintf(sts, "local_hsen_windows_interface_count=%u\n", localHsenIfCount);
+  fputs("[local_hsen]\n", sts);
+  fprintf(sts, "local_hsen_autostart=%d\n", (localHsenWindowsAutostart ? 1 : 0));
+  fprintf(sts, "local_hsen_promiscuous=%d\n", (localHsenWindowsPromisc ? 1 : 0));
+  fprintf(sts, "local_hsen_interface_count=%u\n", localHsenIfCount);
   for (unsigned char cnt = 0; cnt < localHsenIfCount; cnt++)
   {
-    fprintf(sts, "local_hsen_windows_interface%u_id=%s\n", cnt, localHsenIfs[cnt].id);
-    fprintf(sts, "local_hsen_windows_interface%u_name=%s\n", cnt, localHsenIfs[cnt].name);
-    fprintf(sts, "local_hsen_windows_interface%u_class=%s\n", cnt, localHsenIfs[cnt].klass);
-    fprintf(sts, "local_hsen_windows_interface%u_selected=%d\n", cnt, (localHsenIfs[cnt].selected ? 1 : 0));
-    fprintf(sts, "local_hsen_windows_interface%u_sensor_id=%u\n", cnt, localHsenIfs[cnt].sensorId);
+    fprintf(sts, "local_hsen_interface%u_id=%s\n", cnt, localHsenIfs[cnt].id);
+    fprintf(sts, "local_hsen_interface%u_name=%s\n", cnt, localHsenIfs[cnt].name);
+    fprintf(sts, "local_hsen_interface%u_class=%s\n", cnt, localHsenIfs[cnt].klass);
+    fprintf(sts, "local_hsen_interface%u_selected=%d\n", cnt, (localHsenIfs[cnt].selected ? 1 : 0));
+    fprintf(sts, "local_hsen_interface%u_sensor_id=%u\n", cnt, localHsenIfs[cnt].sensorId);
   }
   fputc('\n', sts);
-#endif
 
   fputs("[keybindings]\n", sts);
   for (unsigned char cnt = 0; cnt < kaCount; cnt++)
@@ -4213,12 +4308,10 @@ void settsLoad()
 {
   char inipath[256], legacypath[256];
   ensureHsdDataDir();
-#ifdef __MINGW32__
   localHsenIfCount = 0;
   localHsenWindowsAutostart = false;
   localHsenWindowsPromisc = false;
   memset(localHsenIfs, 0, sizeof(localHsenIfs));
-#endif
   strcpy(inipath, hsddata("settings.ini"));
   strcpy(legacypath, hsddata("settings-hsd"));
 
@@ -4668,9 +4761,7 @@ int main(int argc, char *argv[])
   initObjsGL();
   GLWin.InitFont();
   GLFWthread gthrd = glfwCreateThread(pktProcess, 0);  //packet gatherer
-#ifdef __MINGW32__
   localHsenAutostartMaybe();
-#endif
   signal(SIGINT, hsdStop);  //capture ctrl+c
   signal(SIGTERM, hsdStop);  //capture kill
   while (goRun)
@@ -4696,9 +4787,7 @@ int main(int argc, char *argv[])
 #ifndef __MINGW32__
   syslog(LOG_INFO, "stopping...\n");
 #endif
-#ifdef __MINGW32__
   localHsenStopManaged(false);
-#endif
   goHosts = 2;
   glfwWaitThread(gthrd, GLFW_WAIT);
   settsSave();  //save settings

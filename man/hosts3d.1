@@ -87,9 +87,12 @@ none (where multiple colours are used), default (grey), orange,
 yellow, fluro, green, mint, aqua, blue, purple, violet and hold (place
 hosts in same position).
 .SH "START/STOP LOCAL hsen"
-If sudo is required to start/stop a local hsen, the user starting
-Hosts3D must be in /etc/sudoers.  The default command to stop a local
-hsen is "killall hsen", which will kill all hsen processes.
+Local hsen management can discover interfaces and start/stop managed
+local hsen processes from the Hosts3D GUI.  If sudo is required to
+start a local hsen, the user starting Hosts3D must be in /etc/sudoers
+and configure an appropriate \fBhsen_start_command\fR (for example
+"sudo -n hsen").  Managed local hsen processes are stopped individually;
+Hosts3D does not rely on "killall hsen" for this GUI workflow.
 .SH NOTES
 Firewall configuration: hsen talks to Hosts3D via UDP port 10111.  If
 hsen is running and Hosts3D is not, ICMP Port Unreachable (UDP port

@@ -227,22 +227,28 @@ void pktProcess(u_char *u, const struct pcap_pkthdr *hdr, const u_char *pkt)
 int main(int argc, char *argv[])
 {
   char errbuf[PCAP_ERRBUF_SIZE];
+  if ((argc == 2) && (!strcmp(argv[1], "-l")
+#ifdef __MINGW32__
+      || !strcmp(argv[1], "-d")
+#endif
+      ))
+  {
+    pcap_if_t *dev;
+    if (pcap_findalldevs(&dev, errbuf) == -1) fprintf(stderr, "hsen error: pcap_findalldevs() failed- %s\n", errbuf);
+    else while (dev)
+    {
+      fprintf(stdout, "%s", dev->name);
+      if (dev->description) fprintf(stdout, "  :%s", dev->description);
+      fprintf(stdout, "\n");
+      dev = dev->next;
+    }
+    return 0;
+  }
   if (argc > 1)
   {
     if (!strcmp(argv[argc - 1], "-d"))
     {
-#ifdef __MINGW32__
-      pcap_if_t *dev;
-      if (pcap_findalldevs(&dev, errbuf) == -1) fprintf(stderr, "hsen error: pcap_findalldevs() failed- %s\n", errbuf);
-      else while (dev)
-      {
-        fprintf(stdout, "%s", dev->name);
-        if (dev->description) fprintf(stdout, "  :%s", dev->description);
-        fprintf(stdout, "\n");
-        dev = dev->next;
-      }
-      return 0;
-#else
+#ifndef __MINGW32__
       pid_t pid = fork();
       if (pid == -1)
       {
@@ -273,10 +279,11 @@ int main(int argc, char *argv[])
   if ((argc < 3) || (argc > 4) || !strcmp(argv[argc - 1], "-d"))
   {
 #ifdef __MINGW32__
-    fprintf(stderr, "hsen 1.16 usage: %s [-d] <id> <interface/file> [<destination>] [-p]\n"
-      "  -d : display interfaces\n"
+    fprintf(stderr, "hsen 1.16 usage: %s [-l] <id> <interface/file> [<destination>] [-p]\n"
+      "  -l : display interfaces\n"
 #else
-    fprintf(stderr, "hsen 1.16 usage: %s <id> <interface/file> [<destination>] [-p] [-d]\n"
+    fprintf(stderr, "hsen 1.16 usage: %s [-l] <id> <interface/file> [<destination>] [-p] [-d]\n"
+      "  -l : display interfaces\n"
 #endif
       "  id : identify packets from a specific hsen when multiple exist (1-255)\n"
 #ifdef __MINGW32__
