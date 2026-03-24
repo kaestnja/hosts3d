@@ -149,7 +149,7 @@ class MyGLWin
     int AddLabel(int left, int top, const char *text);
     void AddList(int left, int top, int right, int bottom, const char *fl);
     void AddView(int left, int top, int right, int bottom, int tab, const char *fl);
-    void AddMenu(int width, const char *text, int itms, int sub, int value, int hotkey = 0);
+    void AddMenu(int width, const char *text, int itms, int sub, int value, int hotkey = 0, int indent = 0);
     void Draw(GLenum mode);
     int DefaultButton();
     bool GetCheck(int name);

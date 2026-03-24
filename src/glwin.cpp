@@ -1021,11 +1021,12 @@ void MyGLWin::AddView(int left, int top, int right, int bottom, int tab, const c
 }
 
 //create menu object
-void MyGLWin::AddMenu(int width, const char *text, int itms, int sub, int value, int hotkey)
+void MyGLWin::AddMenu(int width, const char *text, int itms, int sub, int value, int hotkey, int indent)
 {
   glmu_obj glmu;
   glmu.type = GLWIN_MENU;
-  if (mouseX < (screenW - (width + 1))) glmu.left = mouseX;
+  int mleft = mouseX + indent;
+  if (mleft < (screenW - (width + 1))) glmu.left = mleft;
   else glmu.left = screenW - (width + 1);
   if (glmu.left < 0) glmu.left = 0;
   if (mouseY > (itms * MENUH)) glmu.top = mouseY;
