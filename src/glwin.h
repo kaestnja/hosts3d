@@ -113,8 +113,8 @@ class MyGLWin
     struct glmu_obj  //menu object
     {
       unsigned char type;  //GLWIN_MENU
-      int left, top, width, sub, value;  //display sub-menu object
-      char text[64];
+      int left, top, width, sub, value, hotkey;  //display sub-menu object
+      char text[96];
     };
     int names, selected, currInput, currScroll, screenW, screenH, mouseX, mouseY, menuY;  //input object with focus (for keys), scroll object with focus (for mouse wheel)
     GLuint fontDraw;  //GL compiled font
@@ -149,11 +149,12 @@ class MyGLWin
     int AddLabel(int left, int top, const char *text);
     void AddList(int left, int top, int right, int bottom, const char *fl);
     void AddView(int left, int top, int right, int bottom, int tab, const char *fl);
-    void AddMenu(int width, const char *text, int itms, int sub, int value);
+    void AddMenu(int width, const char *text, int itms, int sub, int value, int hotkey = 0);
     void Draw(GLenum mode);
     int DefaultButton();
     bool GetCheck(int name);
     char *GetInput(int name = 0);
+    int MenuValueForKey(int key);
     void PutInput(const char *text, int name = 0);
     void PutLabel(const char *text, int name);
     int GetSelected();

@@ -26,7 +26,7 @@ If your main goal is to get the project running again, use this order:
 
 1. Build `Hosts3D` and `hsen`
 2. Start `Hosts3D`
-3. Right-click in the 3D view to open the main menu, then choose `Local hsen`
+3. Right-click in the 3D view, or press `F9`, to open the main menu, then choose `Local hsen`
 4. Select one or more capture interfaces
 5. Click `Save + Start`
 
@@ -36,11 +36,11 @@ Recommended paths:
   - run `.\compile-hosts3d.bat`
   - run `.\compile-hsen.bat`
   - start `.\start-Hosts3DW.bat`
-  - in Hosts3D, right-click to open the main menu, then choose `Local hsen`
+  - in Hosts3D, right-click in the 3D view, or press `F9`, to open the main menu, then choose `Local hsen`
 - Linux/macOS:
   - build with the platform commands below
   - if local capture needs privileges, set `hsen_start_command=sudo -n hsen` in `settings.ini`
-  - start `Hosts3D`, right-click to open the main menu, then choose `Local hsen`
+  - start `Hosts3D`, right-click in the 3D view, or press `F9`, to open the main menu, then choose `Local hsen`
 
 ## Requirements
 Use the platform-specific subsection that matches the machine you are building on.
@@ -253,7 +253,7 @@ Notes:
 
 ### Local `hsen`
 - `Local hsen` now uses the same GUI on Windows and Linux.
-- Open it by right-clicking in the 3D view and choosing `Local hsen`.
+- Open it by right-clicking in the 3D view, or by pressing `F9`, and choosing `Local hsen`.
 - Interface discovery is done by calling `hsen -l`.
 - Target host for local GUI-managed sensors is fixed to `127.0.0.1`.
 - Ethernet adapters are preselected by default; WLAN and other adapters are listed but start deselected.
@@ -280,6 +280,9 @@ Runtime behavior not explicitly listed in `controls.txt`:
 - Single-clicking a multi-host collision object cycles through hosts in that cluster.
 - Mouse wheel in 3D mode moves camera up/down directly (no modifier required).
 - The in-app help reflects the current bindings from `settings.ini`; the list below shows the default mapping.
+- `F9` opens the main menu from the keyboard.
+- In menus, the key shown in parentheses activates that visible item.
+- `Backspace` returns to the previous menu level; `Esc` closes the open menu or dialog.
 
 ### Default Controls List
 Legacy spelling is preserved for parity: `Persistant`.
@@ -290,6 +293,10 @@ Left Mouse Button	Select Host
 	Click Selected Host to Toggle Persistant IP/Name
 Middle Mouse Button	Click-and-Drag to Change View
 Right Mouse Button	Show Menu
+F9	Open Main Menu
+Shown menu key in parentheses	Activate Visible Menu Item
+Backspace	Return to Previous Menu
+Esc	Close Open Menu or Dialog
 Mouse Wheel	Move Up/Down
 Up/Down	Move Forward/Back
 Left/Right	Move Left/Right
@@ -361,7 +368,8 @@ H	Show Help
 This section is reference material for the current menu tree. You do not need it to get the program running.
 
 All labels below are taken from `src/hosts3d.cpp` menu construction code.
-Shortcut suffixes in the running UI follow the current keybindings from `settings.ini`; the labels below show the default mapping.
+The running UI is authoritative: every visible menu item now shows either its direct shortcut or its local menu mnemonic in parentheses. For readability, the map below focuses on structure and the most important default bindings.
+Use `F9` to open the main menu from the keyboard, press the shown key in parentheses to activate a visible item, and use `Backspace` to return to the previous menu level.
 
 ### Main Menu
 | Menu | Items |
@@ -453,7 +461,7 @@ Conditional by active protocol filter.
 | `TCP` |
 | `UDP` |
 | `ARP` |
-| `Other` |
+| `Other...` |
 
 #### `Packets > Port`
 | Possible item |
@@ -479,7 +487,7 @@ Conditional by active on-active mode.
 | `Save` |
 
 #### `View > Recall`
-`Home (Ctrl+Home)`, `Pos 1 (Ctrl+F1)`, `Pos 2 (Ctrl+F2)`, `Pos 3 (Ctrl+F3)`, `Pos 4 (Ctrl+F4)`
+`Home (Home)`, `Alternate Home (Ctrl+Home)`, `Pos 1 (Ctrl+F1)`, `Pos 2 (Ctrl+F2)`, `Pos 3 (Ctrl+F3)`, `Pos 4 (Ctrl+F4)`
 
 #### `View > Save`
 `Pos 1`, `Pos 2`, `Pos 3`, `Pos 4`

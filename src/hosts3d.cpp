@@ -124,6 +124,7 @@ enum keyact_type
   kaToggleBroadcasts, kaDecreasePacketLimit, kaIncreasePacketLimit, kaTogglePacketDestPort, kaTogglePacketSpeed, kaPacketsOff,
   kaRecordPacketTraffic, kaReplayPacketTraffic, kaSkipReplayPacket, kaStopPacketTraffic, kaOpenPacketTrafficFile, kaSavePacketTrafficFile,
   kaToggleAnimation, kaAcknowledgeAllAnomalies, kaToggleOsd, kaExportSelectionCsv, kaShowHostInformation, kaShowSelectionInformation, kaShowHelp,
+  kaOpenMainMenu,
   kaCount
 };
 
@@ -199,13 +200,17 @@ static keybind_type keybinds[kaCount] =
   {"export_selection_csv", 'X'},
   {"show_selected_host_information", 'I'},
   {"show_selection_information", 'G'},
-  {"show_help", 'H'}
+  {"show_help", 'H'},
+  {"open_main_menu", GLFW_KEY_F9}
 };
 
 static void ensureHsdDataDir();
 static bool parseBindingValue(const char *value, int *out);
 static void bindingLabel(int encoded, char *buf, size_t bufsz);
-static const char *menuLabelWithBinding(const char *title, keyact_type action);
+static const char *menuLabelWithHint(const char *title, int hotkey);
+static int menuItemHotkey(int mnemonic, keyact_type action);
+static int menuItemWidth(const char *label, bool submenu);
+static void addMenuItem(const char *title, int items, int sub, int value, int mnemonic = 0, keyact_type action = kaCount);
 static keyact_type keyActionFromInput(int encoded);
 static void triggerKeyAction(keyact_type action);
 static bool hostIsDynamic(host_type *ht);
@@ -213,6 +218,7 @@ static void hostSetDynamic(host_type *ht, bool dynamic);
 static void hostPromoteStatic(host_type *ht);
 static bool hostShouldPersist(host_type *ht);
 void hostDetails();
+void mnuProcess(int m);
 static void hostDeleteManaged(host_type *ht);
 static void dynamicHostsCleanupMaybe();
 static void settsSave();
@@ -1774,6 +1780,13 @@ void GLFWCALL keyboardGL(int key, int action)
   if (GLWin.On())
   {
     char *clip;
+    int menuValue = GLWin.MenuValueForKey(key);
+    if (menuValue)
+    {
+      mnuProcess(menuValue);
+      refresh = true;
+      return;
+    }
     if (((GLResult[0] % 100) == HSD_HSTINFO) && ((keyact == kaNextSelectedHost) || (keyact == kaPrevSelectedHost)))
     {
       hostTab((keyact == kaNextSelectedHost));
@@ -2120,6 +2133,9 @@ void GLFWCALL keyboardGL(int key, int action)
         GLWin.AddLabel(201, 10, "OTHER");
         GLWin.AddView(10, 30, 10, 10, 28, hsddata("controls.txt"));
         GLResult[0] = 0;
+        break;
+      case kaOpenMainMenu:
+        mnuProcess(100);
         break;
       default:
         break;
@@ -2590,12 +2606,13 @@ void mnuProcess(int m)
         GLWin.AddButton(82, 40, GLWIN_CLOSE, "Cancel");
         break;
       case 69: triggerKeyAction(kaPacketsOff); break;  //packets off
-      case 70: triggerKeyAction(kaViewHomeAlt); break;  //recall alternate home view
+      case 70: triggerKeyAction(kaViewHome); break;  //recall home view
       case 71: triggerKeyAction(kaViewPos1); break;  //recall view position 1
       case 72: triggerKeyAction(kaViewPos2); break;  //recall view position 2
       case 73: triggerKeyAction(kaViewPos3); break;  //recall view position 3
       case 74: triggerKeyAction(kaViewPos4); break;  //recall view position 4
       case 75: case 76: case 77: case 78: memcpy(&setts.vws[m - 74], &setts.vws[0], sizeof(view_type)); break;  //save current view as view position 1-4
+      case 79: triggerKeyAction(kaViewHomeAlt); break;  //recall alternate home view
       case 80: case 85:  //2D GUI open/save network layout file
         filelistCreate(hsddata("tmp-flist-hsd"), ".hnl");
         if (m == 80)
@@ -2718,202 +2735,203 @@ void mnuProcess(int m)
         break;
       case 99: goRun = false; break;  //exit
       case 100:
-        GLWin.AddMenu(88, "MAIN", 12, 0, 0);  //nothing
-        if (seltd) GLWin.AddMenu(88, "Selected", 12, 1, 101);
-        GLWin.AddMenu(88, "Selection", 12, 1, 102);  //6+(10x6)+12+10=88
-        GLWin.AddMenu(88, "Anomalies", 12, 1, 103);
-        GLWin.AddMenu(88, "IP/Name", 12, 1, 104);
-        GLWin.AddMenu(88, "Packets", 12, 1, 105);
-        GLWin.AddMenu(88, "On-Active", 12, 1, 106);
-        GLWin.AddMenu(88, "View", 12, 1, 107);
-        GLWin.AddMenu(88, "Layout", 12, 1, 108);
-        GLWin.AddMenu(88, "Other", 12, 1, 109);
-        GLWin.AddMenu(88, "Local hsen", 12, 0, 94);
-        if (fullscn) GLWin.AddMenu(88, "Exit", 12, 0, 99);
+        addMenuItem("MAIN", 12, 0, 0);
+        if (seltd) addMenuItem("Selected", 12, 1, 101, 'D');
+        addMenuItem("Selection", 12, 1, 102, 'S');
+        addMenuItem("Anomalies", 12, 1, 103, 'A');
+        addMenuItem("IP/Name", 12, 1, 104, 'N');
+        addMenuItem("Packets", 12, 1, 105, 'P');
+        addMenuItem("On-Active", 12, 1, 106, 'O');
+        addMenuItem("View", 12, 1, 107, 'V');
+        addMenuItem("Layout", 12, 1, 108, 'L');
+        addMenuItem("Other", 12, 1, 109, 'T');
+        addMenuItem("Local hsen", 12, 0, 94, 'H');
+        if (fullscn) addMenuItem("Exit", 12, 0, 99, 'X');
         break;
       case 101:
-        GLWin.AddMenu(114, "SELECTED", 8, 2, 100);
-        GLWin.AddMenu(114, menuLabelWithBinding("Information", kaShowHostInformation), 8, 0, 40);
-        GLWin.AddMenu(114, "Show Packets Only", 8, 0, 41);  //6+(17x6)+6=114
-        GLWin.AddMenu(114, "Move Here", 8, 0, 42);
-        GLWin.AddMenu(114, "Go To", 8, 0, 43);
-        GLWin.AddMenu(114, menuLabelWithBinding("Hostname", kaEditHostname), 8, 0, 44);
-        GLWin.AddMenu(114, menuLabelWithBinding("Remarks", kaEditRemarks), 8, 0, 45);
-        GLWin.AddMenu(114, "Add Net Position", 8, 0, 91);
+        addMenuItem("SELECTED", 8, 2, 100, GLFW_KEY_BACKSPACE);
+        addMenuItem("Information", 8, 0, 40, 0, kaShowHostInformation);
+        addMenuItem("Show Packets Only", 8, 0, 41, 'P');
+        addMenuItem("Move Here", 8, 0, 42, 'M');
+        addMenuItem("Go To", 8, 0, 43, 'G');
+        addMenuItem("Hostname", 8, 0, 44, 0, kaEditHostname);
+        addMenuItem("Remarks", 8, 0, 45, 0, kaEditRemarks);
+        addMenuItem("Add Net Position", 8, 0, 91, 'A');
         break;
       case 102:
-        GLWin.AddMenu(114, "SELECTION", 10, 2, 100);
-        GLWin.AddMenu(114, menuLabelWithBinding("Information", kaShowSelectionInformation), 10, 0, 46);
-        GLWin.AddMenu(114, "Resolve Hostnames", 10, 0, 96);
-        GLWin.AddMenu(114, "Colour", 10, 1, 110);
-        GLWin.AddMenu(114, "Lock", 10, 1, 111);
-        GLWin.AddMenu(114, "Move To Zone", 10, 1, 112);
-        GLWin.AddMenu(114, "Arrange", 10, 1, 113);
-        GLWin.AddMenu(114, "Commands", 10, 1, 114);
-        GLWin.AddMenu(114, "Reset", 10, 1, 115);
-        GLWin.AddMenu(114, "Delete", 10, 1, 116);
+        addMenuItem("SELECTION", 10, 2, 100, GLFW_KEY_BACKSPACE);
+        addMenuItem("Information", 10, 0, 46, 0, kaShowSelectionInformation);
+        addMenuItem("Resolve Hostnames", 10, 0, 96, 'H');
+        addMenuItem("Colour", 10, 1, 110, 'C');
+        addMenuItem("Lock", 10, 1, 111, 'L');
+        addMenuItem("Move To Zone", 10, 1, 112, 'M');
+        addMenuItem("Arrange", 10, 1, 113, 'A');
+        addMenuItem("Commands", 10, 1, 114, 'O');
+        addMenuItem("Reset", 10, 1, 115, 'R');
+        addMenuItem("Delete", 10, 1, 116, 'X');
         break;
       case 103:
-        GLWin.AddMenu(108, "ANOMALIES", 4, 2, 100);
-        GLWin.AddMenu(108, "Select All", 4, 0, 31);
-        GLWin.AddMenu(108, "Acknowledge", 4, 1, 117);
-        GLWin.AddMenu(108, "Toggle Detection", 4, 0, 48);  //6+(16x6)+6=108
+        addMenuItem("ANOMALIES", 4, 2, 100, GLFW_KEY_BACKSPACE);
+        addMenuItem("Select All", 4, 0, 31, 'S');
+        addMenuItem("Acknowledge", 4, 1, 117, 'K');
+        addMenuItem("Toggle Detection", 4, 0, 48, 'T');
         break;
       case 104:
-        GLWin.AddMenu(96, "IP/NAME", 6, 2, 100);
-        if (setts.sips != sel) GLWin.AddMenu(96, "Show Selection", 6, 0, 50);  //6+(14x6)+6=96
-        if (setts.sips != all) GLWin.AddMenu(96, "Show All", 6, 0, 51);
-        if (setts.sona != ipn) GLWin.AddMenu(96, "Show On-Active", 6, 0, 52);
-        if (setts.sips != off) GLWin.AddMenu(96, "Show Off", 6, 0, 53);
-        GLWin.AddMenu(96, "All Off", 6, 0, 54);
+        addMenuItem("IP/NAME", 6, 2, 100, GLFW_KEY_BACKSPACE);
+        if (setts.sips != sel) addMenuItem("Show Selection", 6, 0, 50, 'S');
+        if (setts.sips != all) addMenuItem("Show All", 6, 0, 51, 'A');
+        if (setts.sona != ipn) addMenuItem("Show On-Active", 6, 0, 52, 'O');
+        if (setts.sips != off) addMenuItem("Show Off", 6, 0, 53, 'F');
+        addMenuItem("All Off", 6, 0, 54, 'X');
         break;
       case 105:
-        GLWin.AddMenu(96, "PACKETS", 6, 2, 100);
-        GLWin.AddMenu(96, menuLabelWithBinding("Show All", kaShowAllPackets), 6, 0, 60);
-        GLWin.AddMenu(96, "Protocol", 6, 1, 118);
-        GLWin.AddMenu(96, "Port", 6, (setts.prt ? 1 : 0), (setts.prt ? 119 : 68));
-        GLWin.AddMenu(96, "Select Showing", 6, 0, 32);  //6+(14x6)+6=96
-        GLWin.AddMenu(96, menuLabelWithBinding("Off", kaPacketsOff), 6, 0, 69);
+        addMenuItem("PACKETS", 6, 2, 100, GLFW_KEY_BACKSPACE);
+        addMenuItem("Show All", 6, 0, 60, 0, kaShowAllPackets);
+        addMenuItem("Protocol", 6, 1, 118, 'P');
+        addMenuItem("Port", 6, (setts.prt ? 1 : 0), (setts.prt ? 119 : 68), 'T');
+        addMenuItem("Select Showing", 6, 0, 32, 'S');
+        addMenuItem("Off", 6, 0, 69, 0, kaPacketsOff);
         break;
       case 106:
-        GLWin.AddMenu(84, "ON-ACTIVE", 6, 2, 100);
-        if (setts.sona != alt) GLWin.AddMenu(84, "Alert", 6, 0, 55);
-        if (setts.sona != ipn) GLWin.AddMenu(84, "Show IP/Name", 6, 0, 52);  //6+(12x6)+6=84
-        if (setts.sona != hst) GLWin.AddMenu(84, "Show Host", 6, 0, 56);
-        if (setts.sona != slt) GLWin.AddMenu(84, "Select", 6, 0, 57);
-        if (setts.sona != don) GLWin.AddMenu(84, "Do Nothing", 6, 0, 58);
+        addMenuItem("ON-ACTIVE", 6, 2, 100, GLFW_KEY_BACKSPACE);
+        if (setts.sona != alt) addMenuItem("Alert", 6, 0, 55, 'A');
+        if (setts.sona != ipn) addMenuItem("Show IP/Name", 6, 0, 52, 'N');
+        if (setts.sona != hst) addMenuItem("Show Host", 6, 0, 56, 'H');
+        if (setts.sona != slt) addMenuItem("Select", 6, 0, 57, 'S');
+        if (setts.sona != don) addMenuItem("Do Nothing", 6, 0, 58, 'D');
         break;
       case 107:
-        GLWin.AddMenu(64, "VIEW", 3, 2, 100);
-        GLWin.AddMenu(64, "Recall", 3, 1, 120);  //6+(6x6)+12+10=64
-        GLWin.AddMenu(64, "Save", 3, 1, 121);
+        addMenuItem("VIEW", 3, 2, 100, GLFW_KEY_BACKSPACE);
+        addMenuItem("Recall", 3, 1, 120, 'R');
+        addMenuItem("Save", 3, 1, 121, 'S');
         break;
       case 108:
-        GLWin.AddMenu(90, "LAYOUT", 5, 2, 100);
-        GLWin.AddMenu(90, "Restore", 5, 1, 122);
-        GLWin.AddMenu(90, "Save", 5, 1, 123);
-        GLWin.AddMenu(90, "Net Positions", 5, 0, 90);  //6+(13x6)+6=90
-        GLWin.AddMenu(90, "Clear", 5, 1, 124);
+        addMenuItem("LAYOUT", 5, 2, 100, GLFW_KEY_BACKSPACE);
+        addMenuItem("Restore", 5, 1, 122, 'R');
+        addMenuItem("Save", 5, 1, 123, 'S');
+        addMenuItem("Net Positions", 5, 0, 90, 'N');
+        addMenuItem("Clear", 5, 1, 124, 'C');
         break;
       case 109:
-        GLWin.AddMenu(118, "OTHER", 5, 2, 100);
-        GLWin.AddMenu(118, menuLabelWithBinding("Find Hosts", kaFindHosts), 5, 0, 93);
-        GLWin.AddMenu(118, "Select Inactive", 5, 1, 125);  //6+(15x6)+12+10=118
-        GLWin.AddMenu(118, menuLabelWithBinding("Help", kaShowHelp), 5, 0, 97);
-        GLWin.AddMenu(118, "About", 5, 0, 98);
+        addMenuItem("OTHER", 5, 2, 100, GLFW_KEY_BACKSPACE);
+        addMenuItem("Find Hosts", 5, 0, 93, 0, kaFindHosts);
+        addMenuItem("Select Inactive", 5, 1, 125, 'I');
+        addMenuItem("Help", 5, 0, 97, 0, kaShowHelp);
+        addMenuItem("About", 5, 0, 98, 'A');
         break;
       case 110:
-        GLWin.AddMenu(64, "COLOUR", 11, 2, 102);  //6+(6x6)+12+10=64
-        GLWin.AddMenu(64, "Grey", 11, 0, 10);
-        GLWin.AddMenu(64, "Orange", 11, 0, 11);
-        GLWin.AddMenu(64, "Yellow", 11, 0, 12);
-        GLWin.AddMenu(64, "Fluro", 11, 0, 13);
-        GLWin.AddMenu(64, "Green", 11, 0, 14);
-        GLWin.AddMenu(64, "Mint", 11, 0, 15);
-        GLWin.AddMenu(64, "Aqua", 11, 0, 16);
-        GLWin.AddMenu(64, "Blue", 11, 0, 17);
-        GLWin.AddMenu(64, "Purple", 11, 0, 18);
-        GLWin.AddMenu(64, "Violet", 11, 0, 19);
+        addMenuItem("COLOUR", 11, 2, 102, GLFW_KEY_BACKSPACE);
+        addMenuItem("Grey", 11, 0, 10, 'G');
+        addMenuItem("Orange", 11, 0, 11, 'O');
+        addMenuItem("Yellow", 11, 0, 12, 'Y');
+        addMenuItem("Fluro", 11, 0, 13, 'F');
+        addMenuItem("Green", 11, 0, 14, 'E');
+        addMenuItem("Mint", 11, 0, 15, 'M');
+        addMenuItem("Aqua", 11, 0, 16, 'A');
+        addMenuItem("Blue", 11, 0, 17, 'B');
+        addMenuItem("Purple", 11, 0, 18, 'P');
+        addMenuItem("Violet", 11, 0, 19, 'V');
         break;
       case 111:
-        GLWin.AddMenu(52, "LOCK", 3, 2, 102);  //6+(4x6)+12+10=52
-        GLWin.AddMenu(52, "On", 3, 0, 21);
-        GLWin.AddMenu(52, "Off", 3, 0, 22);
+        addMenuItem("LOCK", 3, 2, 102, GLFW_KEY_BACKSPACE);
+        addMenuItem("On", 3, 0, 21, 'O');
+        addMenuItem("Off", 3, 0, 22, 'F');
         break;
       case 112:
-        GLWin.AddMenu(100, "MOVE TO ZONE", 5, 2, 102);  //6+(12x6)+12+10=100
-        GLWin.AddMenu(100, "Grey", 5, 0, 1);
-        GLWin.AddMenu(100, "Blue", 5, 0, 2);
-        GLWin.AddMenu(100, "Green", 5, 0, 3);
-        GLWin.AddMenu(100, "Red", 5, 0, 4);
+        addMenuItem("MOVE TO ZONE", 5, 2, 102, GLFW_KEY_BACKSPACE);
+        addMenuItem("Grey", 5, 0, 1, 'G');
+        addMenuItem("Blue", 5, 0, 2, 'B');
+        addMenuItem("Green", 5, 0, 3, 'N');
+        addMenuItem("Red", 5, 0, 4, 'R');
         break;
       case 113:
-        GLWin.AddMenu(78, "ARRANGE", 5, 2, 102);
-        GLWin.AddMenu(78, "Default", 5, 0, 5);
-        GLWin.AddMenu(78, "10x10", 5, 0, 6);
-        GLWin.AddMenu(78, "10x10 2xSpc", 5, 0, 7);  //6+(11x6)+6=78
-        GLWin.AddMenu(78, "Into Nets", 5, 0, 8);
+        addMenuItem("ARRANGE", 5, 2, 102, GLFW_KEY_BACKSPACE);
+        addMenuItem("Default", 5, 0, 5, 'D');
+        addMenuItem("10x10", 5, 0, 6, '1');
+        addMenuItem("10x10 2xSpc", 5, 0, 7, '2');
+        addMenuItem("Into Nets", 5, 0, 8, 'N');
         break;
       case 114:
-        GLWin.AddMenu(76, "COMMANDS", 6, 2, 102);  //6+(8x6)+12+10=76
-        GLWin.AddMenu(76, "Command 1", 6, 0, 27);
-        GLWin.AddMenu(76, "Command 2", 6, 0, 28);
-        GLWin.AddMenu(76, "Command 3", 6, 0, 29);
-        GLWin.AddMenu(76, "Command 4", 6, 0, 30);
-        GLWin.AddMenu(76, "Set", 6, 0, 38);
+        addMenuItem("COMMANDS", 6, 2, 102, GLFW_KEY_BACKSPACE);
+        addMenuItem("Command 1", 6, 0, 27, '1');
+        addMenuItem("Command 2", 6, 0, 28, '2');
+        addMenuItem("Command 3", 6, 0, 29, '3');
+        addMenuItem("Command 4", 6, 0, 30, '4');
+        addMenuItem("Set", 6, 0, 38, 'S');
         break;
       case 115:
-        GLWin.AddMenu(72, "RESET", 5, 2, 102);
-        GLWin.AddMenu(72, "Link Lines", 5, 0, 39);  //6+(10x6)+6=72
-        GLWin.AddMenu(72, "Downloads", 5, 0, 23);
-        GLWin.AddMenu(72, "Uploads", 5, 0, 24);
-        GLWin.AddMenu(72, "Services", 5, 0, 25);
+        addMenuItem("RESET", 5, 2, 102, GLFW_KEY_BACKSPACE);
+        addMenuItem("Link Lines", 5, 0, 39, 'L');
+        addMenuItem("Downloads", 5, 0, 23, 'D');
+        addMenuItem("Uploads", 5, 0, 24, 'U');
+        addMenuItem("Services", 5, 0, 25, 'S');
         break;
       case 116:
-        GLWin.AddMenu(64, "DELETE", 2, 2, 102);  //6+(6x6)+12+10=64
-        GLWin.AddMenu(64, "Confirm", 2, 0, 9);
+        addMenuItem("DELETE", 2, 2, 102, GLFW_KEY_BACKSPACE);
+        addMenuItem("Confirm", 2, 0, 9, 'C');
         break;
       case 117:
-        GLWin.AddMenu(94, "ACKNOWLEDGE", 3, 2, 103);  //6+(11x6)+12+10=94
-        GLWin.AddMenu(94, "Selection", 3, 0, 26);
-        GLWin.AddMenu(94, menuLabelWithBinding("All", kaAcknowledgeAllAnomalies), 3, 0, 47);
+        addMenuItem("ACKNOWLEDGE", 3, 2, 103, GLFW_KEY_BACKSPACE);
+        addMenuItem("Selection", 3, 0, 26, 'S');
+        addMenuItem("All", 3, 0, 47, 0, kaAcknowledgeAllAnomalies);
         break;
       case 118:
-        GLWin.AddMenu(76, "PROTOCOL", 7, 2, 105);  //6+(8x6)+12+10=76
-        if (setts.pr) GLWin.AddMenu(76, "All", 7, 0, 61);
-        if (setts.pr != IPPROTO_ICMP) GLWin.AddMenu(76, "ICMP", 7, 0, 62);
-        if (setts.pr != IPPROTO_TCP) GLWin.AddMenu(76, "TCP", 7, 0, 63);
-        if (setts.pr != IPPROTO_UDP) GLWin.AddMenu(76, "UDP", 7, 0, 64);
-        if (setts.pr != IPPROTO_ARP) GLWin.AddMenu(76, "ARP", 7, 0, 65);
-        GLWin.AddMenu(76, "Other", 7, 0, 66);
+        addMenuItem("PROTOCOL", 7, 2, 105, GLFW_KEY_BACKSPACE);
+        if (setts.pr) addMenuItem("All", 7, 0, 61, 'A');
+        if (setts.pr != IPPROTO_ICMP) addMenuItem("ICMP", 7, 0, 62, 'I');
+        if (setts.pr != IPPROTO_TCP) addMenuItem("TCP", 7, 0, 63, 'T');
+        if (setts.pr != IPPROTO_UDP) addMenuItem("UDP", 7, 0, 64, 'U');
+        if (setts.pr != IPPROTO_ARP) addMenuItem("ARP", 7, 0, 65, 'R');
+        addMenuItem("Other...", 7, 0, 66, 'O');
         break;
       case 119:
-        GLWin.AddMenu(52, "PORT", 3, 2, 105);  //6+(4x6)+12+10=52
-        if (setts.prt) GLWin.AddMenu(52, "All", 3, 0, 67);
-        GLWin.AddMenu(52, "Enter", 3, 0, 68);
+        addMenuItem("PORT", 3, 2, 105, GLFW_KEY_BACKSPACE);
+        if (setts.prt) addMenuItem("All", 3, 0, 67, 'A');
+        addMenuItem("Enter", 3, 0, 68, 'E');
         break;
       case 120:
-        GLWin.AddMenu(108, "RECALL", 6, 2, 107);
-        GLWin.AddMenu(108, menuLabelWithBinding("Home", kaViewHomeAlt), 6, 0, 70);  //6+(16x6)+6=108
-        GLWin.AddMenu(108, menuLabelWithBinding("Pos 1", kaViewPos1), 6, 0, 71);
-        GLWin.AddMenu(108, menuLabelWithBinding("Pos 2", kaViewPos2), 6, 0, 72);
-        GLWin.AddMenu(108, menuLabelWithBinding("Pos 3", kaViewPos3), 6, 0, 73);
-        GLWin.AddMenu(108, menuLabelWithBinding("Pos 4", kaViewPos4), 6, 0, 74);
+        addMenuItem("RECALL", 7, 2, 107, GLFW_KEY_BACKSPACE);
+        addMenuItem("Home", 7, 0, 70, 0, kaViewHome);
+        addMenuItem("Alternate Home", 7, 0, 79, 0, kaViewHomeAlt);
+        addMenuItem("Pos 1", 7, 0, 71, 0, kaViewPos1);
+        addMenuItem("Pos 2", 7, 0, 72, 0, kaViewPos2);
+        addMenuItem("Pos 3", 7, 0, 73, 0, kaViewPos3);
+        addMenuItem("Pos 4", 7, 0, 74, 0, kaViewPos4);
         break;
       case 121:
-        GLWin.AddMenu(52, "SAVE", 5, 2, 107);  //6+(4x6)+12+10=52
-        GLWin.AddMenu(52, "Pos 1", 5, 0, 75);
-        GLWin.AddMenu(52, "Pos 2", 5, 0, 76);
-        GLWin.AddMenu(52, "Pos 3", 5, 0, 77);
-        GLWin.AddMenu(52, "Pos 4", 5, 0, 78);
+        addMenuItem("SAVE", 5, 2, 107, GLFW_KEY_BACKSPACE);
+        addMenuItem("Pos 1", 5, 0, 75, '1');
+        addMenuItem("Pos 2", 5, 0, 76, '2');
+        addMenuItem("Pos 3", 5, 0, 77, '3');
+        addMenuItem("Pos 4", 5, 0, 78, '4');
         break;
       case 122:
-        GLWin.AddMenu(70, "RESTORE", 6, 2, 108);  //6+(7x6)+12+10=70
-        GLWin.AddMenu(70, "File", 6, 0, 80);
-        GLWin.AddMenu(70, "Net 1", 6, 0, 81);
-        GLWin.AddMenu(70, "Net 2", 6, 0, 82);
-        GLWin.AddMenu(70, "Net 3", 6, 0, 83);
-        GLWin.AddMenu(70, "Net 4", 6, 0, 84);
+        addMenuItem("RESTORE", 6, 2, 108, GLFW_KEY_BACKSPACE);
+        addMenuItem("File", 6, 0, 80, 'F');
+        addMenuItem("Net 1", 6, 0, 81, '1');
+        addMenuItem("Net 2", 6, 0, 82, '2');
+        addMenuItem("Net 3", 6, 0, 83, '3');
+        addMenuItem("Net 4", 6, 0, 84, '4');
         break;
       case 123:
-        GLWin.AddMenu(52, "SAVE", 6, 2, 108);  //6+(4x6)+12+10=52
-        GLWin.AddMenu(52, "File", 6, 0, 85);
-        GLWin.AddMenu(52, "Net 1", 6, 0, 86);
-        GLWin.AddMenu(52, "Net 2", 6, 0, 87);
-        GLWin.AddMenu(52, "Net 3", 6, 0, 88);
-        GLWin.AddMenu(52, "Net 4", 6, 0, 89);
+        addMenuItem("SAVE", 6, 2, 108, GLFW_KEY_BACKSPACE);
+        addMenuItem("File", 6, 0, 85, 'F');
+        addMenuItem("Net 1", 6, 0, 86, '1');
+        addMenuItem("Net 2", 6, 0, 87, '2');
+        addMenuItem("Net 3", 6, 0, 88, '3');
+        addMenuItem("Net 4", 6, 0, 89, '4');
         break;
       case 124:
-        GLWin.AddMenu(58, "CLEAR", 2, 2, 108);  //6+(5x6)+12+10=58
-        GLWin.AddMenu(58, "Confirm", 2, 0, 92);
+        addMenuItem("CLEAR", 2, 2, 108, GLFW_KEY_BACKSPACE);
+        addMenuItem("Confirm", 2, 0, 92, 'C');
         break;
       case 125:
-        GLWin.AddMenu(118, "SELECT INACTIVE", 6, 2, 109);  //6+(15x6)+12+10=118
-        GLWin.AddMenu(118, "> 5 Minutes", 6, 0, 33);
-        GLWin.AddMenu(118, "> 1 Hour", 6, 0, 34);
-        GLWin.AddMenu(118, "> 1 Day", 6, 0, 35);
-        GLWin.AddMenu(118, "> 1 Week", 6, 0, 36);
-        GLWin.AddMenu(118, "> Other", 6, 0, 37);
+        addMenuItem("SELECT INACTIVE", 6, 2, 109, GLFW_KEY_BACKSPACE);
+        addMenuItem("> 5 Minutes", 6, 0, 33, '5');
+        addMenuItem("> 1 Hour", 6, 0, 34, 'H');
+        addMenuItem("> 1 Day", 6, 0, 35, 'D');
+        addMenuItem("> 1 Week", 6, 0, 36, 'W');
+        addMenuItem("> Other", 6, 0, 37, 'O');
         break;
     }
   }
@@ -3946,6 +3964,7 @@ static int keyCodeFromToken(const char *token)
   if (!strcmp(token, "LEFT")) return GLFW_KEY_LEFT;
   if (!strcmp(token, "RIGHT")) return GLFW_KEY_RIGHT;
   if (!strcmp(token, "HOME")) return GLFW_KEY_HOME;
+  if (!strcmp(token, "BACKSPACE")) return GLFW_KEY_BACKSPACE;
   if (!strcmp(token, "TAB")) return GLFW_KEY_TAB;
   if (!strcmp(token, "SPACE")) return GLFW_KEY_SPACE;
   if (!strcmp(token, "INSERT")) return GLFW_KEY_INSERT;
@@ -4012,6 +4031,7 @@ static const char *keyCodeName(int key)
   case GLFW_KEY_LEFT: return "Left";
   case GLFW_KEY_RIGHT: return "Right";
   case GLFW_KEY_HOME: return "Home";
+  case GLFW_KEY_BACKSPACE: return "Backspace";
   case GLFW_KEY_TAB: return "Tab";
   case GLFW_KEY_SPACE: return "Space";
   case GLFW_KEY_INSERT: return "Insert";
@@ -4061,20 +4081,38 @@ static void bindingLabel(int encoded, char *buf, size_t bufsz)
   snprintf(buf, bufsz, "%s", keyCodeName(encoded));
 }
 
-static const char *menuLabelWithBinding(const char *title, keyact_type action)
+static const char *menuLabelWithHint(const char *title, int hotkey)
 {
-  static char labels[8][96];
+  static char labels[12][128];
   static unsigned char idx = 0;
   char binding[32];
-  idx = (idx + 1) % 8;
-  if (!keybinds[action].key)
+  idx = (idx + 1) % 12;
+  if (!hotkey)
   {
     snprintf(labels[idx], sizeof(labels[idx]), "%s", title);
     return labels[idx];
   }
-  bindingLabel(keybinds[action].key, binding, sizeof(binding));
+  bindingLabel(hotkey, binding, sizeof(binding));
   snprintf(labels[idx], sizeof(labels[idx]), "%s (%s)", title, binding);
   return labels[idx];
+}
+
+static int menuItemHotkey(int mnemonic, keyact_type action)
+{
+  if ((action < kaCount) && keybinds[action].key) return keybinds[action].key;
+  return mnemonic;
+}
+
+static int menuItemWidth(const char *label, bool submenu)
+{
+  return 12 + ((int)strlen(label) * 6) + (submenu ? 16 : 6);
+}
+
+static void addMenuItem(const char *title, int items, int sub, int value, int mnemonic, keyact_type action)
+{
+  int hotkey = menuItemHotkey(mnemonic, action);
+  const char *label = menuLabelWithHint(title, hotkey);
+  GLWin.AddMenu(menuItemWidth(label, (sub != 0)), label, items, sub, value, hotkey);
 }
 
 static keyact_type keyActionFromInput(int encoded)
@@ -4444,6 +4482,10 @@ void checkControls()
     controlLine(ctls, "", "Click Selected Host to Toggle Persistant IP/Name");
     controlLine(ctls, "Middle Mouse Button", "Click-and-Drag to Change View");
     controlLine(ctls, "Right Mouse Button", "Show Menu");
+    controlLineKey(ctls, kaOpenMainMenu, "Open Main Menu");
+    controlLine(ctls, "Shown menu key in parentheses", "Activate Visible Menu Item");
+    controlLine(ctls, "Backspace", "Return to Previous Menu");
+    controlLine(ctls, "Esc", "Close Open Menu or Dialog");
     controlLine(ctls, "Mouse Wheel", "Move Up/Down");
     controlLinePair(ctls, kaMoveForward, kaMoveBack, "Move Forward/Back");
     controlLinePair(ctls, kaMoveLeft, kaMoveRight, "Move Left/Right");
