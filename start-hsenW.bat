@@ -52,7 +52,7 @@ if exist "%LOCALCFG%" call "%LOCALCFG%"
 if not defined HSEN_IFACE (
   echo No interface configured.
   echo Creating interface list at "%IFLIST%"
-  "%EXE%" -d > "%IFLIST%"
+  "%EXE%" -l > "%IFLIST%"
   if not exist "%LOCALCFG%" if exist "%EXAMPLECFG%" copy /Y "%EXAMPLECFG%" "%LOCALCFG%" >NUL
   echo Edit "%LOCALCFG%" and set HSEN_IFACE to one entry from "%IFLIST%".
   exit /b 1
