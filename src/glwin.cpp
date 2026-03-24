@@ -1021,7 +1021,7 @@ void MyGLWin::AddView(int left, int top, int right, int bottom, int tab, const c
 }
 
 //create menu object
-void MyGLWin::AddMenu(int width, const char *text, int itms, int sub, int value)
+void MyGLWin::AddMenu(int width, const char *text, int itms, int sub, int value, int hotkey)
 {
   glmu_obj glmu;
   glmu.type = GLWIN_MENU;
@@ -1036,6 +1036,7 @@ void MyGLWin::AddMenu(int width, const char *text, int itms, int sub, int value)
   glmu.width = width;
   glmu.sub = sub;  //display sub-menu object
   glmu.value = value;
+  glmu.hotkey = hotkey;
   strcpy(glmu.text, text);
   GLWinLL.Write(new glmu_obj(glmu));
 }
@@ -1148,6 +1149,23 @@ char *MyGLWin::GetInput(int name)
     {
       in = (glin_obj *)tp;
       if (in->name == gn) return in->text;
+    }
+    GLWinLL.Next(1);
+  }
+  return 0;
+}
+
+int MyGLWin::MenuValueForKey(int key)
+{
+  glmu_obj *mu;
+  unsigned char *tp;
+  GLWinLL.Start(1);
+  while ((tp = (unsigned char *)GLWinLL.Read(1)))
+  {
+    if (*tp == GLWIN_MENU)
+    {
+      mu = (glmu_obj *)tp;
+      if (mu->value && (mu->hotkey == key)) return mu->value;
     }
     GLWinLL.Next(1);
   }
