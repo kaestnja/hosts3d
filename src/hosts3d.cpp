@@ -187,10 +187,10 @@ static keybind_type keybinds[kaCount] =
   {"toggle_show_packet_destination_port", CTRLKEY('T')},
   {"toggle_packet_speed", 'Z'},
   {"packets_off", 'K'},
-  {"record_packet_traffic", GLFW_KEY_PAGEDOWN},
-  {"replay_packet_traffic", GLFW_KEY_INSERT},
+  {"record_packet_traffic", GLFW_KEY_F12},
+  {"replay_packet_traffic", GLFW_KEY_F10},
   {"skip_replay_packet", GLFW_KEY_PAGEUP},
-  {"stop_packet_traffic", GLFW_KEY_END},
+  {"stop_packet_traffic", GLFW_KEY_F11},
   {"open_packet_traffic_file", GLFW_KEY_F7},
   {"save_packet_traffic_file", GLFW_KEY_F8},
   {"toggle_animation", GLFW_KEY_SPACE},
@@ -3956,18 +3956,25 @@ static int keyCodeFromToken(const char *token)
   if (!strcmp(token, "MINUS") || !strcmp(token, "DASH")) return '-';
   if (!strcmp(token, "LEFTBRACKET") || !strcmp(token, "OPENBRACKET")) return '[';
   if (!strcmp(token, "RIGHTBRACKET") || !strcmp(token, "CLOSEBRACKET")) return ']';
-  if ((token[0] == 'F') && isdigit((unsigned char)token[1]) && !token[2])
+  if ((token[0] == 'F') && isdigit((unsigned char)token[1]))
   {
-    switch (token[1])
+    char *end = 0;
+    long fnum = strtol(token + 1, &end, 10);
+    if (*end) return 0;
+    switch (fnum)
     {
-    case '1': return GLFW_KEY_F1;
-    case '2': return GLFW_KEY_F2;
-    case '3': return GLFW_KEY_F3;
-    case '4': return GLFW_KEY_F4;
-    case '5': return GLFW_KEY_F5;
-    case '6': return GLFW_KEY_F6;
-    case '7': return GLFW_KEY_F7;
-    case '8': return GLFW_KEY_F8;
+    case 1: return GLFW_KEY_F1;
+    case 2: return GLFW_KEY_F2;
+    case 3: return GLFW_KEY_F3;
+    case 4: return GLFW_KEY_F4;
+    case 5: return GLFW_KEY_F5;
+    case 6: return GLFW_KEY_F6;
+    case 7: return GLFW_KEY_F7;
+    case 8: return GLFW_KEY_F8;
+    case 9: return GLFW_KEY_F9;
+    case 10: return GLFW_KEY_F10;
+    case 11: return GLFW_KEY_F11;
+    case 12: return GLFW_KEY_F12;
     }
   }
   return 0;
@@ -4019,6 +4026,10 @@ static const char *keyCodeName(int key)
   case GLFW_KEY_F6: return "F6";
   case GLFW_KEY_F7: return "F7";
   case GLFW_KEY_F8: return "F8";
+  case GLFW_KEY_F9: return "F9";
+  case GLFW_KEY_F10: return "F10";
+  case GLFW_KEY_F11: return "F11";
+  case GLFW_KEY_F12: return "F12";
   case '[': return "[";
   case ']': return "]";
   case '-': return "Minus";

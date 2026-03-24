@@ -239,7 +239,7 @@ Notes:
 ### Keyboard Customization
 - Keyboard bindings live in the `[keybindings]` section of `settings.ini`.
 - `controls.txt` is regenerated from the current bindings when Hosts3D starts.
-- Supported examples: `F7`, `Page Down`, `Insert`, `Ctrl + K`, `Tab`, `Plus`, `Minus`, `[` and `]`.
+- Supported examples: `F7`, `F10`, `F11`, `F12`, `Ctrl + K`, `Tab`, `Plus`, `Minus`, `[` and `]`.
 
 ### Dynamic and Static Hosts
 - Automatically discovered traffic hosts start as `dynamic`.
@@ -339,10 +339,10 @@ Plus	Increase Allowed Packets
 Ctrl + T	Toggle Show Packet Destination Port
 Z	Toggle Double Speed Packets [F]
 K	Packets Off
-Page Down	Record Packet Traffic
-Insert	Replay Recorded Packet Traffic
+F12	Record Packet Traffic
+F10	Replay Recorded Packet Traffic
 Page Up	Skip to Next Packet during Replay Traffic
-End	Stop Record/Replay of Packet Traffic
+F11	Stop Record/Replay of Packet Traffic
 F7	Open Packet Traffic File...
 F8	Save Packet Traffic File As...
 Space	Toggle Pause Animation
