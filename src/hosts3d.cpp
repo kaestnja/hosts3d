@@ -208,6 +208,7 @@ static void ensureHsdDataDir();
 static bool parseBindingValue(const char *value, int *out);
 static void bindingLabel(int encoded, char *buf, size_t bufsz);
 static const char *menuLabelWithHint(const char *title, int hotkey);
+static int menuDepthForId(int menuid);
 static int menuItemHotkey(int mnemonic, keyact_type action);
 static int menuItemWidth(const char *label, bool submenu);
 static void addMenuItem(const char *title, int items, int sub, int value, int mnemonic = 0, keyact_type action = kaCount);
@@ -228,6 +229,9 @@ static bool localHsenSaveUiState();
 static bool localHsenStartSelected(bool showmsg = false);
 static bool localHsenDiscoverInterfaces(bool keepSelections = true);
 static void localHsenAutostartMaybe();
+
+static const int MENU_LEVEL_INDENT = 18;
+static int menuBuildDepth = 0;
 
 void hsdStop(int sig)
 {
@@ -2417,6 +2421,7 @@ void mnuProcess(int m)
   GLWin.Close();  //close all 2D GUI windows
   GLResult[0] = 0;
   if (!m) return;
+  menuBuildDepth = menuDepthForId(m);
   if (m <= 9)
   {
     waitShow();
@@ -4097,6 +4102,25 @@ static const char *menuLabelWithHint(const char *title, int hotkey)
   return labels[idx];
 }
 
+static int menuDepthForId(int menuid)
+{
+  switch (menuid)
+  {
+    case 100:
+      return 0;
+    case 101: case 102: case 103: case 104: case 105:
+    case 106: case 107: case 108: case 109:
+      return 1;
+    case 110: case 111: case 112: case 113: case 114:
+    case 115: case 116: case 117: case 118: case 119:
+    case 120: case 121: case 122: case 123: case 124:
+    case 125:
+      return 2;
+    default:
+      return 0;
+  }
+}
+
 static int menuItemHotkey(int mnemonic, keyact_type action)
 {
   if ((action < kaCount) && keybinds[action].key) return keybinds[action].key;
@@ -4112,7 +4136,7 @@ static void addMenuItem(const char *title, int items, int sub, int value, int mn
 {
   int hotkey = menuItemHotkey(mnemonic, action);
   const char *label = menuLabelWithHint(title, hotkey);
-  GLWin.AddMenu(menuItemWidth(label, (sub != 0)), label, items, sub, value, hotkey);
+  GLWin.AddMenu(menuItemWidth(label, (sub != 0)), label, items, sub, value, hotkey, menuBuildDepth * MENU_LEVEL_INDENT);
 }
 
 static keyact_type keyActionFromInput(int encoded)
