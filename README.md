@@ -26,7 +26,7 @@ If your main goal is to get the project running again, use this order:
 
 1. Build `Hosts3D` and `hsen`
 2. Start `Hosts3D`
-3. Right-click in the 3D view, or press `F9`, to open the main menu, then choose `Local hsen`
+3. Right-click in the 3D view, then choose `Local hsen`
 4. Select one or more capture interfaces
 5. Click `Save + Start`
 
@@ -36,11 +36,11 @@ Recommended paths:
   - run `.\compile-hosts3d.bat`
   - run `.\compile-hsen.bat`
   - start `.\start-Hosts3DW.bat`
-  - in Hosts3D, right-click in the 3D view, or press `F9`, to open the main menu, then choose `Local hsen`
+  - in Hosts3D, right-click in the 3D view, then choose `Local hsen`
 - Linux/macOS:
   - build with the platform commands below
   - if local capture needs privileges, set `hsen_start_command=sudo -n hsen` in `settings.ini`
-  - start `Hosts3D`, right-click in the 3D view, or press `F9`, to open the main menu, then choose `Local hsen`
+  - start `Hosts3D`, right-click in the 3D view, then choose `Local hsen`
 
 ## Requirements
 Use the platform-specific subsection that matches the machine you are building on.
@@ -239,7 +239,7 @@ Notes:
 ### Keyboard Customization
 - Keyboard bindings live in the `[keybindings]` section of `settings.ini`.
 - `controls.txt` is regenerated from the current bindings when Hosts3D starts.
-- Supported examples: `F7`, `F10`, `F11`, `F12`, `Ctrl + K`, `Tab`, `Plus`, `Minus`, `[` and `]`.
+- Supported examples: `Shift + 1`, `Shift + 0`, `F7`, `F10`, `F11`, `F12`, `Ctrl + K`, `Ctrl + Shift + F1`, `Tab`, `Plus`, `Minus`, `[` and `]`.
 
 ### Dynamic and Static Hosts
 - Automatically discovered traffic hosts start as `dynamic`.
@@ -253,7 +253,7 @@ Notes:
 
 ### Local `hsen`
 - `Local hsen` now uses the same GUI on Windows and Linux.
-- Open it by right-clicking in the 3D view, or by pressing `F9`, and choosing `Local hsen`.
+- Open it by right-clicking in the 3D view and choosing `Local hsen`.
 - Interface discovery is done by calling `hsen -l`.
 - Target host for local GUI-managed sensors is fixed to `127.0.0.1`.
 - Ethernet adapters are preselected by default; WLAN and other adapters are listed but start deselected.
@@ -266,7 +266,7 @@ Notes:
 ## Controls and Interaction
 This is the main usage section for moving around the scene and operating the UI.
 
-Press `H` in Hosts3D to open the in-app help pane (`controls.txt` content).
+Press `H` in Hosts3D to toggle a non-blocking in-app help overlay (`controls.txt` content).
 
 Source of truth:
 - `settings.ini`: `[keybindings]` stores the current keyboard mapping
@@ -280,9 +280,9 @@ Runtime behavior not explicitly listed in `controls.txt`:
 - Single-clicking a multi-host collision object cycles through hosts in that cluster.
 - Mouse wheel in 3D mode moves camera up/down directly (no modifier required).
 - The in-app help reflects the current bindings from `settings.ini`; the list below shows the default mapping.
-- `F9` opens the main menu from the keyboard.
-- In menus, the key shown in parentheses activates that visible item.
-- `Backspace` returns to the previous menu level; `Esc` closes the open menu or dialog.
+- When the help overlay is visible, the mouse wheel scrolls the help only while the mouse cursor is over the overlay.
+- Menus now show state markers directly: `[X]/[ ]` for toggles, `(*)/( )` for current mode choices.
+- `Esc` closes the open menu or dialog.
 
 ### Default Controls List
 Legacy spelling is preserved for parity: `Persistant`.
@@ -293,20 +293,30 @@ Left Mouse Button	Select Host
 	Click Selected Host to Toggle Persistant IP/Name
 Middle Mouse Button	Click-and-Drag to Change View
 Right Mouse Button	Show Menu
-F9	Open Main Menu
-Shown menu key in parentheses	Activate Visible Menu Item
-Backspace	Return to Previous Menu
 Esc	Close Open Menu or Dialog
+	Menu state markers: [X]/[ ] = toggle, (*)/( ) = current mode
 Mouse Wheel	Move Up/Down
 Up/Down	Move Forward/Back
 Left/Right	Move Left/Right
 Shift + Up/Down/Left/Right	Move at Triple Speed
 Home	Recall Home View
 Ctrl + Home	Recall Alternate Home View
-Ctrl + F1	Recall View Position 1
-Ctrl + F2	Recall View Position 2
-Ctrl + F3	Recall View Position 3
-Ctrl + F4	Recall View Position 4
+F1	Recall View Position 1
+F2	Recall View Position 2
+F3	Recall View Position 3
+F4	Recall View Position 4
+Ctrl + F1	Save View Position 1
+Ctrl + F2	Save View Position 2
+Ctrl + F3	Save View Position 3
+Ctrl + F4	Save View Position 4
+Shift + F1	Restore Network Layout 1
+Shift + F2	Restore Network Layout 2
+Shift + F3	Restore Network Layout 3
+Shift + F4	Restore Network Layout 4
+Ctrl + Shift + F1	Save Network Layout 1
+Ctrl + Shift + F2	Save Network Layout 2
+Ctrl + Shift + F3	Save Network Layout 3
+Ctrl + Shift + F4	Save Network Layout 4
 Ctrl	Multi-Select
 Ctrl + A	Select All Hosts
 Ctrl + S	Invert Selection
@@ -334,11 +344,16 @@ P	Show Packets for Selection
 Ctrl + P	Stop Showing Packets for Selection
 U	Show Packets for All Hosts
 Ctrl + U	Toggle Show Packets for New Hosts [P]
-F1	Show Packets from Sensor 1
-F2	Show Packets from Sensor 2
-F3	Show Packets from Sensor 3
-F4	Show Packets from Sensor 4
-F5	Show Packets from All Sensors
+Shift + 1	Show Packets from Sensor 1
+Shift + 2	Show Packets from Sensor 2
+Shift + 3	Show Packets from Sensor 3
+Shift + 4	Show Packets from Sensor 4
+Shift + 5	Show Packets from Sensor 5
+Shift + 6	Show Packets from Sensor 6
+Shift + 7	Show Packets from Sensor 7
+Shift + 8	Show Packets from Sensor 8
+Shift + 9	Show Packets from Sensor 9
+Shift + 0	Show Packets from All Sensors
 [ / ]	Change Sensor to Show Packets from
 B	Toggle Show Simulated Broadcasts [B]
 Minus	Decrease Allowed Packets
@@ -361,15 +376,14 @@ O	Toggle Show OSD
 X	Export Selection Details in CSV File As...
 I	Show Selected Host Information
 G	Show Selection Information
-H	Show Help
+H	Toggle Help Overlay
 ```
 
 ## Right-Click Menu Map (1:1 From `mnuProcess()`)
 This section is reference material for the current menu tree. You do not need it to get the program running.
 
 All labels below are taken from `src/hosts3d.cpp` menu construction code.
-The running UI is authoritative: every visible menu item now shows either its direct shortcut or its local menu mnemonic in parentheses. For readability, the map below focuses on structure and the most important default bindings.
-Use `F9` to open the main menu from the keyboard, press the shown key in parentheses to activate a visible item, and use `Backspace` to return to the previous menu level.
+The running UI is authoritative: menu items now show direct shortcuts in parentheses where a real keyboard command exists, and stateful items show `[X]/[ ]` or `(*)/( )`. For readability, the map below focuses on structure and the most important default bindings.
 
 ### Main Menu
 | Menu | Items |
@@ -487,10 +501,10 @@ Conditional by active on-active mode.
 | `Save` |
 
 #### `View > Recall`
-`Home (Home)`, `Alternate Home (Ctrl+Home)`, `Pos 1 (Ctrl+F1)`, `Pos 2 (Ctrl+F2)`, `Pos 3 (Ctrl+F3)`, `Pos 4 (Ctrl+F4)`
+`Home (Home)`, `Alternate Home (Ctrl+Home)`, `Pos 1 (F1)`, `Pos 2 (F2)`, `Pos 3 (F3)`, `Pos 4 (F4)`
 
 #### `View > Save`
-`Pos 1`, `Pos 2`, `Pos 3`, `Pos 4`
+`Pos 1 (Ctrl+F1)`, `Pos 2 (Ctrl+F2)`, `Pos 3 (Ctrl+F3)`, `Pos 4 (Ctrl+F4)`
 
 ### `Layout`
 | Item |
@@ -501,10 +515,10 @@ Conditional by active on-active mode.
 | `Clear` |
 
 #### `Layout > Restore`
-`File`, `Net 1`, `Net 2`, `Net 3`, `Net 4`
+`File`, `Net 1 (Shift+F1)`, `Net 2 (Shift+F2)`, `Net 3 (Shift+F3)`, `Net 4 (Shift+F4)`
 
 #### `Layout > Save`
-`File`, `Net 1`, `Net 2`, `Net 3`, `Net 4`
+`File`, `Net 1 (Ctrl+Shift+F1)`, `Net 2 (Ctrl+Shift+F2)`, `Net 3 (Ctrl+Shift+F3)`, `Net 4 (Ctrl+Shift+F4)`
 
 #### `Layout > Clear`
 `Confirm`
@@ -601,7 +615,7 @@ This section helps you map what you see on-screen back to the current implementa
 | Alert object (anomaly) | expanding anomaly wireframe marker |
 
 ## In-App Help
-Press `H` to open help (`controls.txt`, generated from code).
+Press `H` to toggle the help overlay (`controls.txt`, generated from code).
 
 ## Behavior and Limits
 - IPv4 only
