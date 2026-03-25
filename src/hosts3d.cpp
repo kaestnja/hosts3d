@@ -53,6 +53,12 @@ static const int DEFAULT_WIN_H = 600;
 static const unsigned int DEFAULT_DYNAMIC_HOST_TTL_SECONDS = 300;
 static const unsigned int DEFAULT_DYNAMIC_HOST_CLEANUP_INTERVAL_SECONDS = 30;
 static const unsigned char LOCAL_HSEN_MAX_INTERFACES = 16;
+static const unsigned int HELP_OVERLAY_MAX_LINES = 128;
+static const int HELP_OVERLAY_W = 480;
+static const int HELP_OVERLAY_MARGIN = 10;
+static const int HELP_OVERLAY_HEADER_H = 28;
+static const int HELP_OVERLAY_FOOTER_H = 18;
+static const int HELP_OVERLAY_KEY_COL_W = 118;
 static const int OSD_MIN_W = 300;
 static const int OSD_MIN_H = 220;
 static const int OSD_LINE_H = 13;
@@ -80,6 +86,16 @@ bool dynamicHostsEnabled = true;
 unsigned int dynamicHostTtlSeconds = DEFAULT_DYNAMIC_HOST_TTL_SECONDS;
 unsigned int dynamicHostCleanupIntervalSeconds = DEFAULT_DYNAMIC_HOST_CLEANUP_INTERVAL_SECONDS;
 time_t dynamicHostLastCleanup = 0;
+bool helpOverlayVisible = false;
+unsigned int helpOverlayLineCount = 0, helpOverlayScroll = 0;
+
+struct help_overlay_line_type
+{
+  char key[48];
+  char desc[160];
+};
+
+help_overlay_line_type helpOverlayLines[HELP_OVERLAY_MAX_LINES];
 
 struct localhsen_if_type
 {
@@ -109,22 +125,26 @@ int localHsenUiIfaceSensors[LOCAL_HSEN_MAX_INTERFACES];
 #endif
 
 #define CTRLKEY(key) ((key) + 512)
+#define SHIFTKEY(key) ((key) + 1024)
+#define CTRLSHIFTKEY(key) ((key) + 1536)
 
 enum keyact_type
 {
   kaMoveForward, kaMoveBack, kaMoveLeft, kaMoveRight,
   kaViewHome, kaViewHomeAlt, kaViewPos1, kaViewPos2, kaViewPos3, kaViewPos4,
+  kaViewSave1, kaViewSave2, kaViewSave3, kaViewSave4,
+  kaLayoutRestore1, kaLayoutRestore2, kaLayoutRestore3, kaLayoutRestore4,
+  kaLayoutSave1, kaLayoutSave2, kaLayoutSave3, kaLayoutSave4,
   kaSelectAll, kaInvertSelection, kaSelectNamed,
   kaSelMoveUp, kaSelMoveDown, kaSelMoveForward, kaSelMoveBack, kaSelMoveLeft, kaSelMoveRight,
   kaFindHosts, kaNextSelectedHost, kaPrevSelectedHost, kaToggleSelectionPersistant, kaCycleIpNameDisplay,
   kaToggleAddDestinationHosts, kaMakeHost, kaEditHostname, kaEditRemarks,
   kaCreateLinkLine, kaDeleteLinkLine, kaAutoLinksAll, kaToggleNewHostLinks, kaAutoLinksSelection, kaStopAutoLinksSelection, kaDeleteAllLinks,
   kaShowSelectionPackets, kaHideSelectionPackets, kaShowAllPackets, kaToggleNewHostPackets,
-  kaShowSensor1Packets, kaShowSensor2Packets, kaShowSensor3Packets, kaShowSensor4Packets, kaShowAllSensorPackets, kaPrevSensorPackets, kaNextSensorPackets,
+  kaShowSensor1Packets, kaShowSensor2Packets, kaShowSensor3Packets, kaShowSensor4Packets, kaShowSensor5Packets, kaShowSensor6Packets, kaShowSensor7Packets, kaShowSensor8Packets, kaShowSensor9Packets, kaShowAllSensorPackets, kaPrevSensorPackets, kaNextSensorPackets,
   kaToggleBroadcasts, kaDecreasePacketLimit, kaIncreasePacketLimit, kaTogglePacketDestPort, kaTogglePacketSpeed, kaPacketsOff,
   kaRecordPacketTraffic, kaReplayPacketTraffic, kaSkipReplayPacket, kaStopPacketTraffic, kaOpenPacketTrafficFile, kaSavePacketTrafficFile,
   kaToggleAnimation, kaAcknowledgeAllAnomalies, kaToggleOsd, kaExportSelectionCsv, kaShowHostInformation, kaShowSelectionInformation, kaShowHelp,
-  kaOpenMainMenu,
   kaCount
 };
 
@@ -142,10 +162,22 @@ static keybind_type keybinds[kaCount] =
   {"move_right", GLFW_KEY_RIGHT},
   {"view_home", GLFW_KEY_HOME},
   {"view_home_alt", CTRLKEY(GLFW_KEY_HOME)},
-  {"view_position_1", CTRLKEY(GLFW_KEY_F1)},
-  {"view_position_2", CTRLKEY(GLFW_KEY_F2)},
-  {"view_position_3", CTRLKEY(GLFW_KEY_F3)},
-  {"view_position_4", CTRLKEY(GLFW_KEY_F4)},
+  {"view_position_1", GLFW_KEY_F1},
+  {"view_position_2", GLFW_KEY_F2},
+  {"view_position_3", GLFW_KEY_F3},
+  {"view_position_4", GLFW_KEY_F4},
+  {"save_view_position_1", CTRLKEY(GLFW_KEY_F1)},
+  {"save_view_position_2", CTRLKEY(GLFW_KEY_F2)},
+  {"save_view_position_3", CTRLKEY(GLFW_KEY_F3)},
+  {"save_view_position_4", CTRLKEY(GLFW_KEY_F4)},
+  {"restore_layout_1", SHIFTKEY(GLFW_KEY_F1)},
+  {"restore_layout_2", SHIFTKEY(GLFW_KEY_F2)},
+  {"restore_layout_3", SHIFTKEY(GLFW_KEY_F3)},
+  {"restore_layout_4", SHIFTKEY(GLFW_KEY_F4)},
+  {"save_layout_1", CTRLSHIFTKEY(GLFW_KEY_F1)},
+  {"save_layout_2", CTRLSHIFTKEY(GLFW_KEY_F2)},
+  {"save_layout_3", CTRLSHIFTKEY(GLFW_KEY_F3)},
+  {"save_layout_4", CTRLSHIFTKEY(GLFW_KEY_F4)},
   {"select_all_hosts", CTRLKEY('A')},
   {"invert_selection", CTRLKEY('S')},
   {"select_all_named_hosts", CTRLKEY('N')},
@@ -175,11 +207,16 @@ static keybind_type keybinds[kaCount] =
   {"hide_selection_packets", CTRLKEY('P')},
   {"show_all_packets", 'U'},
   {"toggle_show_packets_new_hosts", CTRLKEY('U')},
-  {"show_sensor_1_packets", GLFW_KEY_F1},
-  {"show_sensor_2_packets", GLFW_KEY_F2},
-  {"show_sensor_3_packets", GLFW_KEY_F3},
-  {"show_sensor_4_packets", GLFW_KEY_F4},
-  {"show_all_sensor_packets", GLFW_KEY_F5},
+  {"show_sensor_1_packets", SHIFTKEY('1')},
+  {"show_sensor_2_packets", SHIFTKEY('2')},
+  {"show_sensor_3_packets", SHIFTKEY('3')},
+  {"show_sensor_4_packets", SHIFTKEY('4')},
+  {"show_sensor_5_packets", SHIFTKEY('5')},
+  {"show_sensor_6_packets", SHIFTKEY('6')},
+  {"show_sensor_7_packets", SHIFTKEY('7')},
+  {"show_sensor_8_packets", SHIFTKEY('8')},
+  {"show_sensor_9_packets", SHIFTKEY('9')},
+  {"show_all_sensor_packets", SHIFTKEY('0')},
   {"show_previous_sensor_packets", '['},
   {"show_next_sensor_packets", ']'},
   {"toggle_broadcasts", 'B'},
@@ -200,20 +237,39 @@ static keybind_type keybinds[kaCount] =
   {"export_selection_csv", 'X'},
   {"show_selected_host_information", 'I'},
   {"show_selection_information", 'G'},
-  {"show_help", 'H'},
-  {"open_main_menu", GLFW_KEY_F9}
+  {"show_help", 'H'}
+};
+
+enum menustate_type { msNone, msToggle, msChoice };
+
+struct menu_selection_state_type
+{
+  bool any, mixedLock, mixedColour, mixedZone;
+  bool lockOn;
+  unsigned char colour;
+  unsigned char zone;
 };
 
 static void ensureHsdDataDir();
+static void helpOverlayLoad();
+static void helpOverlayToggle();
+static void helpOverlayBounds(int *left, int *top, int *right, int *bottom);
+static bool helpOverlayMouseOver();
+static void helpOverlayScrollDelta(int delta);
+static void drawHelpOverlay();
 static bool parseBindingValue(const char *value, int *out);
 static void bindingLabel(int encoded, char *buf, size_t bufsz);
-static const char *menuLabelWithHint(const char *title, int hotkey);
+static const char *menuLabelWithHint(const char *title, int hotkey, menustate_type state = msNone, bool active = false);
 static int menuDepthForId(int menuid);
-static int menuItemHotkey(int mnemonic, keyact_type action);
+static int menuItemHotkey(int value, keyact_type action);
 static int menuItemWidth(const char *label, bool submenu);
-static void addMenuItem(const char *title, int items, int sub, int value, int mnemonic = 0, keyact_type action = kaCount);
+static void addMenuItem(const char *title, int items, int sub, int value, int mnemonic = 0, keyact_type action = kaCount, menustate_type state = msNone, bool active = false);
 static keyact_type keyActionFromInput(int encoded);
 static void triggerKeyAction(keyact_type action);
+static keyact_type menuActionForValue(int value);
+static unsigned char hostZone(host_type *ht);
+static void menuSelectionStateCb(void **data, long arg1, long arg2, long arg3, long arg4);
+static menu_selection_state_type menuSelectionState();
 static bool hostIsDynamic(host_type *ht);
 static void hostSetDynamic(host_type *ht, bool dynamic);
 static void hostPromoteStatic(host_type *ht);
@@ -232,6 +288,7 @@ static void localHsenAutostartMaybe();
 
 static const int MENU_LEVEL_INDENT = 18;
 static int menuBuildDepth = 0;
+static int menuBaseX = 0;
 
 void hsdStop(int sig)
 {
@@ -613,6 +670,170 @@ static void osdDrawPktLegend(int px, int py)
   }
 }
 
+static void helpOverlayBounds(int *left, int *top, int *right, int *bottom)
+{
+  int width = HELP_OVERLAY_W;
+  if (width > (wWin - (HELP_OVERLAY_MARGIN * 2))) width = wWin - (HELP_OVERLAY_MARGIN * 2);
+  if (width < 220) width = 220;
+  *left = HELP_OVERLAY_MARGIN;
+  *right = *left + width;
+  if (*right > (wWin - HELP_OVERLAY_MARGIN)) *right = wWin - HELP_OVERLAY_MARGIN;
+  *top = hWin - HELP_OVERLAY_MARGIN;
+  *bottom = HELP_OVERLAY_MARGIN;
+}
+
+static void helpOverlayClampScroll()
+{
+  int left, top, right, bottom, visible;
+  helpOverlayBounds(&left, &top, &right, &bottom);
+  visible = (top - bottom - HELP_OVERLAY_HEADER_H - HELP_OVERLAY_FOOTER_H) / OSD_LINE_H;
+  if (visible < 1) visible = 1;
+  if (helpOverlayLineCount <= (unsigned int) visible) helpOverlayScroll = 0;
+  else if (helpOverlayScroll > (helpOverlayLineCount - (unsigned int) visible)) helpOverlayScroll = helpOverlayLineCount - (unsigned int) visible;
+}
+
+static void helpOverlayLoad()
+{
+  FILE *text;
+  char line[256];
+  helpOverlayLineCount = 0;
+  helpOverlayScroll = 0;
+  if (!(text = fopen(hsddata("controls.txt"), "r"))) return;
+  while ((helpOverlayLineCount < HELP_OVERLAY_MAX_LINES) && fgets(line, sizeof(line), text))
+  {
+    char *key = line, *desc = 0, *end;
+    help_overlay_line_type *row = &helpOverlayLines[helpOverlayLineCount];
+    memset(row, 0, sizeof(help_overlay_line_type));
+    end = line + strlen(line);
+    while ((end > line) && ((end[-1] == '\n') || (end[-1] == '\r'))) *(--end) = '\0';
+    desc = strchr(line, '\t');
+    if (desc)
+    {
+      *desc = '\0';
+      desc++;
+    }
+    else
+    {
+      key = (char *)"";
+      desc = line;
+    }
+    snprintf(row->key, sizeof(row->key), "%s", key);
+    snprintf(row->desc, sizeof(row->desc), "%s", desc);
+    helpOverlayLineCount++;
+  }
+  fclose(text);
+  helpOverlayClampScroll();
+}
+
+static void helpOverlayToggle()
+{
+  if (!helpOverlayVisible) helpOverlayLoad();
+  helpOverlayVisible = !helpOverlayVisible;
+  refresh = true;
+}
+
+static bool helpOverlayMouseOver()
+{
+  int left, top, right, bottom, gy = hWin - mPsy;
+  if (!helpOverlayVisible) return false;
+  helpOverlayBounds(&left, &top, &right, &bottom);
+  return ((mPsx >= left) && (mPsx <= right) && (gy >= bottom) && (gy <= top));
+}
+
+static void helpOverlayScrollDelta(int delta)
+{
+  int left, top, right, bottom, visible;
+  helpOverlayBounds(&left, &top, &right, &bottom);
+  visible = (top - bottom - HELP_OVERLAY_HEADER_H - HELP_OVERLAY_FOOTER_H) / OSD_LINE_H;
+  if ((visible < 1) || (helpOverlayLineCount <= (unsigned int) visible)) return;
+  if ((delta < 0) && helpOverlayScroll) helpOverlayScroll--;
+  else if ((delta > 0) && ((helpOverlayScroll + (unsigned int) visible) < helpOverlayLineCount)) helpOverlayScroll++;
+}
+
+static void helpOverlayTrimText(const char *src, char *dst, size_t dstsz, unsigned int maxChars)
+{
+  size_t len;
+  if (!maxChars || !dstsz)
+  {
+    if (dstsz) *dst = '\0';
+    return;
+  }
+  len = strlen(src);
+  if (len <= maxChars)
+  {
+    strncpy(dst, src, dstsz - 1);
+    dst[dstsz - 1] = '\0';
+    return;
+  }
+  if (maxChars <= 3)
+  {
+    snprintf(dst, dstsz, "%.*s", (int) maxChars, src);
+    return;
+  }
+  snprintf(dst, dstsz, "%.*s...", (int)(maxChars - 3), src);
+}
+
+static void drawHelpOverlay()
+{
+  int left, top, right, bottom, y, visible, row, keyChars, descChars;
+  char keybuf[48], descbuf[160], footer[64];
+  help_overlay_line_type *line;
+  if (!helpOverlayVisible) return;
+  helpOverlayClampScroll();
+  helpOverlayBounds(&left, &top, &right, &bottom);
+  visible = (top - bottom - HELP_OVERLAY_HEADER_H - HELP_OVERLAY_FOOTER_H) / OSD_LINE_H;
+  if (visible < 1) visible = 1;
+  keyChars = (HELP_OVERLAY_KEY_COL_W - 12) / 6;
+  if (keyChars < 6) keyChars = 6;
+  descChars = (right - left - HELP_OVERLAY_KEY_COL_W - 18) / 6;
+  if (descChars < 12) descChars = 12;
+
+  glColor3ub(dlblue[0], dlblue[1], dlblue[2]);
+  glRecti(left, top, right, bottom);
+  glColor3ub(brblue[0], brblue[1], brblue[2]);
+  glBegin(GL_LINE_LOOP);
+    glVertex2i(left, top);
+    glVertex2i(right, top);
+    glVertex2i(right, bottom);
+    glVertex2i(left, bottom);
+  glEnd();
+
+  glColor3ub(white[0], white[1], white[2]);
+  glRasterPos2i(left + 10, top - 16);
+  GLWin.DrawString((const unsigned char *)"HELP  (H hide, mouse wheel scrolls here)");
+
+  y = top - HELP_OVERLAY_HEADER_H;
+  for (row = 0; (row < visible) && ((helpOverlayScroll + row) < helpOverlayLineCount); row++)
+  {
+    line = &helpOverlayLines[helpOverlayScroll + row];
+    helpOverlayTrimText(line->key, keybuf, sizeof(keybuf), keyChars);
+    helpOverlayTrimText(line->desc, descbuf, sizeof(descbuf), descChars);
+    if (*keybuf)
+    {
+      glColor3ub(aqua[0], aqua[1], aqua[2]);
+      glRasterPos2i(left + 10, y - (row * OSD_LINE_H));
+      GLWin.DrawString((const unsigned char *)keybuf);
+      glColor3ub(white[0], white[1], white[2]);
+      glRasterPos2i(left + HELP_OVERLAY_KEY_COL_W, y - (row * OSD_LINE_H));
+      GLWin.DrawString((const unsigned char *)descbuf);
+    }
+    else
+    {
+      glColor3ub(brgrey[0], brgrey[1], brgrey[2]);
+      glRasterPos2i(left + 22, y - (row * OSD_LINE_H));
+      GLWin.DrawString((const unsigned char *)descbuf);
+    }
+  }
+
+  glColor3ub(brgrey[0], brgrey[1], brgrey[2]);
+  snprintf(footer, sizeof(footer), "Lines %u-%u / %u",
+           (helpOverlayLineCount ? helpOverlayScroll + 1 : 0),
+           ((helpOverlayScroll + (unsigned int) visible) < helpOverlayLineCount ? helpOverlayScroll + (unsigned int) visible : helpOverlayLineCount),
+           helpOverlayLineCount);
+  glRasterPos2i(left + 10, bottom + 6);
+  GLWin.DrawString((const unsigned char *)footer);
+}
+
 //destroy packets LL
 void pcktsDestroy(bool gh = false)
 {
@@ -914,6 +1135,7 @@ void draw2D()
     glRasterPos2i(6, 6);
     GLWin.DrawString((const unsigned char *)sbuf);
   }
+  if (helpOverlayVisible) drawHelpOverlay();
   if (GLWin.On()) GLWin.Draw(GL_RENDER);  //draw 2D GUI
   else if (mMove)  //draw selection box
   {
@@ -945,7 +1167,7 @@ void displayGL()
   if (lnksLL.Num()) linksDraw();
   if (altsLL.Num()) alrtsDraw();
   if (pktsLL.Num()) pcktsDraw();
-  if (setts.osd || seltd || mMove || (ptrc > hlt) || GLWin.On()) draw2D();
+  if (setts.osd || seltd || mMove || (ptrc > hlt) || GLWin.On() || helpOverlayVisible) draw2D();
   animate = false;
   glfwSwapBuffers();
 }
@@ -1004,7 +1226,6 @@ void messageBox(const char *ttl, const char *msg)
 {
   GLWin.CreateWin(-1, -1, 230, 90, ttl);
   GLWin.AddLabel(10, 10, msg);
-  GLWin.AddButton(178, 30, GLWIN_CLOSE, "OK", true, true);
   displayGL();
 }
 
@@ -1778,13 +1999,18 @@ void keyboardForEachCb(void **data, long arg1, long arg2, long arg3, long arg4)
 //glfwSetKeyCallback
 void GLFWCALL keyboardGL(int key, int action)
 {
+  bool ctrlDown = (glfwGetKey(GLFW_KEY_LCTRL) || glfwGetKey(GLFW_KEY_RCTRL));
+  bool shiftDown = (glfwGetKey(GLFW_KEY_LSHIFT) || glfwGetKey(GLFW_KEY_RSHIFT));
+  int rawkey = key, actionKey = key;
   if (!action) return;
-  if ((glfwGetKey(GLFW_KEY_LCTRL) || glfwGetKey(GLFW_KEY_RCTRL)) && (key != GLFW_KEY_LCTRL) && (key != GLFW_KEY_RCTRL)) key += 512;
-  keyact_type keyact = keyActionFromInput(key);
+  if (ctrlDown && shiftDown && (key != GLFW_KEY_LCTRL) && (key != GLFW_KEY_RCTRL) && (key != GLFW_KEY_LSHIFT) && (key != GLFW_KEY_RSHIFT)) actionKey = CTRLSHIFTKEY(key);
+  else if (ctrlDown && (key != GLFW_KEY_LCTRL) && (key != GLFW_KEY_RCTRL)) actionKey = CTRLKEY(key);
+  else if (shiftDown && (key != GLFW_KEY_LSHIFT) && (key != GLFW_KEY_RSHIFT)) actionKey = SHIFTKEY(key);
+  keyact_type keyact = keyActionFromInput(actionKey);
   if (GLWin.On())
   {
     char *clip;
-    int menuValue = GLWin.MenuValueForKey(key);
+    int menuValue = GLWin.MenuValueForKey(actionKey);
     if (menuValue)
     {
       mnuProcess(menuValue);
@@ -1802,7 +2028,7 @@ void GLFWCALL keyboardGL(int key, int action)
       refresh = true;
       return;
     }
-    switch (key)
+    switch (actionKey)
     {
       case 600:  //ctrl+x
         if ((clip = GLWin.GetInput()))
@@ -1818,7 +2044,7 @@ void GLFWCALL keyboardGL(int key, int action)
       case GLFW_KEY_TAB: case 805:  //select next/prev host in selection, update host info
         if ((GLResult[0] % 100) == HSD_HSTINFO)
         {
-          hostTab((key == GLFW_KEY_TAB));
+          hostTab((actionKey == GLFW_KEY_TAB));
           if (seltd)
           {
             GLWin.Scroll();  //start
@@ -1826,13 +2052,19 @@ void GLFWCALL keyboardGL(int key, int action)
           }
           break;
         }  //pass tab to 2D GUI
-      default: GLWin.Key(key, (glfwGetKey(GLFW_KEY_LSHIFT) || glfwGetKey(GLFW_KEY_RSHIFT)));  //pass key to 2D GUI
+      default: GLWin.Key(rawkey, shiftDown);  //pass key to 2D GUI
     }
   }
   else
   {
-    int kymv = (glfwGetKey(GLFW_KEY_LSHIFT) || glfwGetKey(GLFW_KEY_RSHIFT) ? 3 : 1) * MOV;
+    int kymv = (shiftDown ? 3 : 1) * MOV;
     double angx, angy;
+    if ((actionKey == GLFW_KEY_ESC) && helpOverlayVisible)
+    {
+      helpOverlayVisible = false;
+      refresh = true;
+      return;
+    }
     switch (keyact)
     {
       case kaMoveForward:
@@ -1861,6 +2093,18 @@ void GLFWCALL keyboardGL(int key, int action)
       case kaViewPos2: memcpy(&setts.vws[0], &setts.vws[2], sizeof(view_type)); break;
       case kaViewPos3: memcpy(&setts.vws[0], &setts.vws[3], sizeof(view_type)); break;
       case kaViewPos4: memcpy(&setts.vws[0], &setts.vws[4], sizeof(view_type)); break;
+      case kaViewSave1: memcpy(&setts.vws[1], &setts.vws[0], sizeof(view_type)); break;
+      case kaViewSave2: memcpy(&setts.vws[2], &setts.vws[0], sizeof(view_type)); break;
+      case kaViewSave3: memcpy(&setts.vws[3], &setts.vws[0], sizeof(view_type)); break;
+      case kaViewSave4: memcpy(&setts.vws[4], &setts.vws[0], sizeof(view_type)); break;
+      case kaLayoutRestore1: netLoad(hsddata("1network.hnl")); break;
+      case kaLayoutRestore2: netLoad(hsddata("2network.hnl")); break;
+      case kaLayoutRestore3: netLoad(hsddata("3network.hnl")); break;
+      case kaLayoutRestore4: netLoad(hsddata("4network.hnl")); break;
+      case kaLayoutSave1: netSave(hsddata("1network.hnl")); break;
+      case kaLayoutSave2: netSave(hsddata("2network.hnl")); break;
+      case kaLayoutSave3: netSave(hsddata("3network.hnl")); break;
+      case kaLayoutSave4: netSave(hsddata("4network.hnl")); break;
       case kaSelectAll: hostsSet(0, 1); break;  //select all hosts, ht->sld
       case kaSelMoveUp:
       case kaSelMoveDown:
@@ -1900,7 +2144,6 @@ void GLFWCALL keyboardGL(int key, int action)
         GLResult[0] = (GLWin.AddInput(70, 10, 18, 18, "", true) * 100) + HSD_FNDHSTS;  //last for focus
         GLWin.AddButton(146, 160, GLWIN_OK, "Find", true, true);
         GLWin.AddButton(210, 160, GLWIN_DEL, "Clear");
-        GLWin.AddButton(280, 160, GLWIN_CLOSE, "Close");
         break;
       case kaNextSelectedHost:
       case kaPrevSelectedHost:
@@ -2000,6 +2243,26 @@ void GLFWCALL keyboardGL(int key, int action)
         break;
       case kaShowSensor4Packets:
         setts.sen = 4;
+        pcktsDestroy(true);
+        break;
+      case kaShowSensor5Packets:
+        setts.sen = 5;
+        pcktsDestroy(true);
+        break;
+      case kaShowSensor6Packets:
+        setts.sen = 6;
+        pcktsDestroy(true);
+        break;
+      case kaShowSensor7Packets:
+        setts.sen = 7;
+        pcktsDestroy(true);
+        break;
+      case kaShowSensor8Packets:
+        setts.sen = 8;
+        pcktsDestroy(true);
+        break;
+      case kaShowSensor9Packets:
+        setts.sen = 9;
         pcktsDestroy(true);
         break;
       case kaShowAllSensorPackets:  //show packets from all hsen
@@ -2119,28 +2382,10 @@ void GLFWCALL keyboardGL(int key, int action)
         GLWin.CreateWin(-2, -2, 352, 270, "SELECTION INFORMATION", true, true);
         GLWin.AddButton(10, 6, GLWIN_MISC1, "Selection");
         GLWin.AddButton(104, 6, GLWIN_MISC2, "General");
-        GLWin.AddButton(186, 6, GLWIN_CLOSE, "Close", true, true);
         GLWin.AddView(10, 42, 10, 10, 17, hsddata("tmp-hinfo-hsd"));
         GLResult[0] = 0;
         break;
-      case kaShowHelp:  //2D GUI help
-        GLWin.CreateWin(-2, -2, 352, 271, "HELP", true, true);
-        GLWin.AddBitmap(10, 10, red[0], red[1], red[2], bitmaps[16]);
-        GLWin.AddLabel(23, 10, "ICMP");
-        GLWin.AddBitmap(59, 10, green[0], green[1], green[2], bitmaps[16]);
-        GLWin.AddLabel(72, 10, "TCP");
-        GLWin.AddBitmap(102, 10, blue[0], blue[1], blue[2], bitmaps[16]);
-        GLWin.AddLabel(115, 10, "UDP");
-        GLWin.AddBitmap(145, 10, yellow[0], yellow[1], yellow[2], bitmaps[16]);
-        GLWin.AddLabel(158, 10, "ARP");
-        GLWin.AddBitmap(188, 10, brgrey[0], brgrey[1], brgrey[2], bitmaps[16]);
-        GLWin.AddLabel(201, 10, "OTHER");
-        GLWin.AddView(10, 30, 10, 10, 28, hsddata("controls.txt"));
-        GLResult[0] = 0;
-        break;
-      case kaOpenMainMenu:
-        mnuProcess(100);
-        break;
+      case kaShowHelp: helpOverlayToggle(); break;
       default:
         break;
     }
@@ -2151,6 +2396,78 @@ void GLFWCALL keyboardGL(int key, int action)
 static void triggerKeyAction(keyact_type action)
 {
   if (keybinds[action].key) keyboardGL(keybinds[action].key, 2);
+}
+
+static keyact_type menuActionForValue(int value)
+{
+  switch (value)
+  {
+    case 40: return kaShowHostInformation;
+    case 44: return kaEditHostname;
+    case 45: return kaEditRemarks;
+    case 46: return kaShowSelectionInformation;
+    case 47: return kaAcknowledgeAllAnomalies;
+    case 60: return kaShowAllPackets;
+    case 69: return kaPacketsOff;
+    case 70: return kaViewHome;
+    case 71: return kaViewPos1;
+    case 72: return kaViewPos2;
+    case 73: return kaViewPos3;
+    case 74: return kaViewPos4;
+    case 75: return kaViewSave1;
+    case 76: return kaViewSave2;
+    case 77: return kaViewSave3;
+    case 78: return kaViewSave4;
+    case 81: return kaLayoutRestore1;
+    case 82: return kaLayoutRestore2;
+    case 83: return kaLayoutRestore3;
+    case 84: return kaLayoutRestore4;
+    case 86: return kaLayoutSave1;
+    case 87: return kaLayoutSave2;
+    case 88: return kaLayoutSave3;
+    case 89: return kaLayoutSave4;
+    case 79: return kaViewHomeAlt;
+    case 93: return kaFindHosts;
+    case 97: return kaShowHelp;
+    default: return kaCount;
+  }
+}
+
+static unsigned char hostZone(host_type *ht)
+{
+  if (!ht) return 0;
+  if (ht->px < 0) return (ht->pz < 0 ? 3 : 2);
+  return (ht->pz < 0 ? 4 : 1);
+}
+
+static void menuSelectionStateCb(void **data, long arg1, long arg2, long arg3, long arg4)
+{
+  host_type *ht = *((host_type **) data);
+  menu_selection_state_type *state = (menu_selection_state_type *)(void *) arg1;
+  unsigned char zone;
+  (void) arg2;
+  (void) arg3;
+  (void) arg4;
+  if (!ht->sld) return;
+  if (!state->any)
+  {
+    state->any = true;
+    state->lockOn = ht->lck;
+    state->colour = ht->clr;
+    state->zone = hostZone(ht);
+    return;
+  }
+  if (state->lockOn != ((bool) ht->lck)) state->mixedLock = true;
+  if (state->colour != ht->clr) state->mixedColour = true;
+  zone = hostZone(ht);
+  if (state->zone != zone) state->mixedZone = true;
+}
+
+static menu_selection_state_type menuSelectionState()
+{
+  menu_selection_state_type state = {0};
+  hstsByIp.forEach(1, &menuSelectionStateCb, (long)(void *)&state, 0, 0, 0);
+  return state;
 }
 
 static void hostDeleteManaged(host_type *ht)
@@ -2422,6 +2739,7 @@ void mnuProcess(int m)
   GLResult[0] = 0;
   if (!m) return;
   menuBuildDepth = menuDepthForId(m);
+  if (m == 100) menuBaseX = mPsx;
   if (m <= 9)
   {
     waitShow();
@@ -2659,7 +2977,6 @@ void mnuProcess(int m)
         GLWin.AddButton(263, 60, GLWIN_ITMDN, "!d", false, false);  //item down
         GLWin.AddButton(204, 60, GLWIN_OK, "Add", false, true);
         GLWin.AddButton(146, 60, GLWIN_DEL, "Delete", false, false);
-        GLWin.AddButton(70, 60, GLWIN_CLOSE, "Close", false, false);
         break;
       case 92:  //clear network layout
         allDestroy();
@@ -2688,7 +3005,10 @@ void mnuProcess(int m)
         }
         break;
       }
-      case 97: triggerKeyAction(kaShowHelp); break;  //2D GUI help
+      case 97:
+        GLWin.Close();
+        helpOverlayToggle();
+        break;
       case 98:  //about
         GLWin.CreateWin(-1, -1, 230, 138, "ABOUT");
         GLWin.AddLabel(10, 10, "Hosts3D 1.16");
@@ -2735,7 +3055,6 @@ void mnuProcess(int m)
         GLWin.AddBitmap(27, 92, black[0], black[1], black[2], bitmaps[13]);
         GLWin.AddBitmap(18, 100, black[0], black[1], black[2], bitmaps[14]);
         GLWin.AddBitmap(26, 100, black[0], black[1], black[2], bitmaps[15]);
-        GLWin.AddButton(178, 78, GLWIN_CLOSE, "OK", true, true);
         GLResult[0] = 0;
         break;
       case 99: goRun = false; break;  //exit
@@ -2779,31 +3098,33 @@ void mnuProcess(int m)
         addMenuItem("ANOMALIES", 4, 2, 100, GLFW_KEY_BACKSPACE);
         addMenuItem("Select All", 4, 0, 31, 'S');
         addMenuItem("Acknowledge", 4, 1, 117, 'K');
-        addMenuItem("Toggle Detection", 4, 0, 48, 'T');
+        addMenuItem("Toggle Detection", 4, 0, 48, 'T', kaCount, msToggle, setts.anm);
         break;
       case 104:
+      {
         addMenuItem("IP/NAME", 6, 2, 100, GLFW_KEY_BACKSPACE);
-        if (setts.sips != sel) addMenuItem("Show Selection", 6, 0, 50, 'S');
-        if (setts.sips != all) addMenuItem("Show All", 6, 0, 51, 'A');
-        if (setts.sona != ipn) addMenuItem("Show On-Active", 6, 0, 52, 'O');
-        if (setts.sips != off) addMenuItem("Show Off", 6, 0, 53, 'F');
+        addMenuItem("Show Selection", 6, 0, 50, 'S', kaCount, msChoice, (setts.sips == sel));
+        addMenuItem("Show All", 6, 0, 51, 'A', kaCount, msChoice, (setts.sips == all));
+        addMenuItem("Show On-Active", 6, 0, 52, 'O', kaCount, msChoice, (setts.sona == ipn));
+        addMenuItem("Show Off", 6, 0, 53, 'F', kaCount, msChoice, ((setts.sips == off) && (setts.sona != ipn)));
         addMenuItem("All Off", 6, 0, 54, 'X');
         break;
+      }
       case 105:
         addMenuItem("PACKETS", 6, 2, 100, GLFW_KEY_BACKSPACE);
         addMenuItem("Show All", 6, 0, 60, 0, kaShowAllPackets);
         addMenuItem("Protocol", 6, 1, 118, 'P');
-        addMenuItem("Port", 6, (setts.prt ? 1 : 0), (setts.prt ? 119 : 68), 'T');
+        addMenuItem("Port", 6, 1, 119, 'T');
         addMenuItem("Select Showing", 6, 0, 32, 'S');
         addMenuItem("Off", 6, 0, 69, 0, kaPacketsOff);
         break;
       case 106:
         addMenuItem("ON-ACTIVE", 6, 2, 100, GLFW_KEY_BACKSPACE);
-        if (setts.sona != alt) addMenuItem("Alert", 6, 0, 55, 'A');
-        if (setts.sona != ipn) addMenuItem("Show IP/Name", 6, 0, 52, 'N');
-        if (setts.sona != hst) addMenuItem("Show Host", 6, 0, 56, 'H');
-        if (setts.sona != slt) addMenuItem("Select", 6, 0, 57, 'S');
-        if (setts.sona != don) addMenuItem("Do Nothing", 6, 0, 58, 'D');
+        addMenuItem("Alert", 6, 0, 55, 'A', kaCount, msChoice, (setts.sona == alt));
+        addMenuItem("Show IP/Name", 6, 0, 52, 'N', kaCount, msChoice, (setts.sona == ipn));
+        addMenuItem("Show Host", 6, 0, 56, 'H', kaCount, msChoice, (setts.sona == hst));
+        addMenuItem("Select", 6, 0, 57, 'S', kaCount, msChoice, (setts.sona == slt));
+        addMenuItem("Do Nothing", 6, 0, 58, 'D', kaCount, msChoice, (setts.sona == don));
         break;
       case 107:
         addMenuItem("VIEW", 3, 2, 100, GLFW_KEY_BACKSPACE);
@@ -2825,30 +3146,39 @@ void mnuProcess(int m)
         addMenuItem("About", 5, 0, 98, 'A');
         break;
       case 110:
+      {
+        menu_selection_state_type state = menuSelectionState();
         addMenuItem("COLOUR", 11, 2, 102, GLFW_KEY_BACKSPACE);
-        addMenuItem("Grey", 11, 0, 10, 'G');
-        addMenuItem("Orange", 11, 0, 11, 'O');
-        addMenuItem("Yellow", 11, 0, 12, 'Y');
-        addMenuItem("Fluro", 11, 0, 13, 'F');
-        addMenuItem("Green", 11, 0, 14, 'E');
-        addMenuItem("Mint", 11, 0, 15, 'M');
-        addMenuItem("Aqua", 11, 0, 16, 'A');
-        addMenuItem("Blue", 11, 0, 17, 'B');
-        addMenuItem("Purple", 11, 0, 18, 'P');
-        addMenuItem("Violet", 11, 0, 19, 'V');
+        addMenuItem("Grey", 11, 0, 10, 'G', kaCount, msChoice, (state.any && !state.mixedColour && (state.colour == 0)));
+        addMenuItem("Orange", 11, 0, 11, 'O', kaCount, msChoice, (state.any && !state.mixedColour && (state.colour == 1)));
+        addMenuItem("Yellow", 11, 0, 12, 'Y', kaCount, msChoice, (state.any && !state.mixedColour && (state.colour == 2)));
+        addMenuItem("Fluro", 11, 0, 13, 'F', kaCount, msChoice, (state.any && !state.mixedColour && (state.colour == 3)));
+        addMenuItem("Green", 11, 0, 14, 'E', kaCount, msChoice, (state.any && !state.mixedColour && (state.colour == 4)));
+        addMenuItem("Mint", 11, 0, 15, 'M', kaCount, msChoice, (state.any && !state.mixedColour && (state.colour == 5)));
+        addMenuItem("Aqua", 11, 0, 16, 'A', kaCount, msChoice, (state.any && !state.mixedColour && (state.colour == 6)));
+        addMenuItem("Blue", 11, 0, 17, 'B', kaCount, msChoice, (state.any && !state.mixedColour && (state.colour == 7)));
+        addMenuItem("Purple", 11, 0, 18, 'P', kaCount, msChoice, (state.any && !state.mixedColour && (state.colour == 8)));
+        addMenuItem("Violet", 11, 0, 19, 'V', kaCount, msChoice, (state.any && !state.mixedColour && (state.colour == 9)));
         break;
+      }
       case 111:
+      {
+        menu_selection_state_type state = menuSelectionState();
         addMenuItem("LOCK", 3, 2, 102, GLFW_KEY_BACKSPACE);
-        addMenuItem("On", 3, 0, 21, 'O');
-        addMenuItem("Off", 3, 0, 22, 'F');
+        addMenuItem("On", 3, 0, 21, 'O', kaCount, msChoice, (state.any && !state.mixedLock && state.lockOn));
+        addMenuItem("Off", 3, 0, 22, 'F', kaCount, msChoice, (state.any && !state.mixedLock && !state.lockOn));
         break;
+      }
       case 112:
+      {
+        menu_selection_state_type state = menuSelectionState();
         addMenuItem("MOVE TO ZONE", 5, 2, 102, GLFW_KEY_BACKSPACE);
-        addMenuItem("Grey", 5, 0, 1, 'G');
-        addMenuItem("Blue", 5, 0, 2, 'B');
-        addMenuItem("Green", 5, 0, 3, 'N');
-        addMenuItem("Red", 5, 0, 4, 'R');
+        addMenuItem("Grey", 5, 0, 1, 'G', kaCount, msChoice, (state.any && !state.mixedZone && (state.zone == 1)));
+        addMenuItem("Blue", 5, 0, 2, 'B', kaCount, msChoice, (state.any && !state.mixedZone && (state.zone == 2)));
+        addMenuItem("Green", 5, 0, 3, 'N', kaCount, msChoice, (state.any && !state.mixedZone && (state.zone == 3)));
+        addMenuItem("Red", 5, 0, 4, 'R', kaCount, msChoice, (state.any && !state.mixedZone && (state.zone == 4)));
         break;
+      }
       case 113:
         addMenuItem("ARRANGE", 5, 2, 102, GLFW_KEY_BACKSPACE);
         addMenuItem("Default", 5, 0, 5, 'D');
@@ -2881,19 +3211,30 @@ void mnuProcess(int m)
         addMenuItem("All", 3, 0, 47, 0, kaAcknowledgeAllAnomalies);
         break;
       case 118:
+      {
+        bool otherProtocol = (setts.pr && (setts.pr != IPPROTO_ICMP) && (setts.pr != IPPROTO_TCP) && (setts.pr != IPPROTO_UDP) && (setts.pr != IPPROTO_ARP));
+        char otherLabel[32];
+        if (otherProtocol) snprintf(otherLabel, sizeof(otherLabel), "Other... [%u]", setts.pr);
+        else strcpy(otherLabel, "Other...");
         addMenuItem("PROTOCOL", 7, 2, 105, GLFW_KEY_BACKSPACE);
-        if (setts.pr) addMenuItem("All", 7, 0, 61, 'A');
-        if (setts.pr != IPPROTO_ICMP) addMenuItem("ICMP", 7, 0, 62, 'I');
-        if (setts.pr != IPPROTO_TCP) addMenuItem("TCP", 7, 0, 63, 'T');
-        if (setts.pr != IPPROTO_UDP) addMenuItem("UDP", 7, 0, 64, 'U');
-        if (setts.pr != IPPROTO_ARP) addMenuItem("ARP", 7, 0, 65, 'R');
-        addMenuItem("Other...", 7, 0, 66, 'O');
+        addMenuItem("All", 7, 0, 61, 'A', kaCount, msChoice, (setts.pr == 0));
+        addMenuItem("ICMP", 7, 0, 62, 'I', kaCount, msChoice, (setts.pr == IPPROTO_ICMP));
+        addMenuItem("TCP", 7, 0, 63, 'T', kaCount, msChoice, (setts.pr == IPPROTO_TCP));
+        addMenuItem("UDP", 7, 0, 64, 'U', kaCount, msChoice, (setts.pr == IPPROTO_UDP));
+        addMenuItem("ARP", 7, 0, 65, 'R', kaCount, msChoice, (setts.pr == IPPROTO_ARP));
+        addMenuItem(otherLabel, 7, 0, 66, 'O', kaCount, msChoice, otherProtocol);
         break;
+      }
       case 119:
+      {
+        char portLabel[32];
+        if (setts.prt) snprintf(portLabel, sizeof(portLabel), "Enter... [%u]", setts.prt);
+        else strcpy(portLabel, "Enter...");
         addMenuItem("PORT", 3, 2, 105, GLFW_KEY_BACKSPACE);
-        if (setts.prt) addMenuItem("All", 3, 0, 67, 'A');
-        addMenuItem("Enter", 3, 0, 68, 'E');
+        addMenuItem("All", 3, 0, 67, 'A', kaCount, msChoice, (setts.prt == 0));
+        addMenuItem(portLabel, 3, 0, 68, 'E', kaCount, msChoice, (setts.prt != 0));
         break;
+      }
       case 120:
         addMenuItem("RECALL", 7, 2, 107, GLFW_KEY_BACKSPACE);
         addMenuItem("Home", 7, 0, 70, 0, kaViewHome);
@@ -3129,6 +3470,7 @@ void GLFWCALL clickGL(int button, int action)
 void GLFWCALL wheelGL(int pos)
 {
   if (GLWin.On()) GLWin.Scroll((pos > mWhl ? GLWIN_UP : GLWIN_DOWN), false);  //scroll text in 2D GUI
+  else if (helpOverlayMouseOver()) helpOverlayScrollDelta((pos > mWhl ? -1 : 1));
   else  //move view up/down
   {
     setts.vws[0].ee.y += (pos > mWhl ? 1 : -1) * MOV;
@@ -3938,7 +4280,6 @@ static void localHsenDialogOpen()
   GLWin.AddButton(10, btnTop, GLWIN_MISC1, "Refresh");
   GLWin.AddButton(120, btnTop, GLWIN_OK, "Save + Start", true, true);
   GLWin.AddButton(256, btnTop, GLWIN_MISC2, "Stop");
-  GLWin.AddButton(340, btnTop, GLWIN_CLOSE, "Close");
 }
 
 static void localHsenAutostartMaybe()
@@ -4007,7 +4348,7 @@ static int keyCodeFromToken(const char *token)
 static bool parseBindingValue(const char *value, int *out)
 {
   char compact[64], *keytxt = compact;
-  bool ctrl = false;
+  bool ctrl = false, shift = false;
   compactBindingToken(value, compact, sizeof(compact));
   if (!*keytxt) return false;
   if (!strcmp(keytxt, "NONE") || !strcmp(keytxt, "DISABLED"))
@@ -4015,14 +4356,25 @@ static bool parseBindingValue(const char *value, int *out)
     *out = 0;
     return true;
   }
-  if (!strncmp(keytxt, "CTRL+", 5))
+  while (true)
   {
-    ctrl = true;
-    keytxt += 5;
+    if (!strncmp(keytxt, "CTRL+", 5))
+    {
+      ctrl = true;
+      keytxt += 5;
+      continue;
+    }
+    if (!strncmp(keytxt, "SHIFT+", 6))
+    {
+      shift = true;
+      keytxt += 6;
+      continue;
+    }
+    break;
   }
   int keycode = keyCodeFromToken(keytxt);
   if (!keycode) return false;
-  *out = (ctrl ? CTRLKEY(keycode) : keycode);
+  *out = (ctrl && shift ? CTRLSHIFTKEY(keycode) : (ctrl ? CTRLKEY(keycode) : (shift ? SHIFTKEY(keycode) : keycode)));
   return true;
 }
 
@@ -4078,6 +4430,16 @@ static void bindingLabel(int encoded, char *buf, size_t bufsz)
     buf[bufsz - 1] = '\0';
     return;
   }
+  if (encoded >= 1536)
+  {
+    snprintf(buf, bufsz, "Ctrl + Shift + %s", keyCodeName(encoded - 1536));
+    return;
+  }
+  if (encoded >= 1024)
+  {
+    snprintf(buf, bufsz, "Shift + %s", keyCodeName(encoded - 1024));
+    return;
+  }
   if (encoded >= 512)
   {
     snprintf(buf, bufsz, "Ctrl + %s", keyCodeName(encoded - 512));
@@ -4086,19 +4448,26 @@ static void bindingLabel(int encoded, char *buf, size_t bufsz)
   snprintf(buf, bufsz, "%s", keyCodeName(encoded));
 }
 
-static const char *menuLabelWithHint(const char *title, int hotkey)
+static const char *menuLabelWithHint(const char *title, int hotkey, menustate_type state, bool active)
 {
   static char labels[12][128];
   static unsigned char idx = 0;
   char binding[32];
+  const char *prefix = "";
   idx = (idx + 1) % 12;
+  switch (state)
+  {
+    case msToggle: prefix = (active ? "[X] " : "[ ] "); break;
+    case msChoice: prefix = (active ? "(*) " : "( ) "); break;
+    default: break;
+  }
   if (!hotkey)
   {
-    snprintf(labels[idx], sizeof(labels[idx]), "%s", title);
+    snprintf(labels[idx], sizeof(labels[idx]), "%s%s", prefix, title);
     return labels[idx];
   }
   bindingLabel(hotkey, binding, sizeof(binding));
-  snprintf(labels[idx], sizeof(labels[idx]), "%s (%s)", title, binding);
+  snprintf(labels[idx], sizeof(labels[idx]), "%s%s (%s)", prefix, title, binding);
   return labels[idx];
 }
 
@@ -4121,10 +4490,11 @@ static int menuDepthForId(int menuid)
   }
 }
 
-static int menuItemHotkey(int mnemonic, keyact_type action)
+static int menuItemHotkey(int value, keyact_type action)
 {
-  if ((action < kaCount) && keybinds[action].key) return keybinds[action].key;
-  return mnemonic;
+  keyact_type resolved = (action < kaCount ? action : menuActionForValue(value));
+  if ((resolved < kaCount) && keybinds[resolved].key) return keybinds[resolved].key;
+  return 0;
 }
 
 static int menuItemWidth(const char *label, bool submenu)
@@ -4132,11 +4502,13 @@ static int menuItemWidth(const char *label, bool submenu)
   return 12 + ((int)strlen(label) * 6) + (submenu ? 16 : 6);
 }
 
-static void addMenuItem(const char *title, int items, int sub, int value, int mnemonic, keyact_type action)
+static void addMenuItem(const char *title, int items, int sub, int value, int mnemonic, keyact_type action, menustate_type state, bool active)
 {
-  int hotkey = menuItemHotkey(mnemonic, action);
-  const char *label = menuLabelWithHint(title, hotkey);
-  GLWin.AddMenu(menuItemWidth(label, (sub != 0)), label, items, sub, value, hotkey, menuBuildDepth * MENU_LEVEL_INDENT);
+  (void) mnemonic;
+  int hotkey = menuItemHotkey(value, action);
+  const char *label = menuLabelWithHint(title, hotkey, state, active);
+  GLWin.AddMenu(menuItemWidth(label, (sub != 0)), label, items, sub, value, hotkey,
+                (menuBaseX - mPsx) + (menuBuildDepth * MENU_LEVEL_INDENT));
 }
 
 static keyact_type keyActionFromInput(int encoded)
@@ -4144,6 +4516,24 @@ static keyact_type keyActionFromInput(int encoded)
   for (unsigned char cnt = 0; cnt < kaCount; cnt++)
   {
     if (keybinds[cnt].key && (keybinds[cnt].key == encoded)) return (keyact_type) cnt;
+  }
+  if (encoded >= 1536)
+  {
+    int ctrlEncoded = encoded - 1024;
+    int shiftEncoded = encoded - 512;
+    int baseEncoded = encoded - 1536;
+    for (unsigned char cnt = 0; cnt < kaCount; cnt++)
+    {
+      if (keybinds[cnt].key && ((keybinds[cnt].key == ctrlEncoded) || (keybinds[cnt].key == shiftEncoded) || (keybinds[cnt].key == baseEncoded))) return (keyact_type) cnt;
+    }
+  }
+  if (encoded >= 1024)
+  {
+    encoded -= 1024;
+    for (unsigned char cnt = 0; cnt < kaCount; cnt++)
+    {
+      if (keybinds[cnt].key && (keybinds[cnt].key == encoded)) return (keyact_type) cnt;
+    }
   }
   return kaCount;
 }
@@ -4506,10 +4896,8 @@ void checkControls()
     controlLine(ctls, "", "Click Selected Host to Toggle Persistant IP/Name");
     controlLine(ctls, "Middle Mouse Button", "Click-and-Drag to Change View");
     controlLine(ctls, "Right Mouse Button", "Show Menu");
-    controlLineKey(ctls, kaOpenMainMenu, "Open Main Menu");
-    controlLine(ctls, "Shown menu key in parentheses", "Activate Visible Menu Item");
-    controlLine(ctls, "Backspace", "Return to Previous Menu");
     controlLine(ctls, "Esc", "Close Open Menu or Dialog");
+    controlLine(ctls, "", "Menu state markers: [X]/[ ] = toggle, (*)/( ) = current mode");
     controlLine(ctls, "Mouse Wheel", "Move Up/Down");
     controlLinePair(ctls, kaMoveForward, kaMoveBack, "Move Forward/Back");
     controlLinePair(ctls, kaMoveLeft, kaMoveRight, "Move Left/Right");
@@ -4525,6 +4913,18 @@ void checkControls()
     controlLineKey(ctls, kaViewPos2, "Recall View Position 2");
     controlLineKey(ctls, kaViewPos3, "Recall View Position 3");
     controlLineKey(ctls, kaViewPos4, "Recall View Position 4");
+    controlLineKey(ctls, kaViewSave1, "Save View Position 1");
+    controlLineKey(ctls, kaViewSave2, "Save View Position 2");
+    controlLineKey(ctls, kaViewSave3, "Save View Position 3");
+    controlLineKey(ctls, kaViewSave4, "Save View Position 4");
+    controlLineKey(ctls, kaLayoutRestore1, "Restore Network Layout 1");
+    controlLineKey(ctls, kaLayoutRestore2, "Restore Network Layout 2");
+    controlLineKey(ctls, kaLayoutRestore3, "Restore Network Layout 3");
+    controlLineKey(ctls, kaLayoutRestore4, "Restore Network Layout 4");
+    controlLineKey(ctls, kaLayoutSave1, "Save Network Layout 1");
+    controlLineKey(ctls, kaLayoutSave2, "Save Network Layout 2");
+    controlLineKey(ctls, kaLayoutSave3, "Save Network Layout 3");
+    controlLineKey(ctls, kaLayoutSave4, "Save Network Layout 4");
     controlLine(ctls, "Ctrl", "Multi-Select");
     controlLineKey(ctls, kaSelectAll, "Select All Hosts");
     controlLineKey(ctls, kaInvertSelection, "Invert Selection");
@@ -4556,6 +4956,11 @@ void checkControls()
     controlLineKey(ctls, kaShowSensor2Packets, "Show Packets from Sensor 2");
     controlLineKey(ctls, kaShowSensor3Packets, "Show Packets from Sensor 3");
     controlLineKey(ctls, kaShowSensor4Packets, "Show Packets from Sensor 4");
+    controlLineKey(ctls, kaShowSensor5Packets, "Show Packets from Sensor 5");
+    controlLineKey(ctls, kaShowSensor6Packets, "Show Packets from Sensor 6");
+    controlLineKey(ctls, kaShowSensor7Packets, "Show Packets from Sensor 7");
+    controlLineKey(ctls, kaShowSensor8Packets, "Show Packets from Sensor 8");
+    controlLineKey(ctls, kaShowSensor9Packets, "Show Packets from Sensor 9");
     controlLineKey(ctls, kaShowAllSensorPackets, "Show Packets from All Sensors");
     controlLinePair(ctls, kaPrevSensorPackets, kaNextSensorPackets, "Change Sensor to Show Packets from");
     controlLineKey(ctls, kaToggleBroadcasts, "Toggle Show Simulated Broadcasts [B]");
@@ -4579,7 +4984,7 @@ void checkControls()
     controlLineKey(ctls, kaExportSelectionCsv, "Export Selection Details in CSV File As...");
     controlLineKey(ctls, kaShowHostInformation, "Show Selected Host Information");
     controlLineKey(ctls, kaShowSelectionInformation, "Show Selection Information");
-    controlLineKey(ctls, kaShowHelp, "Show Help");
+    controlLineKey(ctls, kaShowHelp, "Toggle Help Overlay");
     fclose(ctls);
   }
 }
@@ -4878,6 +5283,7 @@ int main(int argc, char *argv[])
   }
   settsLoad();  //load settings
   checkControls();  //write controls file from current settings
+  helpOverlayLoad();
   osdUpdate();
   netLoad(hsddata("0network.hnl"));  //load network layout 0
   if (goHosts) goHosts = 0;

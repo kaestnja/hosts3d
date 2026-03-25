@@ -1156,23 +1156,6 @@ char *MyGLWin::GetInput(int name)
   return 0;
 }
 
-int MyGLWin::MenuValueForKey(int key)
-{
-  glmu_obj *mu;
-  unsigned char *tp;
-  GLWinLL.Start(1);
-  while ((tp = (unsigned char *)GLWinLL.Read(1)))
-  {
-    if (*tp == GLWIN_MENU)
-    {
-      mu = (glmu_obj *)tp;
-      if (mu->value && (mu->hotkey == key)) return mu->value;
-    }
-    GLWinLL.Next(1);
-  }
-  return 0;
-}
-
 //change input object text
 void MyGLWin::PutInput(const char *text, int name)
 {
@@ -1562,4 +1545,20 @@ MyGLWin::~MyGLWin()
 {
   GLWinDestroy(0);
   glDeleteLists(fontDraw, 97);
+}
+int MyGLWin::MenuValueForKey(int key)
+{
+  glmu_obj *mu;
+  unsigned char *tp;
+  GLWinLL.Start(1);
+  while ((tp = (unsigned char *)GLWinLL.Read(1)))
+  {
+    if (*tp == GLWIN_MENU)
+    {
+      mu = (glmu_obj *)tp;
+      if (mu->value && (mu->hotkey == key)) return mu->value;
+    }
+    GLWinLL.Next(1);
+  }
+  return 0;
 }
