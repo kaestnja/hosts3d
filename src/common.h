@@ -38,7 +38,7 @@ struct pkif_type
 #pragma pack(1)
 struct pkex_type
 {
-  char id, syn:1, ack:1, spr:6;  //spare (future use)
+  char id, syn:1, ack:1, pld:1, spr:5;  //payload present, spare (future use)
   unsigned int sz;
   unsigned char srcmc[6];
   pkif_type pk;

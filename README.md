@@ -1,4 +1,4 @@
-# Hosts3D 1.16
+# Hosts3D 1.17
 
 > 3D Real-Time Network Monitor (legacy project, modernized build workflow)  
 > Original upstream release: 10 May 2011, Del Castle
@@ -234,6 +234,7 @@ Notes:
 - `settings.ini` is plain text and can be reviewed or edited with Hosts3D closed.
 - If a legacy `settings-hsd` binary file is found, Hosts3D imports it once into `settings.ini`.
 - `traffic.hpt` contains Hosts3D/hsen packet metadata for Record/Replay; it is not a Wireshark-compatible capture format.
+- New recordings preserve packet-shape metadata; older `traffic.hpt` recordings remain readable.
 - Runtime host lifetime/cleanup behavior is configured in the `[dynamic_hosts]` section of `settings.ini`.
 
 ### Keyboard Customization
@@ -286,6 +287,7 @@ Runtime behavior not explicitly listed in `controls.txt`:
 - Menus now show state markers directly: `[X]/[ ]` for toggles, `(*)/( )` for current mode choices.
 - The top-right OSD now spells out current filters and toggles using the same names as `settings.ini`, for example `Display Mode`, `Display Scope`, `On-Active Action`, and `Packet Limit`.
 - The OSD is grouped into `FILTERS`, `LABELS`, `PACKETS`, and `RUNTIME`, with grey labels, white values, yellow highlights for active deviations, and red alerts for important attention states.
+- The packet legend inside the OSD now renders actual miniature 3D packet examples at an angled view instead of flat markers, using the same shapes as the live animated packet objects.
 - Legacy short forms such as `Sen`, `Pro`, `Prt`, `Act`, and `Pkts` are no longer used in the OSD.
 - `Esc` closes the open menu or dialog.
 
@@ -604,6 +606,12 @@ This section helps you map what you see on-screen back to the current implementa
 | UDP packet | blue |
 | ARP packet | yellow |
 | Other/fragmented packet | grey |
+| Packet form: cube | control packet / no payload |
+| Packet form: double cuboid | payload-carrying packet |
+| Packet form: triple cuboid | larger payload-carrying packet |
+| Packet form: sphere | name/discovery traffic such as DNS, mDNS, LLMNR, or NetBIOS name service |
+| Packet form: pyramid | exceptional traffic such as ICMP or fragmented packets |
+| Packet legend in OSD | rendered as miniature 3D examples of the real packet objects, shown from an angled view |
 | Anomaly alert | bright red |
 | On-active alert | protocol color |
 | Link lines | dull grey |

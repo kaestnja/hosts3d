@@ -61,9 +61,13 @@ static const int HELP_OVERLAY_HEADER_H = 28;
 static const int HELP_OVERLAY_FOOTER_H = 18;
 static const int HELP_OVERLAY_KEY_COL_W = 118;
 static const int OSD_MIN_W = 420;
-static const int OSD_MIN_H = 320;
+static const int OSD_MIN_H = 380;
 static const int OSD_LINE_H = 13;
 static const int OSD_PKT_GAP_H = 18;
+static const int OSD_PKT_ICON_SCALE = 6;
+static const int OSD_PKT_ICON_COL_W = 34;
+static const int OSD_PKT_ROW_H = 28;
+static const int OSD_PKT_SECTION_GAP_H = 16;
 static const int OSD_CHAR_W = 6;
 static const int OSD_MARGIN_X = 10;
 static const int OSD_MARGIN_Y = 16;
@@ -74,10 +78,15 @@ static const int OSD_VALUE_COL_CHARS = 16;
 static const int OSD_BOX_W = (OSD_BOX_PAD_X * 2) + ((OSD_LABEL_COL_CHARS + OSD_VALUE_COL_CHARS) * OSD_CHAR_W);
 static const int OSD_VALUE_X = OSD_BOX_PAD_X + (OSD_LABEL_COL_CHARS * OSD_CHAR_W);
 static const unsigned int OSD_MAX_ROWS = 24;
+static const unsigned int PACKET_TRIPLE_SIZE_THRESHOLD = 512;
+static const double PACKET_CENTER_Y = 5.0;
+static const double PACKET_LABEL_Y = 7.0;
+static const double RAD2DEG = 57.29577951308232;
 int wWin = DEFAULT_WIN_W, hWin = DEFAULT_WIN_H, mBxx, mBxy, mPsx = 0, mPsy = 0, mWhl = 0, GLResult[6] = {0, 0, 0, 0, 0, 0};  //2D GUI result identification
 time_t atime = 0, distm;  //packet traffic display time offset
 ptrc_type ptrc = stp;  //packet traffic state
 pkrc_type pkrp;  //packet traffic replay packet
+bool pkrLegacy = false;
 unsigned short frame = 0;
 unsigned long long fps = 0, rpoff;  //packet traffic replay time offset
 char goHosts = 2, htdtls[570];
@@ -568,18 +577,57 @@ void alrtCreate(aobj_type ao, unsigned char pr, host_type *ht)
   altsLL.Write(new alrt_type(alrt));
 }
 
-//create packet
-void pcktCreate(pkif_type *pkt, host_type *sht, host_type *dht, bool lk)
+static unsigned char packetColorIndex(unsigned char pr)
 {
+  switch (pr)
+  {
+    case IPPROTO_ICMP: return 1;
+    case IPPROTO_TCP: return 2;
+    case IPPROTO_UDP: return 3;
+    case IPPROTO_ARP: return 4;
+    default: return 0;
+  }
+}
+
+static bool packetIsNameDiscovery(const pkif_type *pkt)
+{
+  if ((pkt->pr != IPPROTO_TCP) && (pkt->pr != IPPROTO_UDP)) return false;
+  return (pkt->srcpt == 53) || (pkt->dstpt == 53) || (pkt->srcpt == 137) || (pkt->dstpt == 137)
+    || (pkt->srcpt == 5353) || (pkt->dstpt == 5353) || (pkt->srcpt == 5355) || (pkt->dstpt == 5355);
+}
+
+static unsigned char packetShape(const pkex_type *pkex)
+{
+  const pkif_type *pkt = &pkex->pk;
+  if (packetIsNameDiscovery(pkt)) return pSphere;
+  if ((pkt->pr == IPPROTO_ICMP) || (pkt->pr == IPPROTO_FRAG)) return pPyramid;
+  if ((pkt->pr == IPPROTO_TCP) || (pkt->pr == IPPROTO_UDP))
+  {
+    if (!pkex->pld) return pCube;
+    return (pkex->sz >= PACKET_TRIPLE_SIZE_THRESHOLD ? pTriple : pDouble);
+  }
+  return pCube;
+}
+
+static int packetListIndex(unsigned char colorIndex, unsigned char shape)
+{
+  return 15 + (colorIndex * 5) + shape;
+}
+
+//create packet
+void pcktCreate(pkex_type *pkex, host_type *sht, host_type *dht, bool lk)
+{
+  pkif_type *pkt = &pkex->pk;
   if ((pktsLL.Num() < setts.pks) && (sht->shp || dht->shp) && (!setts.sen || (pkt->sen == setts.sen))
     && (!setts.pr || (pkt->pr == setts.pr)) && (!setts.prt || (pkt->srcpt == setts.prt) || (pkt->dstpt == setts.prt)) && goAnim)
   {
-    pckt_type pckt = {pkt->pr, pkt->dstpt, frame, {(double)sht->px, (double)sht->py, (double)sht->pz}, dht}, *pk;
+    pckt_type pckt = {pkt->pr, packetShape(pkex), pkt->dstpt, frame, {(double)sht->px, (double)sht->py, (double)sht->pz}, dht}, *pk;
     pktsLL.End(2);
     while ((pk = (pckt_type *)pktsLL.Read(2)))
     {
       if (pk->frm != frame) break;
-      if ((pk->cu.x == pckt.cu.x) && (pk->cu.y == pckt.cu.y) && (pk->cu.z == pckt.cu.z) && (pk->ht == pckt.ht)) return;
+      if ((pk->cu.x == pckt.cu.x) && (pk->cu.y == pckt.cu.y) && (pk->cu.z == pckt.cu.z)
+        && (pk->ht == pckt.ht) && (pk->pr == pckt.pr) && (pk->shp == pckt.shp) && (pk->dstpt == pckt.dstpt)) return;
       pktsLL.Prev(2);
     }
     pktsLL.Write(new pckt_type(pckt));
@@ -821,25 +869,50 @@ void osdUpdate()
 
 struct pktlg_type
 {
-  unsigned char red, green, blue;
+  unsigned char colorIndex, shape;
   const char *name;
 };
+
+static void osdDrawPacketMini(int cx, int cy, unsigned char colorIndex, unsigned char shape, double scale)
+{
+  glPushMatrix();
+  glTranslated((double)cx, (double)cy, 0.0);
+  glScaled(scale, scale, scale);
+  glRotated(25.0, 1.0, 0.0, 0.0);
+  glRotated(45.0, 0.0, 1.0, 0.0);
+  glCallList(objsDraw + packetListIndex(colorIndex, shape));
+  glPopMatrix();
+}
 
 static void osdDrawPktLegend(int px, int py)
 {
   static const pktlg_type legend[] =
   {
-    {red[0], red[1], red[2], "ICMP"},
-    {green[0], green[1], green[2], "TCP"},
-    {blue[0], blue[1], blue[2], "UDP"},
-    {yellow[0], yellow[1], yellow[2], "ARP"},
-    {brgrey[0], brgrey[1], brgrey[2], "OTHER"}
+    {1, pPyramid, "ICMP"},
+    {2, pDouble, "TCP"},
+    {3, pDouble, "UDP"},
+    {4, pCube, "ARP"},
+    {0, pCube, "OTHER"}
+  };
+  static const pktlg_type forms[] =
+  {
+    {0, pCube, "Cube: control / no payload"},
+    {2, pDouble, "Double cuboid: payload"},
+    {2, pTriple, "Triple cuboid: larger payload"},
+    {3, pSphere, "Sphere: name / discovery"},
+    {1, pPyramid, "Pyramid: ICMP / fragmented"}
   };
 
   int left = px, right = px + OSD_BOX_W, top, bottom;
+  int legendRows = (int)(sizeof(legend) / sizeof(legend[0]));
+  int formRows = (int)(sizeof(forms) / sizeof(forms[0]));
+  int coloursTop, formsTop, iconX;
   py -= (osdTextLineCount * OSD_LINE_H) + OSD_PKT_GAP_H;
   top = py + 12;
-  bottom = py - ((int)(sizeof(legend) / sizeof(legend[0])) * OSD_LINE_H) - 18;
+  coloursTop = py - 12;
+  formsTop = coloursTop - (legendRows * OSD_PKT_ROW_H) - OSD_PKT_SECTION_GAP_H - 6;
+  iconX = left + OSD_BOX_PAD_X + 13;
+  bottom = formsTop - (formRows * OSD_PKT_ROW_H) - 24;
   glColor3ub(15, 15, 20);
   glRecti(left, top, right, bottom);
   glColor3ub(dlgrey[0], dlgrey[1], dlgrey[2]);
@@ -851,19 +924,47 @@ static void osdDrawPktLegend(int px, int py)
   glEnd();
   glColor3ub(brgrey[0], brgrey[1], brgrey[2]);
   glRasterPos2i(left + OSD_BOX_PAD_X, py + 2);
-  GLWin.DrawString((const unsigned char *)"PACKET TYPES");
+  GLWin.DrawString((const unsigned char *)"PACKET LEGEND");
   glBegin(GL_LINES);
-    glVertex2i(left + 84, py + 5);
+    glVertex2i(left + 92, py + 5);
     glVertex2i(right - OSD_BOX_PAD_X, py + 5);
   glEnd();
-  for (unsigned int cnt = 0; cnt < (sizeof(legend) / sizeof(legend[0])); cnt++)
+  glColor3ub(brgrey[0], brgrey[1], brgrey[2]);
+  glRasterPos2i(left + OSD_BOX_PAD_X, coloursTop);
+  GLWin.DrawString((const unsigned char *)"COLOURS");
+  glMatrixMode(GL_PROJECTION);
+  glPushMatrix();
+  glLoadIdentity();
+  glOrtho(0.0, (GLdouble)wWin, 0.0, (GLdouble)hWin, -128.0, 128.0);
+  glMatrixMode(GL_MODELVIEW);
+  glClear(GL_DEPTH_BUFFER_BIT);
+  glEnable(GL_DEPTH_TEST);
+  for (int cnt = 0; cnt < legendRows; cnt++)
   {
-    glColor3ub(legend[cnt].red, legend[cnt].green, legend[cnt].blue);
-    glRasterPos2i(left + OSD_BOX_PAD_X, py - (cnt * OSD_LINE_H) - 12);
-    glBitmap(8, 8, 0.0, 0.0, 0.0, 0.0, bitmaps[16]);
+    osdDrawPacketMini(iconX, coloursTop - 16 - (cnt * OSD_PKT_ROW_H), legend[cnt].colorIndex, legend[cnt].shape, OSD_PKT_ICON_SCALE);
+  }
+  for (int cnt = 0; cnt < formRows; cnt++)
+  {
+    osdDrawPacketMini(iconX, formsTop - 16 - (cnt * OSD_PKT_ROW_H), forms[cnt].colorIndex, forms[cnt].shape, OSD_PKT_ICON_SCALE);
+  }
+  glDisable(GL_DEPTH_TEST);
+  glMatrixMode(GL_PROJECTION);
+  glPopMatrix();
+  glMatrixMode(GL_MODELVIEW);
+  for (int cnt = 0; cnt < legendRows; cnt++)
+  {
     glColor3ub(white[0], white[1], white[2]);
-    glRasterPos2i(left + OSD_BOX_PAD_X + 14, py - (cnt * OSD_LINE_H) - 12);
+    glRasterPos2i(left + OSD_BOX_PAD_X + OSD_PKT_ICON_COL_W, coloursTop - 20 - (cnt * OSD_PKT_ROW_H));
     GLWin.DrawString((const unsigned char *)legend[cnt].name);
+  }
+  glColor3ub(brgrey[0], brgrey[1], brgrey[2]);
+  glRasterPos2i(left + OSD_BOX_PAD_X, formsTop);
+  GLWin.DrawString((const unsigned char *)"FORMS");
+  for (int cnt = 0; cnt < formRows; cnt++)
+  {
+    glColor3ub(white[0], white[1], white[2]);
+    glRasterPos2i(left + OSD_BOX_PAD_X + OSD_PKT_ICON_COL_W, formsTop - 20 - (cnt * OSD_PKT_ROW_H));
+    GLWin.DrawString((const unsigned char *)forms[cnt].name);
   }
 }
 
@@ -1191,7 +1292,7 @@ void alrtsDraw()
       glPushMatrix();
       glTranslated(al->ht->px, al->ht->py + 5, al->ht->pz);
       glScalef(al->sz, al->sz, al->sz);
-      glCallList(objsDraw + (al->ao == actv ? 20 : 21));
+      glCallList(objsDraw + (al->ao == actv ? 40 : 41));
       glPopMatrix();
     }
     if (animate)
@@ -1216,7 +1317,7 @@ void alrtsDraw()
 //draw packet objects
 void pcktsDraw()
 {
-  double itrns;
+  double itrns, dx, dy, dz, yaw, pitch, hyp;
   char sbuf[6];
   pckt_type *pk;
   pktsLL.Start(1);
@@ -1224,21 +1325,22 @@ void pcktsDraw()
   {
     if (pk->frm == frame) break;
     glPushMatrix();
-    glTranslated(pk->cu.x, pk->cu.y, pk->cu.z);
-    switch (pk->pr)
-    {
-      case IPPROTO_ICMP: glCallList(objsDraw + 16); break;  //ICMP red
-      case IPPROTO_TCP: glCallList(objsDraw + 17); break;  //TCP green
-      case IPPROTO_UDP: glCallList(objsDraw + 18); break;  //UDP blue
-      case IPPROTO_ARP: glCallList(objsDraw + 19); break;  //ARP yellow
-      default: glCallList(objsDraw + 15);  //other grey
-    }
+    glTranslated(pk->cu.x, pk->cu.y + PACKET_CENTER_Y, pk->cu.z);
+    dx = pk->ht->px - pk->cu.x;
+    dy = pk->ht->py - pk->cu.y;
+    dz = pk->ht->pz - pk->cu.z;
+    hyp = sqrt((dx * dx) + (dz * dz));
+    yaw = atan2(dx, dz) * RAD2DEG;
+    pitch = -atan2(dy, (hyp ? hyp : 1.0)) * RAD2DEG;
+    glRotated(yaw, 0.0, 1.0, 0.0);
+    glRotated(pitch, 1.0, 0.0, 0.0);
+    glCallList(objsDraw + packetListIndex(packetColorIndex(pk->pr), pk->shp));
     glPopMatrix();
     if (setts.pdp)
     {
       glColor3ub(white[0], white[1], white[2]);
       sprintf(sbuf, "%u", pk->dstpt);
-      glRasterPos3d(pk->cu.x, pk->cu.y + 7.0, pk->cu.z);
+      glRasterPos3d(pk->cu.x, pk->cu.y + PACKET_LABEL_Y, pk->cu.z);
       GLWin.DrawString((const unsigned char *)sbuf);
     }
     if (animate)
@@ -2490,7 +2592,7 @@ void GLFWCALL keyboardGL(int key, int action)
         while (ptrc == hlt) usleep(1000);
         if ((pfile = fopen(hsddata("traffic.hpt"), "wb")))
         {
-          fputs("HPT", pfile);
+          fputs("HP2", pfile);
           distm = 0;
           ptrc = rec;
         }
@@ -2500,13 +2602,39 @@ void GLFWCALL keyboardGL(int key, int action)
         while (ptrc == hlt) usleep(1000);
         if ((pfile = fopen(hsddata("traffic.hpt"), "rb")))
         {
-          fseek(pfile, 3, SEEK_SET);
-          if (fread(&pkrp, sizeof(pkrp), 1, pfile) == 1)
+          char hpt[4] = {0, 0, 0, 0};
+          pkrLegacy = false;
+          if (fread(hpt, 1, 3, pfile) == 3)
           {
-            pcktsDestroy();
-            ptrc = rpy;
-            offsetReset();
-            goHosts = 0;
+            if (!strcmp(hpt, "HP2"))
+            {
+              if (fread(&pkrp, sizeof(pkrp), 1, pfile) == 1)
+              {
+                pcktsDestroy();
+                ptrc = rpy;
+                offsetReset();
+                goHosts = 0;
+              }
+              else fclose(pfile);
+            }
+            else if (!strcmp(hpt, "HPT"))
+            {
+              pkrc1_type pkr1;
+              if (fread(&pkr1, sizeof(pkr1), 1, pfile) == 1)
+              {
+                memset(&pkrp, 0, sizeof(pkrp));
+                pkrLegacy = true;
+                pkrp.ptime = pkr1.ptime;
+                pkrp.pk.id = 85;
+                pkrp.pk.pk = pkr1.pk;
+                pcktsDestroy();
+                ptrc = rpy;
+                offsetReset();
+                goHosts = 0;
+              }
+              else fclose(pfile);
+            }
+            else fclose(pfile);
           }
           else fclose(pfile);
         }
@@ -5177,7 +5305,7 @@ void checkControls()
 //compile GL objects
 void initObjsGL()
 {
-  objsDraw = glGenLists(22);
+  objsDraw = glGenLists(42);
   glNewList(objsDraw, GL_COMPILE);  //grey host object
     hobjDraw(brgrey[0], brgrey[1], brgrey[2]);
   glEndList();
@@ -5223,25 +5351,28 @@ void initObjsGL()
   glNewList(objsDraw + 14, GL_COMPILE);  //cross object
     cobjDraw();
   glEndList();
-  glNewList(objsDraw + 15, GL_COMPILE);  //grey packet object
-    pobjDraw(0);
-  glEndList();
-  glNewList(objsDraw + 16, GL_COMPILE);  //red packet object
-    pobjDraw(1);
-  glEndList();
-  glNewList(objsDraw + 17, GL_COMPILE);  //green packet object
-    pobjDraw(2);
-  glEndList();
-  glNewList(objsDraw + 18, GL_COMPILE);  //blue packet object
-    pobjDraw(3);
-  glEndList();
-  glNewList(objsDraw + 19, GL_COMPILE);  //yellow packet object
-    pobjDraw(4);
-  glEndList();
-  glNewList(objsDraw + 20, GL_COMPILE);  //active alert object
+  for (unsigned char clr = 0; clr < 5; clr++)
+  {
+    glNewList(objsDraw + packetListIndex(clr, pCube), GL_COMPILE);
+      pobjDraw(clr);
+    glEndList();
+    glNewList(objsDraw + packetListIndex(clr, pDouble), GL_COMPILE);
+      pobj2Draw(clr);
+    glEndList();
+    glNewList(objsDraw + packetListIndex(clr, pTriple), GL_COMPILE);
+      pobj3Draw(clr);
+    glEndList();
+    glNewList(objsDraw + packetListIndex(clr, pSphere), GL_COMPILE);
+      psobjDraw(clr);
+    glEndList();
+    glNewList(objsDraw + packetListIndex(clr, pPyramid), GL_COMPILE);
+      ppobjDraw(clr);
+    glEndList();
+  }
+  glNewList(objsDraw + 40, GL_COMPILE);  //active alert object
     aobjDraw(false);
   glEndList();
-  glNewList(objsDraw + 21, GL_COMPILE);  //anomaly alert object
+  glNewList(objsDraw + 41, GL_COMPILE);  //anomaly alert object
     aobjDraw(true);
   glEndList();
 }
@@ -5252,10 +5383,10 @@ void pktProcessCb(void **data, long arg1, long arg2, long arg3, long arg4)
   host_type *sh = (host_type *)(void *) arg1;
   in_addr_t mask = (in_addr_t) arg2;
   in_addr_t dstip = (in_addr_t) arg3;
-  pkif_type *pkif = (pkif_type *)(void *) arg4;
+  pkex_type *pkex = (pkex_type *)(void *) arg4;
 
   if ((dh != sh) && ((dh->hip.s_addr & mask) == dstip))
-    pcktCreate(pkif, sh, dh, false);
+    pcktCreate(pkex, sh, dh, false);
 }
 
 //glfwCreateThread
@@ -5306,11 +5437,12 @@ void GLFWCALL pktProcess(void *arg)
   pkex_type *pkex = 0;  //packet info from hsen
   pdns_type *pdns;  //DNS info from hsen
   timeval ptm;  //time of packet
-  int rcsz, prsz = sizeof(pkrp), pisz = sizeof(pkif_type), pesz = sizeof(pkex_type), dnsz = sizeof(pdns_type), ptsz = sizeof(ptm);
+  int rcsz, prsz = sizeof(pkrp), pr1sz = sizeof(pkrc1_type), pesz = sizeof(pkex_type), dnsz = sizeof(pdns_type), ptsz = sizeof(ptm);
   in_addr_t mask, dstip;
   unsigned long long rpytm;
   char pbuf[dnsz];
   host_type *sh, *dh;
+  pkrc1_type pkr1;
   while (goRun)
   {
     if (!goHosts)
@@ -5326,7 +5458,8 @@ void GLFWCALL pktProcess(void *arg)
         rpytm = milliTime(0) - rpoff;
         if (!feof(pfile) && (rpytm >= milliTime(&pkrp.ptime)))
         {
-          pkif = &pkrp.pk;
+          pkex = &pkrp.pk;
+          pkif = &pkrp.pk.pk;
           pksc = pkfl;
         }
         else if (feof(pfile) && !pktsLL.Num())  //stop replay when last packet ends
@@ -5347,7 +5480,7 @@ void GLFWCALL pktProcess(void *arg)
             if (!distm) time(&distm);
             gettimeofday(&ptm, 0);
             if (fwrite(&ptm, ptsz, 1, pfile) != 1) ptrc = hlt;
-            else if (fwrite(pkif, pisz, 1, pfile) != 1) ptrc = hlt;
+            else if (fwrite(pkex, pesz, 1, pfile) != 1) ptrc = hlt;
           }
         }
         else if ((pbuf[0] == 42) && (rcsz == dnsz))  //42 used to identify DNS info
@@ -5382,17 +5515,28 @@ void GLFWCALL pktProcess(void *arg)
             dh->dld += pkex->sz;
             time(&dh->lpk);
           }
-          pcktCreate(pkif, sh, dh, true);
+          pcktCreate(pkex, sh, dh, true);
         }
         else if (setts.bct && (mask = isBroadcast(pkif->dstip)))
         {
           dstip = pkif->dstip.s_addr & mask;
 	  hstsByIp.forEach(2, &pktProcessCb, (long)(void *) sh, (long) mask,
-			   (long) dstip, (long)(void *) pkif);
+			   (long) dstip, (long)(void *) pkex);
         }
         if (pksc == pkfl)
         {
-          if (fread(&pkrp, prsz, 1, pfile) != 1) ptrc = hlt;
+          if (pkrLegacy)
+          {
+            if (fread(&pkr1, pr1sz, 1, pfile) == 1)
+            {
+              memset(&pkrp, 0, sizeof(pkrp));
+              pkrp.ptime = pkr1.ptime;
+              pkrp.pk.id = 85;
+              pkrp.pk.pk = pkr1.pk;
+            }
+            else ptrc = hlt;
+          }
+          else if (fread(&pkrp, prsz, 1, pfile) != 1) ptrc = hlt;
         }
       }
       else usleep(10000);
@@ -5521,7 +5665,7 @@ int main(int argc, char *argv[])
   netSave(hsddata("0network.hnl"));  //save network layout 0
   allDestroy();
   netpsDestroy();
-  glDeleteLists(objsDraw, 22);
+  glDeleteLists(objsDraw, 42);
   glfwTerminate();
 #ifndef __MINGW32__
   syslog(LOG_INFO, "stopped\n");
