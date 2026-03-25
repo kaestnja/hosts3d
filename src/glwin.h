@@ -145,7 +145,7 @@ class MyGLWin
     void AddBitmap(int left, int top, int red, int green, int blue, const GLubyte *bitmap);
     void AddButton(int left, int top, int value, const char *text, bool align = true, bool defalt = false);
     int AddCheck(int left, int top, bool state);
-    int AddInput(int left, int top, unsigned int cwidth, int max, const char *text, bool lower = false);
+    int AddInput(int left, int top, unsigned int cwidth, unsigned int max, const char *text, bool lower = false);
     int AddLabel(int left, int top, const char *text);
     void AddList(int left, int top, int right, int bottom, const char *fl);
     void AddView(int left, int top, int right, int bottom, int tab, const char *fl);
