@@ -68,6 +68,11 @@ static const int OSD_PKT_ICON_SCALE = 6;
 static const int OSD_PKT_ICON_COL_W = 34;
 static const int OSD_PKT_ROW_H = 28;
 static const int OSD_PKT_SECTION_GAP_H = 16;
+static const int OSD_PKT_ROW_ICON_Y = 16;
+static const int OSD_PKT_ROW_TEXT_Y = 20;
+static const int OSD_PKT_ROW_HILITE_TOP_Y = 2;
+static const int OSD_PKT_ROW_HILITE_BOTTOM_Y = 26;
+static const unsigned int OSD_PKT_HIT_MAX = 16;
 static const int OSD_CHAR_W = 6;
 static const int OSD_MARGIN_X = 10;
 static const int OSD_MARGIN_Y = 16;
@@ -82,6 +87,11 @@ static const unsigned int PACKET_TRIPLE_SIZE_THRESHOLD = 512;
 static const double PACKET_CENTER_Y = 5.0;
 static const double PACKET_LABEL_Y = 7.0;
 static const double RAD2DEG = 57.29577951308232;
+static const unsigned char PACKET_COLOR_COUNT = 6;
+static const unsigned char PACKET_SHAPE_COUNT = 5;
+static const int PACKET_LIST_BASE = 15;
+static const int ALERT_LIST_BASE = PACKET_LIST_BASE + (PACKET_COLOR_COUNT * PACKET_SHAPE_COUNT);
+static const int OBJ_LIST_COUNT = ALERT_LIST_BASE + 2;
 int wWin = DEFAULT_WIN_W, hWin = DEFAULT_WIN_H, mBxx, mBxy, mPsx = 0, mPsy = 0, mWhl = 0, GLResult[6] = {0, 0, 0, 0, 0, 0};  //2D GUI result identification
 time_t atime = 0, distm;  //packet traffic display time offset
 ptrc_type ptrc = stp;  //packet traffic state
@@ -89,10 +99,10 @@ pkrc_type pkrp;  //packet traffic replay packet
 bool pkrLegacy = false;
 unsigned short frame = 0;
 unsigned long long fps = 0, rpoff;  //packet traffic replay time offset
-char goHosts = 2, htdtls[570];
+char goHosts = 2, htdtls[960];
 unsigned int osdTextLineCount = 0;
 view_type vwdef[2] = {{0.0, 0.0, {0.0, 75.0, -360.0}, {0.0, 75.0, MOV - 360.0}}, {90.0, 0.0, {-360.0, 75.0, 0.0}, {MOV - 360.0, 75.0, 0.0}}};  //default views
-sett_type setts = {false, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 5000, "", "<sudo command> hsen", "1", "eth0", "", "<sudo command> killall hsen"
+sett_type setts = {false, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 5000, "", "<sudo command> hsen", "1", "eth0", "", "<sudo command> killall hsen"
   , {"", "", "", ""}, ins, off, alt, {vwdef[0], vwdef[0], vwdef[0], vwdef[0], vwdef[0]}};  //settings
 host_type *seltd = 0, *lnkht = 0;  //selected host, link line host
 MyLL lnksLL, altsLL, pktsLL;  //dynamic data struct for links, alerts, packets
@@ -128,6 +138,25 @@ struct osd_row_type
 };
 
 osd_row_type osdRows[OSD_MAX_ROWS];
+
+struct host_runtime_meta_type
+{
+  unsigned char pr, shp, clr;
+  unsigned short port;
+  char dnm[256];
+};
+
+struct osd_pkt_hit_type
+{
+  int left, top, right, bottom;
+  unsigned char pr, psf, ptf;
+  bool active;
+};
+
+host_runtime_meta_type hostRuntimeMetaDefault = {0, 0, 0, 0, ""};
+std::map<unsigned long, host_runtime_meta_type> hostRuntimeMetaByIp;
+osd_pkt_hit_type osdPacketHits[OSD_PKT_HIT_MAX];
+unsigned int osdPacketHitCount = 0;
 
 struct localhsen_if_type
 {
@@ -306,9 +335,33 @@ static bool hostIsDynamic(host_type *ht);
 static void hostSetDynamic(host_type *ht, bool dynamic);
 static void hostPromoteStatic(host_type *ht);
 static bool hostShouldPersist(host_type *ht);
+static host_runtime_meta_type *hostRuntimeMeta(host_type *ht, bool create = true);
+static void hostRuntimeNotePacket(host_type *ht, const pkex_type *pkex, unsigned short port);
+static void hostRuntimeNoteDiscoveryName(host_type *ht, const char *name);
+static const char *packetShapeFilterLabel(unsigned char psf);
+static const char *packetShapeFilterString(unsigned char psf);
+static bool parsePacketShapeFilterValue(const char *value, unsigned char *out);
+static const char *packetTcpFilterLabel(unsigned char ptf);
+static const char *packetTcpFilterString(unsigned char ptf);
+static bool parsePacketTcpFilterValue(const char *value, unsigned char *out);
+static bool packetProtocolMatches(const pkex_type *pkex, unsigned char filter);
+static bool packetTcpControlMatches(const pkex_type *pkex, unsigned char filter);
+static unsigned short packetImportantPort(const pkif_type *pkt);
+static unsigned char packetColorIndex(const pkex_type *pkex);
+static unsigned char packetShape(const pkex_type *pkex);
+static bool packetLegendFilterActive(unsigned char pr, unsigned char psf, unsigned char ptf);
+static void packetFilterResetAll();
+static void packetFilterSetSensor(unsigned char sen);
+static void packetFilterSetProtocol(unsigned char pr);
+static void packetFilterSetShape(unsigned char psf);
+static void packetFilterSetTcp(unsigned char ptf);
+static void osdPacketHitsClear();
+static void osdPacketHitAdd(int left, int top, int right, int bottom, unsigned char pr, unsigned char psf, unsigned char ptf);
+static bool osdPacketHitProcess(int x, int y);
 void hostDetails();
 void mnuProcess(int m);
 static void hostDeleteManaged(host_type *ht);
+void pcktsDestroy(bool gh);
 static void dynamicHostsCleanupMaybe();
 static void settsSave();
 static void localHsenDialogOpen();
@@ -466,6 +519,45 @@ static void hostSetDynamic(host_type *ht, bool dynamic)
   hostDynamicStateByIp[hostDynamicStateKey(ht->hip)] = dynamic;
 }
 
+static host_runtime_meta_type *hostRuntimeMeta(host_type *ht, bool create)
+{
+  std::map<unsigned long, host_runtime_meta_type>::iterator it;
+  if (!ht) return 0;
+  it = hostRuntimeMetaByIp.find(hostDynamicStateKey(ht->hip));
+  if (it != hostRuntimeMetaByIp.end()) return &it->second;
+  if (!create) return 0;
+  hostRuntimeMetaByIp[hostDynamicStateKey(ht->hip)] = hostRuntimeMetaDefault;
+  return &hostRuntimeMetaByIp[hostDynamicStateKey(ht->hip)];
+}
+
+static unsigned short packetImportantPort(const pkif_type *pkt)
+{
+  if (!pkt || ((pkt->pr != IPPROTO_TCP) && (pkt->pr != IPPROTO_UDP))) return 0;
+  if (!pkt->srcpt) return pkt->dstpt;
+  if (!pkt->dstpt) return pkt->srcpt;
+  if ((pkt->srcpt >= 49152) && (pkt->dstpt < 49152)) return pkt->dstpt;
+  if ((pkt->dstpt >= 49152) && (pkt->srcpt < 49152)) return pkt->srcpt;
+  return (pkt->srcpt < pkt->dstpt ? pkt->srcpt : pkt->dstpt);
+}
+
+static void hostRuntimeNotePacket(host_type *ht, const pkex_type *pkex, unsigned short port)
+{
+  host_runtime_meta_type *meta = hostRuntimeMeta(ht);
+  if (!meta || !pkex) return;
+  meta->pr = pkex->pk.pr;
+  meta->shp = packetShape(pkex) + 1;
+  meta->clr = packetColorIndex(pkex) + 1;
+  meta->port = port;
+}
+
+static void hostRuntimeNoteDiscoveryName(host_type *ht, const char *name)
+{
+  host_runtime_meta_type *meta = hostRuntimeMeta(ht);
+  if (!meta || !name || !*name) return;
+  strncpy(meta->dnm, name, sizeof(meta->dnm) - 1);
+  meta->dnm[sizeof(meta->dnm) - 1] = '\0';
+}
+
 static void hostPromoteStatic(host_type *ht)
 {
   hostSetDynamic(ht, false);
@@ -577,8 +669,164 @@ void alrtCreate(aobj_type ao, unsigned char pr, host_type *ht)
   altsLL.Write(new alrt_type(alrt));
 }
 
-static unsigned char packetColorIndex(unsigned char pr)
+static bool packetProtocolMatches(const pkex_type *pkex, unsigned char filter)
 {
+  unsigned char pr;
+  if (!filter) return true;
+  if (!pkex) return false;
+  pr = pkex->pk.pr;
+  if (filter == IPPROTO_OTHER)
+    return (pr != IPPROTO_ICMP) && (pr != IPPROTO_TCP) && (pr != IPPROTO_UDP) && (pr != IPPROTO_ARP);
+  return (pr == filter);
+}
+
+static bool packetTcpControlMatches(const pkex_type *pkex, unsigned char filter)
+{
+  if (!filter) return true;
+  if (!pkex || (pkex->pk.pr != IPPROTO_TCP) || pkex->pld) return false;
+  if (filter == 1) return ((pkex->syn || pkex->fin) && !pkex->rst);
+  if (filter == 2) return (pkex->rst != 0);
+  return true;
+}
+
+static bool packetLegendFilterActive(unsigned char pr, unsigned char psf, unsigned char ptf)
+{
+  if (pr) return (setts.pr == pr) && !setts.sen && !setts.psf && !setts.ptf && !setts.prt;
+  if (psf) return (setts.psf == psf) && !setts.sen && !setts.pr && !setts.ptf && !setts.prt;
+  if (ptf) return (setts.ptf == ptf) && !setts.sen && (setts.pr == IPPROTO_TCP) && !setts.psf && !setts.prt;
+  return (!setts.sen && !setts.pr && !setts.psf && !setts.ptf && !setts.prt);
+}
+
+static void packetFilterResetAll()
+{
+  setts.sen = 0;
+  setts.pr = 0;
+  setts.psf = 0;
+  setts.ptf = 0;
+  setts.prt = 0;
+}
+
+static void packetFilterSetSensor(unsigned char sen)
+{
+  if ((setts.sen == sen) && !setts.pr && !setts.psf && !setts.ptf && !setts.prt) packetFilterResetAll();
+  else
+  {
+    packetFilterResetAll();
+    setts.sen = sen;
+  }
+}
+
+static void packetFilterSetProtocol(unsigned char pr)
+{
+  if (packetLegendFilterActive(pr, 0, 0)) packetFilterResetAll();
+  else
+  {
+    packetFilterResetAll();
+    setts.pr = pr;
+  }
+}
+
+static void packetFilterSetShape(unsigned char psf)
+{
+  if (packetLegendFilterActive(0, psf, 0)) packetFilterResetAll();
+  else
+  {
+    packetFilterResetAll();
+    setts.psf = psf;
+  }
+}
+
+static void packetFilterSetTcp(unsigned char ptf)
+{
+  if (packetLegendFilterActive(0, 0, ptf)) packetFilterResetAll();
+  else
+  {
+    packetFilterResetAll();
+    setts.pr = IPPROTO_TCP;
+    setts.ptf = ptf;
+  }
+}
+
+static const char *packetShapeFilterLabel(unsigned char psf)
+{
+  switch (psf)
+  {
+    case pCube + 1: return "Cube";
+    case pDouble + 1: return "Double";
+    case pTriple + 1: return "Triple";
+    case pSphere + 1: return "Sphere";
+    case pPyramid + 1: return "Pyramid";
+    default: return "All";
+  }
+}
+
+static const char *packetShapeFilterString(unsigned char psf)
+{
+  switch (psf)
+  {
+    case pCube + 1: return "cube";
+    case pDouble + 1: return "double";
+    case pTriple + 1: return "triple";
+    case pSphere + 1: return "sphere";
+    case pPyramid + 1: return "pyramid";
+    default: return "all";
+  }
+}
+
+static bool parsePacketShapeFilterValue(const char *value, unsigned char *out)
+{
+  if (!value || !out) return false;
+  if (!strcmp(value, "all")) *out = 0;
+  else if (!strcmp(value, "cube")) *out = pCube + 1;
+  else if (!strcmp(value, "double")) *out = pDouble + 1;
+  else if (!strcmp(value, "triple")) *out = pTriple + 1;
+  else if (!strcmp(value, "sphere")) *out = pSphere + 1;
+  else if (!strcmp(value, "pyramid")) *out = pPyramid + 1;
+  else return false;
+  return true;
+}
+
+static const char *packetTcpFilterLabel(unsigned char ptf)
+{
+  switch (ptf)
+  {
+    case 1: return "Setup / Finish";
+    case 2: return "Reset";
+    default: return "All";
+  }
+}
+
+static const char *packetTcpFilterString(unsigned char ptf)
+{
+  switch (ptf)
+  {
+    case 1: return "setup_finish";
+    case 2: return "reset";
+    default: return "all";
+  }
+}
+
+static bool parsePacketTcpFilterValue(const char *value, unsigned char *out)
+{
+  if (!value || !out) return false;
+  if (!strcmp(value, "all")) *out = 0;
+  else if (!strcmp(value, "setup_finish")) *out = 1;
+  else if (!strcmp(value, "reset")) *out = 2;
+  else return false;
+  return true;
+}
+
+static unsigned char packetColorIndex(const pkex_type *pkex)
+{
+  unsigned char pr;
+  if (!pkex) return 0;
+  pr = pkex->pk.pr;
+  if ((pr == IPPROTO_TCP) && !pkex->pld)
+  {
+    if (pkex->rst) return 1;
+    if (pkex->syn || pkex->fin) return 5;
+    return 2;
+  }
   switch (pr)
   {
     case IPPROTO_ICMP: return 1;
@@ -611,23 +859,25 @@ static unsigned char packetShape(const pkex_type *pkex)
 
 static int packetListIndex(unsigned char colorIndex, unsigned char shape)
 {
-  return 15 + (colorIndex * 5) + shape;
+  return PACKET_LIST_BASE + (colorIndex * PACKET_SHAPE_COUNT) + shape;
 }
 
 //create packet
 void pcktCreate(pkex_type *pkex, host_type *sht, host_type *dht, bool lk)
 {
   pkif_type *pkt = &pkex->pk;
+  unsigned char shape = packetShape(pkex), color = packetColorIndex(pkex);
   if ((pktsLL.Num() < setts.pks) && (sht->shp || dht->shp) && (!setts.sen || (pkt->sen == setts.sen))
-    && (!setts.pr || (pkt->pr == setts.pr)) && (!setts.prt || (pkt->srcpt == setts.prt) || (pkt->dstpt == setts.prt)) && goAnim)
+    && packetProtocolMatches(pkex, setts.pr) && (!setts.prt || (pkt->srcpt == setts.prt) || (pkt->dstpt == setts.prt))
+    && (!setts.psf || (shape == (setts.psf - 1))) && packetTcpControlMatches(pkex, setts.ptf) && goAnim)
   {
-    pckt_type pckt = {pkt->pr, packetShape(pkex), pkt->dstpt, frame, {(double)sht->px, (double)sht->py, (double)sht->pz}, dht}, *pk;
+    pckt_type pckt = {pkt->pr, shape, color, pkt->dstpt, frame, {(double)sht->px, (double)sht->py, (double)sht->pz}, dht}, *pk;
     pktsLL.End(2);
     while ((pk = (pckt_type *)pktsLL.Read(2)))
     {
       if (pk->frm != frame) break;
       if ((pk->cu.x == pckt.cu.x) && (pk->cu.y == pckt.cu.y) && (pk->cu.z == pckt.cu.z)
-        && (pk->ht == pckt.ht) && (pk->pr == pckt.pr) && (pk->shp == pckt.shp) && (pk->dstpt == pckt.dstpt)) return;
+        && (pk->ht == pckt.ht) && (pk->pr == pckt.pr) && (pk->shp == pckt.shp) && (pk->clr == pckt.clr) && (pk->dstpt == pckt.dstpt)) return;
       pktsLL.Prev(2);
     }
     pktsLL.Write(new pckt_type(pckt));
@@ -644,6 +894,7 @@ void pcktCreate(pkex_type *pkex, host_type *sht, host_type *dht, bool lk)
 void hostDestroyCb(void **data, long arg1, long arg2, long arg3, long arg4) {
   host_type *ht = *((host_type **) data);
   hostDynamicStateByIp.erase(hostDynamicStateKey(ht->hip));
+  hostRuntimeMetaByIp.erase(hostDynamicStateKey(ht->hip));
   delete ht;
   *data = 0;
 }
@@ -832,12 +1083,15 @@ static void drawOsdPanel()
 //update osd text
 void osdUpdate()
 {
-  char sensorLabel[16], protocolLabel[16], portLabel[16];
+  char sensorLabel[16], protocolLabel[16], portLabel[16], shapeLabel[16], tcpLabel[20];
   char packetLimitLabel[16], visiblePacketsLabel[16];
   if (setts.sen) snprintf(sensorLabel, sizeof(sensorLabel), "%u", setts.sen);
   else strcpy(sensorLabel, "All");
-  if (setts.pr) protoDecode(setts.pr, protocolLabel);
+  if (setts.pr == IPPROTO_OTHER) strcpy(protocolLabel, "Other");
+  else if (setts.pr) protoDecode(setts.pr, protocolLabel);
   else strcpy(protocolLabel, "All");
+  strcpy(shapeLabel, packetShapeFilterLabel(setts.psf));
+  strcpy(tcpLabel, packetTcpFilterLabel(setts.ptf));
   if (setts.prt) snprintf(portLabel, sizeof(portLabel), "%u", setts.prt);
   else strcpy(portLabel, "All");
   snprintf(packetLimitLabel, sizeof(packetLimitLabel), "%7u", setts.pks);
@@ -846,6 +1100,8 @@ void osdUpdate()
   osdAddSection("FILTERS");
   osdAddRow("Sensor Filter", sensorLabel, (setts.sen ? osdAccent : osdNormal));
   osdAddRow("Protocol Filter", protocolLabel, (setts.pr ? osdAccent : osdNormal));
+  osdAddRow("Packet Form", shapeLabel, (setts.psf ? osdAccent : osdNormal));
+  osdAddRow("TCP Control", tcpLabel, (setts.ptf ? osdAccent : osdNormal));
   osdAddRow("Port Filter", portLabel, (setts.prt ? osdAccent : osdNormal));
   osdAddSection("LABELS");
   osdAddRow("Display Mode", sipnToLabel(setts.sipn));
@@ -869,9 +1125,57 @@ void osdUpdate()
 
 struct pktlg_type
 {
-  unsigned char colorIndex, shape;
+  unsigned char colorIndex, shape, pr, psf;
   const char *name;
 };
+
+static void osdPacketHitsClear()
+{
+  osdPacketHitCount = 0;
+}
+
+static void osdPacketHitAdd(int left, int top, int right, int bottom, unsigned char pr, unsigned char psf, unsigned char ptf)
+{
+  if (osdPacketHitCount >= OSD_PKT_HIT_MAX) return;
+  osdPacketHits[osdPacketHitCount].left = left;
+  osdPacketHits[osdPacketHitCount].top = top;
+  osdPacketHits[osdPacketHitCount].right = right;
+  osdPacketHits[osdPacketHitCount].bottom = bottom;
+  osdPacketHits[osdPacketHitCount].pr = pr;
+  osdPacketHits[osdPacketHitCount].psf = psf;
+  osdPacketHits[osdPacketHitCount].ptf = ptf;
+  osdPacketHits[osdPacketHitCount].active = true;
+  osdPacketHitCount++;
+}
+
+static bool osdPacketHitProcess(int x, int y)
+{
+  for (unsigned int cnt = 0; cnt < osdPacketHitCount; cnt++)
+  {
+    osd_pkt_hit_type *hit = &osdPacketHits[cnt];
+    if (!hit->active) continue;
+    if ((x >= hit->left) && (x <= hit->right) && (y >= hit->bottom) && (y <= hit->top))
+    {
+      if (hit->pr)
+      {
+        packetFilterSetProtocol(hit->pr);
+      }
+      else if (hit->psf)
+      {
+        packetFilterSetShape(hit->psf);
+      }
+      else if (hit->ptf)
+      {
+        packetFilterSetTcp(hit->ptf);
+      }
+      pcktsDestroy(true);
+      osdUpdate();
+      refresh = true;
+      return true;
+    }
+  }
+  return false;
+}
 
 static void osdDrawPacketMini(int cx, int cy, unsigned char colorIndex, unsigned char shape, double scale)
 {
@@ -888,31 +1192,40 @@ static void osdDrawPktLegend(int px, int py)
 {
   static const pktlg_type legend[] =
   {
-    {1, pPyramid, "ICMP"},
-    {2, pDouble, "TCP"},
-    {3, pDouble, "UDP"},
-    {4, pCube, "ARP"},
-    {0, pCube, "OTHER"}
+    {1, pPyramid, IPPROTO_ICMP, 0, "ICMP"},
+    {2, pDouble, IPPROTO_TCP, 0, "TCP"},
+    {3, pDouble, IPPROTO_UDP, 0, "UDP"},
+    {4, pCube, IPPROTO_ARP, 0, "ARP"},
+    {0, pCube, IPPROTO_OTHER, 0, "OTHER"}
   };
   static const pktlg_type forms[] =
   {
-    {0, pCube, "Cube: control / no payload"},
-    {2, pDouble, "Double cuboid: payload"},
-    {2, pTriple, "Triple cuboid: larger payload"},
-    {3, pSphere, "Sphere: name / discovery"},
-    {1, pPyramid, "Pyramid: ICMP / fragmented"}
+    {0, pCube, 0, pCube + 1, "Cube: control / no payload"},
+    {2, pDouble, 0, pDouble + 1, "Double cuboid: payload"},
+    {2, pTriple, 0, pTriple + 1, "Triple cuboid: larger payload"},
+    {3, pSphere, 0, pSphere + 1, "Sphere: name / discovery"},
+    {1, pPyramid, 0, pPyramid + 1, "Pyramid: ICMP / fragmented"}
+  };
+  static const pktlg_type tcpctrl[] =
+  {
+    {5, pCube, 0, 0, "TCP setup / finish"},
+    {1, pCube, 0, 0, "TCP reset"}
   };
 
   int left = px, right = px + OSD_BOX_W, top, bottom;
   int legendRows = (int)(sizeof(legend) / sizeof(legend[0]));
   int formRows = (int)(sizeof(forms) / sizeof(forms[0]));
-  int coloursTop, formsTop, iconX;
+  int tcpctrlRows = (int)(sizeof(tcpctrl) / sizeof(tcpctrl[0]));
+  int coloursTop, formsTop, tcpctrlTop, iconX;
+  int rowTop, rowBottom, rowIconY, rowTextY;
   py -= (osdTextLineCount * OSD_LINE_H) + OSD_PKT_GAP_H;
+  osdPacketHitsClear();
   top = py + 12;
   coloursTop = py - 12;
   formsTop = coloursTop - (legendRows * OSD_PKT_ROW_H) - OSD_PKT_SECTION_GAP_H - 6;
+  tcpctrlTop = formsTop - (formRows * OSD_PKT_ROW_H) - OSD_PKT_SECTION_GAP_H - 6;
   iconX = left + OSD_BOX_PAD_X + 13;
-  bottom = formsTop - (formRows * OSD_PKT_ROW_H) - 24;
+  bottom = tcpctrlTop - (tcpctrlRows * OSD_PKT_ROW_H) - 24;
   glColor3ub(15, 15, 20);
   glRecti(left, top, right, bottom);
   glColor3ub(dlgrey[0], dlgrey[1], dlgrey[2]);
@@ -932,6 +1245,57 @@ static void osdDrawPktLegend(int px, int py)
   glColor3ub(brgrey[0], brgrey[1], brgrey[2]);
   glRasterPos2i(left + OSD_BOX_PAD_X, coloursTop);
   GLWin.DrawString((const unsigned char *)"COLOURS");
+  for (int cnt = 0; cnt < legendRows; cnt++)
+  {
+    if (packetLegendFilterActive(legend[cnt].pr, 0, 0))
+    {
+      rowTop = coloursTop - OSD_PKT_ROW_HILITE_TOP_Y - (cnt * OSD_PKT_ROW_H);
+      rowBottom = coloursTop - OSD_PKT_ROW_HILITE_BOTTOM_Y - (cnt * OSD_PKT_ROW_H);
+      glColor3ub(dlblue[0], dlblue[1], dlblue[2]);
+      glRecti(left + OSD_BOX_PAD_X, rowTop, right - OSD_BOX_PAD_X, rowBottom);
+      glColor3ub(yellow[0], yellow[1], yellow[2]);
+      glBegin(GL_LINE_LOOP);
+        glVertex2i(left + OSD_BOX_PAD_X, rowTop);
+        glVertex2i(right - OSD_BOX_PAD_X, rowTop);
+        glVertex2i(right - OSD_BOX_PAD_X, rowBottom);
+        glVertex2i(left + OSD_BOX_PAD_X, rowBottom);
+      glEnd();
+    }
+  }
+  for (int cnt = 0; cnt < formRows; cnt++)
+  {
+    if (packetLegendFilterActive(0, forms[cnt].psf, 0))
+    {
+      rowTop = formsTop - OSD_PKT_ROW_HILITE_TOP_Y - (cnt * OSD_PKT_ROW_H);
+      rowBottom = formsTop - OSD_PKT_ROW_HILITE_BOTTOM_Y - (cnt * OSD_PKT_ROW_H);
+      glColor3ub(dlblue[0], dlblue[1], dlblue[2]);
+      glRecti(left + OSD_BOX_PAD_X, rowTop, right - OSD_BOX_PAD_X, rowBottom);
+      glColor3ub(yellow[0], yellow[1], yellow[2]);
+      glBegin(GL_LINE_LOOP);
+        glVertex2i(left + OSD_BOX_PAD_X, rowTop);
+        glVertex2i(right - OSD_BOX_PAD_X, rowTop);
+        glVertex2i(right - OSD_BOX_PAD_X, rowBottom);
+        glVertex2i(left + OSD_BOX_PAD_X, rowBottom);
+      glEnd();
+    }
+  }
+  for (int cnt = 0; cnt < tcpctrlRows; cnt++)
+  {
+    if (packetLegendFilterActive(0, 0, (unsigned char)(cnt + 1)))
+    {
+      rowTop = tcpctrlTop - OSD_PKT_ROW_HILITE_TOP_Y - (cnt * OSD_PKT_ROW_H);
+      rowBottom = tcpctrlTop - OSD_PKT_ROW_HILITE_BOTTOM_Y - (cnt * OSD_PKT_ROW_H);
+      glColor3ub(dlblue[0], dlblue[1], dlblue[2]);
+      glRecti(left + OSD_BOX_PAD_X, rowTop, right - OSD_BOX_PAD_X, rowBottom);
+      glColor3ub(yellow[0], yellow[1], yellow[2]);
+      glBegin(GL_LINE_LOOP);
+        glVertex2i(left + OSD_BOX_PAD_X, rowTop);
+        glVertex2i(right - OSD_BOX_PAD_X, rowTop);
+        glVertex2i(right - OSD_BOX_PAD_X, rowBottom);
+        glVertex2i(left + OSD_BOX_PAD_X, rowBottom);
+      glEnd();
+    }
+  }
   glMatrixMode(GL_PROJECTION);
   glPushMatrix();
   glLoadIdentity();
@@ -941,11 +1305,27 @@ static void osdDrawPktLegend(int px, int py)
   glEnable(GL_DEPTH_TEST);
   for (int cnt = 0; cnt < legendRows; cnt++)
   {
-    osdDrawPacketMini(iconX, coloursTop - 16 - (cnt * OSD_PKT_ROW_H), legend[cnt].colorIndex, legend[cnt].shape, OSD_PKT_ICON_SCALE);
+    rowTop = coloursTop - OSD_PKT_ROW_HILITE_TOP_Y - (cnt * OSD_PKT_ROW_H);
+    rowBottom = coloursTop - OSD_PKT_ROW_HILITE_BOTTOM_Y - (cnt * OSD_PKT_ROW_H);
+    rowIconY = coloursTop - OSD_PKT_ROW_ICON_Y - (cnt * OSD_PKT_ROW_H);
+    osdPacketHitAdd(left + OSD_BOX_PAD_X, rowTop, right - OSD_BOX_PAD_X, rowBottom, legend[cnt].pr, 0, 0);
+    osdDrawPacketMini(iconX, rowIconY, legend[cnt].colorIndex, legend[cnt].shape, OSD_PKT_ICON_SCALE);
   }
   for (int cnt = 0; cnt < formRows; cnt++)
   {
-    osdDrawPacketMini(iconX, formsTop - 16 - (cnt * OSD_PKT_ROW_H), forms[cnt].colorIndex, forms[cnt].shape, OSD_PKT_ICON_SCALE);
+    rowTop = formsTop - OSD_PKT_ROW_HILITE_TOP_Y - (cnt * OSD_PKT_ROW_H);
+    rowBottom = formsTop - OSD_PKT_ROW_HILITE_BOTTOM_Y - (cnt * OSD_PKT_ROW_H);
+    rowIconY = formsTop - OSD_PKT_ROW_ICON_Y - (cnt * OSD_PKT_ROW_H);
+    osdPacketHitAdd(left + OSD_BOX_PAD_X, rowTop, right - OSD_BOX_PAD_X, rowBottom, 0, forms[cnt].psf, 0);
+    osdDrawPacketMini(iconX, rowIconY, forms[cnt].colorIndex, forms[cnt].shape, OSD_PKT_ICON_SCALE);
+  }
+  for (int cnt = 0; cnt < tcpctrlRows; cnt++)
+  {
+    rowTop = tcpctrlTop - OSD_PKT_ROW_HILITE_TOP_Y - (cnt * OSD_PKT_ROW_H);
+    rowBottom = tcpctrlTop - OSD_PKT_ROW_HILITE_BOTTOM_Y - (cnt * OSD_PKT_ROW_H);
+    rowIconY = tcpctrlTop - OSD_PKT_ROW_ICON_Y - (cnt * OSD_PKT_ROW_H);
+    osdPacketHitAdd(left + OSD_BOX_PAD_X, rowTop, right - OSD_BOX_PAD_X, rowBottom, 0, 0, (unsigned char)(cnt + 1));
+    osdDrawPacketMini(iconX, rowIconY, tcpctrl[cnt].colorIndex, tcpctrl[cnt].shape, OSD_PKT_ICON_SCALE);
   }
   glDisable(GL_DEPTH_TEST);
   glMatrixMode(GL_PROJECTION);
@@ -953,8 +1333,9 @@ static void osdDrawPktLegend(int px, int py)
   glMatrixMode(GL_MODELVIEW);
   for (int cnt = 0; cnt < legendRows; cnt++)
   {
+    rowTextY = coloursTop - OSD_PKT_ROW_TEXT_Y - (cnt * OSD_PKT_ROW_H);
     glColor3ub(white[0], white[1], white[2]);
-    glRasterPos2i(left + OSD_BOX_PAD_X + OSD_PKT_ICON_COL_W, coloursTop - 20 - (cnt * OSD_PKT_ROW_H));
+    glRasterPos2i(left + OSD_BOX_PAD_X + OSD_PKT_ICON_COL_W, rowTextY);
     GLWin.DrawString((const unsigned char *)legend[cnt].name);
   }
   glColor3ub(brgrey[0], brgrey[1], brgrey[2]);
@@ -962,9 +1343,20 @@ static void osdDrawPktLegend(int px, int py)
   GLWin.DrawString((const unsigned char *)"FORMS");
   for (int cnt = 0; cnt < formRows; cnt++)
   {
+    rowTextY = formsTop - OSD_PKT_ROW_TEXT_Y - (cnt * OSD_PKT_ROW_H);
     glColor3ub(white[0], white[1], white[2]);
-    glRasterPos2i(left + OSD_BOX_PAD_X + OSD_PKT_ICON_COL_W, formsTop - 20 - (cnt * OSD_PKT_ROW_H));
+    glRasterPos2i(left + OSD_BOX_PAD_X + OSD_PKT_ICON_COL_W, rowTextY);
     GLWin.DrawString((const unsigned char *)forms[cnt].name);
+  }
+  glColor3ub(brgrey[0], brgrey[1], brgrey[2]);
+  glRasterPos2i(left + OSD_BOX_PAD_X, tcpctrlTop);
+  GLWin.DrawString((const unsigned char *)"TCP CONTROL");
+  for (int cnt = 0; cnt < tcpctrlRows; cnt++)
+  {
+    rowTextY = tcpctrlTop - OSD_PKT_ROW_TEXT_Y - (cnt * OSD_PKT_ROW_H);
+    glColor3ub(white[0], white[1], white[2]);
+    glRasterPos2i(left + OSD_BOX_PAD_X + OSD_PKT_ICON_COL_W, rowTextY);
+    GLWin.DrawString((const unsigned char *)tcpctrl[cnt].name);
   }
 }
 
@@ -1292,7 +1684,7 @@ void alrtsDraw()
       glPushMatrix();
       glTranslated(al->ht->px, al->ht->py + 5, al->ht->pz);
       glScalef(al->sz, al->sz, al->sz);
-      glCallList(objsDraw + (al->ao == actv ? 40 : 41));
+      glCallList(objsDraw + (al->ao == actv ? ALERT_LIST_BASE : (ALERT_LIST_BASE + 1)));
       glPopMatrix();
     }
     if (animate)
@@ -1334,7 +1726,7 @@ void pcktsDraw()
     pitch = -atan2(dy, (hyp ? hyp : 1.0)) * RAD2DEG;
     glRotated(yaw, 0.0, 1.0, 0.0);
     glRotated(pitch, 1.0, 0.0, 0.0);
-    glCallList(objsDraw + packetListIndex(packetColorIndex(pk->pr), pk->shp));
+    glCallList(objsDraw + packetListIndex(pk->clr, pk->shp));
     glPopMatrix();
     if (setts.pdp)
     {
@@ -1479,6 +1871,8 @@ void GLFWCALL resizeGL(int w, int h)
 //load selected host details into htdtls
 void hostDetails()
 {
+  char pbuf[16];
+  host_runtime_meta_type *meta;
   strcpy(htdtls, "IP: ");  //4
   strcat(htdtls, seltd->htip);  //15
   if (*seltd->htmc && strcmp(seltd->htmc, "00:00:00:00:00:00"))
@@ -1495,6 +1889,29 @@ void hostDetails()
   {
     strcat(htdtls, "\nRemarks: ");  //10
     strcat(htdtls, seltd->htrm);  //255
+  }
+  meta = hostRuntimeMeta(seltd, false);
+  if (meta && meta->pr)
+  {
+    strcat(htdtls, "\nLast Protocol: ");
+    if (meta->pr == IPPROTO_OTHER) strcat(htdtls, "Other");
+    else strcat(htdtls, protoDecode(meta->pr, pbuf));
+    if (meta->shp)
+    {
+      strcat(htdtls, "\nLast Packet Form: ");
+      strcat(htdtls, packetShapeFilterLabel(meta->shp));
+    }
+    if (meta->port)
+    {
+      sprintf(pbuf, "%u", meta->port);
+      strcat(htdtls, "\nLast Important Port: ");
+      strcat(htdtls, pbuf);
+    }
+  }
+  if (meta && *meta->dnm)
+  {
+    strcat(htdtls, "\nLast Discovery Name: ");
+    strcat(htdtls, meta->dnm);
   }
 }
 
@@ -2051,12 +2468,14 @@ void btnProcess(int gs)
       {
         if (gr == HSD_PKTSPRO)
         {
+          packetFilterResetAll();
           setts.pr = atoi(gi1);
           if (setts.pr) pcktsDestroy(true);
           else osdUpdate();
         }
         else
         {
+          packetFilterResetAll();
           setts.prt = atoi(gi1);
           if (setts.prt) pcktsDestroy(true);
           else osdUpdate();
@@ -2155,11 +2574,20 @@ void infoHost()
   if ((info = fopen(hsddata("tmp-hinfo-hsd"), "w")))
   {
     char buf[11];
+    host_runtime_meta_type *meta = hostRuntimeMeta(seltd, false);
+    char pbuf[16];
     fputs(htdtls, info);
     fprintf(info, "\n\nAnomaly: %s\nLast Sensor: %u\nLast Packet: %sShow Packets: %s\nDownloads: %s"
       , (seltd->anm ? "Yes" : "No"), seltd->lsn, ctime(&seltd->lpk), (seltd->shp ? "Yes" : "No"), formatBytes(seltd->dld, buf));
     fprintf(info, "\nUploads: %s\nAuto Link Lines: %s\nLock: %s\nLifetime: %s"
       , formatBytes(seltd->uld, buf), (seltd->alk ? "Yes" : "No"), (seltd->lck ? "On" : "Off"), (hostIsDynamic(seltd) ? "Dynamic" : "Static"));  //reuse buf
+    if (meta && meta->pr)
+    {
+      fprintf(info, "\nLast Protocol: %s", (meta->pr == IPPROTO_OTHER ? "Other" : protoDecode(meta->pr, pbuf)));
+      if (meta->shp) fprintf(info, "\nLast Packet Form: %s", packetShapeFilterLabel(meta->shp));
+      if (meta->port) fprintf(info, "\nLast Important Port: %u", meta->port);
+    }
+    if (meta && *meta->dnm) fprintf(info, "\nLast Discovery Name: %s", meta->dnm);
     if (seltd->svc[0] == -1) fprintf(info, "\n\nNO SERVICES");
     else
     {
@@ -2513,51 +2941,59 @@ void GLFWCALL keyboardGL(int key, int action)
         osdUpdate();
         break;
       case kaShowSensor1Packets:
-        setts.sen = 1;
+        packetFilterSetSensor(1);
         pcktsDestroy(true);
         break;
       case kaShowSensor2Packets:
-        setts.sen = 2;
+        packetFilterSetSensor(2);
         pcktsDestroy(true);
         break;
       case kaShowSensor3Packets:
-        setts.sen = 3;
+        packetFilterSetSensor(3);
         pcktsDestroy(true);
         break;
       case kaShowSensor4Packets:
-        setts.sen = 4;
+        packetFilterSetSensor(4);
         pcktsDestroy(true);
         break;
       case kaShowSensor5Packets:
-        setts.sen = 5;
+        packetFilterSetSensor(5);
         pcktsDestroy(true);
         break;
       case kaShowSensor6Packets:
-        setts.sen = 6;
+        packetFilterSetSensor(6);
         pcktsDestroy(true);
         break;
       case kaShowSensor7Packets:
-        setts.sen = 7;
+        packetFilterSetSensor(7);
         pcktsDestroy(true);
         break;
       case kaShowSensor8Packets:
-        setts.sen = 8;
+        packetFilterSetSensor(8);
         pcktsDestroy(true);
         break;
       case kaShowSensor9Packets:
-        setts.sen = 9;
+        packetFilterSetSensor(9);
         pcktsDestroy(true);
         break;
       case kaShowAllSensorPackets:  //show packets from all hsen
-        setts.sen = 0;
+        packetFilterResetAll();
         osdUpdate();
         break;
       case kaPrevSensorPackets:  //decrement hsen to show packets from
-        setts.sen--;
+        {
+          unsigned char sen = setts.sen;
+          packetFilterResetAll();
+          setts.sen = (sen > 1 ? (unsigned char)(sen - 1) : 9);
+        }
         pcktsDestroy(true);
         break;
       case kaNextSensorPackets:  //increment hsen to show packets from
-        setts.sen++;
+        {
+          unsigned char sen = setts.sen;
+          packetFilterResetAll();
+          setts.sen = ((sen >= 1) && (sen < 9) ? (unsigned char)(sen + 1) : 1);
+        }
         pcktsDestroy(true);
         break;
       case kaToggleBroadcasts:  //toggle broadcasts
@@ -2810,6 +3246,7 @@ static void hostDeleteManaged(host_type *ht)
   hostByPositionPreMove(ht);
   hostCollisionDetach(ht);
   hostDynamicStateByIp.erase(hostDynamicStateKey(ht->hip));
+  hostRuntimeMetaByIp.erase(hostDynamicStateKey(ht->hip));
   delete ht;
   refresh = true;
 }
@@ -3199,24 +3636,38 @@ void mnuProcess(int m)
         osdUpdate();
         break;
       case 60: triggerKeyAction(kaShowAllPackets); break;  //show packets for all hosts
+      case 139: packetFilterResetAll(); osdUpdate(); break;  //show all sensors / clear packet filter
+      case 140: packetFilterSetSensor(1); pcktsDestroy(true); break;
+      case 141: packetFilterSetSensor(2); pcktsDestroy(true); break;
+      case 142: packetFilterSetSensor(3); pcktsDestroy(true); break;
+      case 143: packetFilterSetSensor(4); pcktsDestroy(true); break;
+      case 144: packetFilterSetSensor(5); pcktsDestroy(true); break;
+      case 145: packetFilterSetSensor(6); pcktsDestroy(true); break;
+      case 146: packetFilterSetSensor(7); pcktsDestroy(true); break;
+      case 147: packetFilterSetSensor(8); pcktsDestroy(true); break;
+      case 148: packetFilterSetSensor(9); pcktsDestroy(true); break;
       case 61:  //show all protocols packets
-        setts.pr = 0;
+        packetFilterResetAll();
         osdUpdate();
         break;
       case 62:  //show ICMP packets
-        setts.pr = IPPROTO_ICMP;
+        packetFilterSetProtocol(IPPROTO_ICMP);
         pcktsDestroy(true);
         break;
       case 63:  //show TCP packets
-        setts.pr = IPPROTO_TCP;
+        packetFilterSetProtocol(IPPROTO_TCP);
         pcktsDestroy(true);
         break;
       case 64:  //show UDP packets
-        setts.pr = IPPROTO_UDP;
+        packetFilterSetProtocol(IPPROTO_UDP);
         pcktsDestroy(true);
         break;
       case 65:  //show ARP packets
-        setts.pr = IPPROTO_ARP;
+        packetFilterSetProtocol(IPPROTO_ARP);
+        pcktsDestroy(true);
+        break;
+      case 133:  //show other protocol packets
+        packetFilterSetProtocol(IPPROTO_OTHER);
         pcktsDestroy(true);
         break;
       case 66:  //enter protocol to show packets for
@@ -3227,7 +3678,7 @@ void mnuProcess(int m)
         GLWin.AddButton(94, 40, GLWIN_CLOSE, "Cancel");
         break;
       case 67:  //show all ports packets
-        setts.prt = 0;
+        packetFilterResetAll();
         osdUpdate();
         break;
       case 68:  //enter port to show packets for
@@ -3237,6 +3688,15 @@ void mnuProcess(int m)
         GLWin.AddButton(30, 40, GLWIN_OK, "OK", true, true);
         GLWin.AddButton(82, 40, GLWIN_CLOSE, "Cancel");
         break;
+      case 127: packetFilterResetAll(); osdUpdate(); break;  //all packet forms
+      case 128: packetFilterSetShape(pCube + 1); pcktsDestroy(true); break;
+      case 129: packetFilterSetShape(pDouble + 1); pcktsDestroy(true); break;
+      case 130: packetFilterSetShape(pTriple + 1); pcktsDestroy(true); break;
+      case 131: packetFilterSetShape(pSphere + 1); pcktsDestroy(true); break;
+      case 132: packetFilterSetShape(pPyramid + 1); pcktsDestroy(true); break;
+      case 135: packetFilterResetAll(); osdUpdate(); break;  //all tcp control / clear packet filter
+      case 136: packetFilterSetTcp(1); pcktsDestroy(true); break;  //setup / finish
+      case 137: packetFilterSetTcp(2); pcktsDestroy(true); break;  //reset
       case 69: triggerKeyAction(kaPacketsOff); break;  //packets off
       case 70: triggerKeyAction(kaViewHome); break;  //recall home view
       case 71: triggerKeyAction(kaViewPos1); break;  //recall view position 1
@@ -3420,12 +3880,15 @@ void mnuProcess(int m)
         break;
       }
       case 105:
-        addMenuItem("PACKETS", 6, 2, 100, GLFW_KEY_BACKSPACE);
-        addMenuItem("Show All", 6, 0, 60, 0, kaShowAllPackets);
-        addMenuItem("Protocol", 6, 1, 118, 'P');
-        addMenuItem("Port", 6, 1, 119, 'T');
-        addMenuItem("Select Showing", 6, 0, 32, 'S');
-        addMenuItem("Off", 6, 0, 69, 0, kaPacketsOff);
+        addMenuItem("PACKETS", 9, 2, 100, GLFW_KEY_BACKSPACE);
+        addMenuItem("Show All", 7, 0, 60, 0, kaShowAllPackets);
+        addMenuItem("Sensor", 9, 1, 138, 'N', kaCount, msChoice, (setts.sen != 0));
+        addMenuItem("Protocol", 9, 1, 118, 'P', kaCount, msChoice, (setts.pr != 0) && !setts.ptf && !setts.prt && !setts.psf && !setts.sen);
+        addMenuItem("Form", 9, 1, 126, 'F', kaCount, msChoice, (setts.psf != 0));
+        addMenuItem("Port", 9, 1, 119, 'T', kaCount, msChoice, (setts.prt != 0));
+        addMenuItem("TCP Control", 9, 1, 134, 'C', kaCount, msChoice, (setts.ptf != 0));
+        addMenuItem("Select Showing", 9, 0, 32, 'S');
+        addMenuItem("Off", 9, 0, 69, 0, kaPacketsOff);
         break;
       case 106:
         addMenuItem("ON-ACTIVE", 6, 2, 100, GLFW_KEY_BACKSPACE);
@@ -3521,17 +3984,20 @@ void mnuProcess(int m)
         break;
       case 118:
       {
-        bool otherProtocol = (setts.pr && (setts.pr != IPPROTO_ICMP) && (setts.pr != IPPROTO_TCP) && (setts.pr != IPPROTO_UDP) && (setts.pr != IPPROTO_ARP));
+        bool customProtocol = (setts.pr && !setts.sen && !setts.psf && !setts.ptf && !setts.prt
+          && (setts.pr != IPPROTO_ICMP) && (setts.pr != IPPROTO_TCP) && (setts.pr != IPPROTO_UDP)
+          && (setts.pr != IPPROTO_ARP) && (setts.pr != IPPROTO_OTHER));
         char otherLabel[32];
-        if (otherProtocol) snprintf(otherLabel, sizeof(otherLabel), "Other... [%u]", setts.pr);
-        else strcpy(otherLabel, "Other...");
-        addMenuItem("PROTOCOL", 7, 2, 105, GLFW_KEY_BACKSPACE);
-        addMenuItem("All", 7, 0, 61, 'A', kaCount, msChoice, (setts.pr == 0));
-        addMenuItem("ICMP", 7, 0, 62, 'I', kaCount, msChoice, (setts.pr == IPPROTO_ICMP));
-        addMenuItem("TCP", 7, 0, 63, 'T', kaCount, msChoice, (setts.pr == IPPROTO_TCP));
-        addMenuItem("UDP", 7, 0, 64, 'U', kaCount, msChoice, (setts.pr == IPPROTO_UDP));
-        addMenuItem("ARP", 7, 0, 65, 'R', kaCount, msChoice, (setts.pr == IPPROTO_ARP));
-        addMenuItem(otherLabel, 7, 0, 66, 'O', kaCount, msChoice, otherProtocol);
+        if (customProtocol) snprintf(otherLabel, sizeof(otherLabel), "Enter... [%u]", setts.pr);
+        else strcpy(otherLabel, "Enter...");
+        addMenuItem("PROTOCOL", 8, 2, 105, GLFW_KEY_BACKSPACE);
+        addMenuItem("All", 8, 0, 61, 'A', kaCount, msChoice, packetLegendFilterActive(0, 0, 0));
+        addMenuItem("ICMP", 8, 0, 62, 'I', kaCount, msChoice, packetLegendFilterActive(IPPROTO_ICMP, 0, 0));
+        addMenuItem("TCP", 8, 0, 63, 'T', kaCount, msChoice, packetLegendFilterActive(IPPROTO_TCP, 0, 0));
+        addMenuItem("UDP", 8, 0, 64, 'U', kaCount, msChoice, packetLegendFilterActive(IPPROTO_UDP, 0, 0));
+        addMenuItem("ARP", 8, 0, 65, 'R', kaCount, msChoice, packetLegendFilterActive(IPPROTO_ARP, 0, 0));
+        addMenuItem("Other", 8, 0, 133, 'O', kaCount, msChoice, packetLegendFilterActive(IPPROTO_OTHER, 0, 0));
+        addMenuItem(otherLabel, 8, 0, 66, 'E', kaCount, msChoice, customProtocol);
         break;
       }
       case 119:
@@ -3540,10 +4006,38 @@ void mnuProcess(int m)
         if (setts.prt) snprintf(portLabel, sizeof(portLabel), "Enter... [%u]", setts.prt);
         else strcpy(portLabel, "Enter...");
         addMenuItem("PORT", 3, 2, 105, GLFW_KEY_BACKSPACE);
-        addMenuItem("All", 3, 0, 67, 'A', kaCount, msChoice, (setts.prt == 0));
-        addMenuItem(portLabel, 3, 0, 68, 'E', kaCount, msChoice, (setts.prt != 0));
+        addMenuItem("All", 3, 0, 67, 'A', kaCount, msChoice, packetLegendFilterActive(0, 0, 0));
+        addMenuItem(portLabel, 3, 0, 68, 'E', kaCount, msChoice, (setts.prt != 0) && !setts.sen && !setts.pr && !setts.psf && !setts.ptf);
         break;
       }
+      case 126:
+        addMenuItem("FORM", 6, 2, 105, GLFW_KEY_BACKSPACE);
+        addMenuItem("All", 6, 0, 127, 'A', kaCount, msChoice, packetLegendFilterActive(0, 0, 0));
+        addMenuItem("Cube", 6, 0, 128, 'C', kaCount, msChoice, (setts.psf == (pCube + 1)));
+        addMenuItem("Double", 6, 0, 129, 'D', kaCount, msChoice, (setts.psf == (pDouble + 1)));
+        addMenuItem("Triple", 6, 0, 130, 'T', kaCount, msChoice, (setts.psf == (pTriple + 1)));
+        addMenuItem("Sphere", 6, 0, 131, 'S', kaCount, msChoice, (setts.psf == (pSphere + 1)));
+        addMenuItem("Pyramid", 6, 0, 132, 'P', kaCount, msChoice, (setts.psf == (pPyramid + 1)));
+        break;
+      case 134:
+        addMenuItem("TCP CONTROL", 4, 2, 105, GLFW_KEY_BACKSPACE);
+        addMenuItem("All", 4, 0, 135, 'A', kaCount, msChoice, packetLegendFilterActive(0, 0, 0));
+        addMenuItem("Setup / Finish", 4, 0, 136, 'S', kaCount, msChoice, (setts.ptf == 1) && !setts.sen && (setts.pr == IPPROTO_TCP) && !setts.psf && !setts.prt);
+        addMenuItem("Reset", 4, 0, 137, 'R', kaCount, msChoice, (setts.ptf == 2) && !setts.sen && (setts.pr == IPPROTO_TCP) && !setts.psf && !setts.prt);
+        break;
+      case 138:
+        addMenuItem("SENSOR", 11, 2, 105, GLFW_KEY_BACKSPACE);
+        addMenuItem("All", 11, 0, 139, 'A', kaCount, msChoice, packetLegendFilterActive(0, 0, 0));
+        addMenuItem("Sensor 1", 11, 0, 140, '1', kaCount, msChoice, (setts.sen == 1) && !setts.pr && !setts.psf && !setts.ptf && !setts.prt);
+        addMenuItem("Sensor 2", 11, 0, 141, '2', kaCount, msChoice, (setts.sen == 2) && !setts.pr && !setts.psf && !setts.ptf && !setts.prt);
+        addMenuItem("Sensor 3", 11, 0, 142, '3', kaCount, msChoice, (setts.sen == 3) && !setts.pr && !setts.psf && !setts.ptf && !setts.prt);
+        addMenuItem("Sensor 4", 11, 0, 143, '4', kaCount, msChoice, (setts.sen == 4) && !setts.pr && !setts.psf && !setts.ptf && !setts.prt);
+        addMenuItem("Sensor 5", 11, 0, 144, '5', kaCount, msChoice, (setts.sen == 5) && !setts.pr && !setts.psf && !setts.ptf && !setts.prt);
+        addMenuItem("Sensor 6", 11, 0, 145, '6', kaCount, msChoice, (setts.sen == 6) && !setts.pr && !setts.psf && !setts.ptf && !setts.prt);
+        addMenuItem("Sensor 7", 11, 0, 146, '7', kaCount, msChoice, (setts.sen == 7) && !setts.pr && !setts.psf && !setts.ptf && !setts.prt);
+        addMenuItem("Sensor 8", 11, 0, 147, '8', kaCount, msChoice, (setts.sen == 8) && !setts.pr && !setts.psf && !setts.ptf && !setts.prt);
+        addMenuItem("Sensor 9", 11, 0, 148, '9', kaCount, msChoice, (setts.sen == 9) && !setts.pr && !setts.psf && !setts.ptf && !setts.prt);
+        break;
       case 120:
         addMenuItem("RECALL", 7, 2, 107, GLFW_KEY_BACKSPACE);
         addMenuItem("Home", 7, 0, 70, 0, kaViewHome);
@@ -3663,6 +4157,10 @@ void GLFWCALL clickGL(int button, int action)
             break;
         }
       }
+    }
+    else if (action && setts.osd && osdPacketHitProcess(mPsx, hWin - mPsy))
+    {
+      mMove = false;
     }
     else if (action)  //start selection box
     {
@@ -4796,7 +5294,7 @@ static int menuDepthForId(int menuid)
     case 110: case 111: case 112: case 113: case 114:
     case 115: case 116: case 117: case 118: case 119:
     case 120: case 121: case 122: case 123: case 124:
-    case 125:
+    case 125: case 126: case 134: case 138:
       return 2;
     default:
       return 0;
@@ -4917,6 +5415,14 @@ static bool settsLoadIni(const char *path)
     else if (!strcmp(key, "protocol_filter"))
     {
       if (parseUnsignedCharValue(value, &uc)) setts.pr = uc;
+    }
+    else if (!strcmp(key, "packet_form_filter"))
+    {
+      if (parsePacketShapeFilterValue(value, &uc)) setts.psf = uc;
+    }
+    else if (!strcmp(key, "packet_tcp_filter"))
+    {
+      if (parsePacketTcpFilterValue(value, &uc)) setts.ptf = uc;
     }
     else if (!strcmp(key, "port_filter"))
     {
@@ -5079,6 +5585,8 @@ static bool settsSaveIni(const char *path)
   fputs("[filters]\n", sts);
   fprintf(sts, "sensor_filter=%u\n", setts.sen);
   fprintf(sts, "protocol_filter=%u\n", setts.pr);
+  fprintf(sts, "packet_form_filter=%s\n", packetShapeFilterString(setts.psf));
+  fprintf(sts, "packet_tcp_filter=%s\n", packetTcpFilterString(setts.ptf));
   fprintf(sts, "port_filter=%u\n\n", setts.prt);
 
   fputs("[hsen]\n", sts);
@@ -5305,7 +5813,7 @@ void checkControls()
 //compile GL objects
 void initObjsGL()
 {
-  objsDraw = glGenLists(42);
+  objsDraw = glGenLists(OBJ_LIST_COUNT);
   glNewList(objsDraw, GL_COMPILE);  //grey host object
     hobjDraw(brgrey[0], brgrey[1], brgrey[2]);
   glEndList();
@@ -5351,7 +5859,7 @@ void initObjsGL()
   glNewList(objsDraw + 14, GL_COMPILE);  //cross object
     cobjDraw();
   glEndList();
-  for (unsigned char clr = 0; clr < 5; clr++)
+  for (unsigned char clr = 0; clr < PACKET_COLOR_COUNT; clr++)
   {
     glNewList(objsDraw + packetListIndex(clr, pCube), GL_COMPILE);
       pobjDraw(clr);
@@ -5369,10 +5877,10 @@ void initObjsGL()
       ppobjDraw(clr);
     glEndList();
   }
-  glNewList(objsDraw + 40, GL_COMPILE);  //active alert object
+  glNewList(objsDraw + ALERT_LIST_BASE, GL_COMPILE);  //active alert object
     aobjDraw(false);
   glEndList();
-  glNewList(objsDraw + 41, GL_COMPILE);  //anomaly alert object
+  glNewList(objsDraw + ALERT_LIST_BASE + 1, GL_COMPILE);  //anomaly alert object
     aobjDraw(true);
   glEndList();
 }
@@ -5488,13 +5996,18 @@ void GLFWCALL pktProcess(void *arg)
           pdns = (pdns_type *)pbuf;
           if ((sh = hostIP(pdns->dnsip, false)))
           {
+            hostRuntimeNoteDiscoveryName(sh, pdns->htnm);
             if (!*sh->htnm) strcpy(sh->htnm, pdns->htnm);
+            if (seltd == sh) hostDetails();
           }
         }
       }
       if (pksc)
       {
+        unsigned short importantPort = packetImportantPort(pkif);
         sh = hostIP(pkif->srcip, true);
+        hostRuntimeNotePacket(sh, pkex, importantPort);
+        if (seltd == sh) hostDetails();
         if (pksc == sckt)
         {
           sh->lsn = pkif->sen;
@@ -5509,6 +6022,8 @@ void GLFWCALL pktProcess(void *arg)
         }
         if ((dh = hostIP(pkif->dstip, setts.adh)))
         {
+          hostRuntimeNotePacket(dh, pkex, importantPort);
+          if (seltd == dh) hostDetails();
           if (pksc == sckt)
           {
             dh->lsn = pkif->sen;
@@ -5665,7 +6180,7 @@ int main(int argc, char *argv[])
   netSave(hsddata("0network.hnl"));  //save network layout 0
   allDestroy();
   netpsDestroy();
-  glDeleteLists(objsDraw, 42);
+  glDeleteLists(objsDraw, OBJ_LIST_COUNT);
   glfwTerminate();
 #ifndef __MINGW32__
   syslog(LOG_INFO, "stopped\n");
