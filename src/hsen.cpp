@@ -77,12 +77,10 @@ void pktProcess(u_char *u, const struct pcap_pkthdr *hdr, const u_char *pkt)
     reltm = microTime(&hdr->ts) + rpoff;
     if (reltm > nowtm) usleep(reltm - nowtm);
   }
-#ifdef __MINGW32__
-  pkif_type pkif = {0, 0, {{{0, 0, 0, 0}}}, {{{0, 0, 0, 0}}}, *u, 0};
-#else
-  pkif_type pkif = {0, 0, {0}, {0}, *u, 0};
-#endif
-  pkex_type pkex = {85, 0, 0, 0, 0, {0, 0, 0, 0, 0, 0}};  //85 used to identify packet info
+  pkif_type pkif = {0};
+  pkif.sen = *u;
+  pkex_type pkex = {0};  //85 used to identify packet info
+  pkex.id = 85;
   pkex.pk = pkif;
   bool arp = false;
   unsigned int clen = hdr->caplen;
@@ -169,6 +167,7 @@ void pktProcess(u_char *u, const struct pcap_pkthdr *hdr, const u_char *pkt)
         pkex.pk.dstpt = ntohs(thdr->dest);
         pkex.syn = thdr->syn;
         pkex.ack = thdr->ack;
+        pkex.pld = (pkex.sz > (unsigned int)(ihsz + (thdr->doff * 4)));
       }
       else pkex.pk.pr = IPPROTO_FRAG;
     }
@@ -180,6 +179,7 @@ void pktProcess(u_char *u, const struct pcap_pkthdr *hdr, const u_char *pkt)
         if (hadr.sin_port == uhdr->dest) return;  //ignore hsen to hosts3d packets
         pkex.pk.srcpt = ntohs(uhdr->source);
         pkex.pk.dstpt = ntohs(uhdr->dest);
+        pkex.pld = (ntohs(uhdr->len) > sizeof(udphdr));
         udp_type udpt = udpTrack(&pkex.pk);
         if (udpt == src) pkex.ack = 1;  //ACK used to identify service
         if ((pkex.pk.srcpt == 53) && (clen > dtsz))  //port 53 DNS, malformed packet check

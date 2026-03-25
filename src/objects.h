@@ -121,6 +121,8 @@ struct pobj_type
   tri_type tri[12];
 };
 
+enum pshp_type { pCube, pDouble, pTriple, pSphere, pPyramid };
+
 //host object info
 struct host_type
 {
@@ -156,7 +158,7 @@ struct alrt_type
 //packet object info
 struct pckt_type
 {
-  unsigned char pr;
+  unsigned char pr, shp;
   unsigned short dstpt, frm;  //frame
   pos_type cu;  //current
   host_type *ht;  //destination host
@@ -166,6 +168,13 @@ enum ptrc_type { stp, hlt, rec, rpy };  //packet traffic - stop, halt, record, r
 
 //packet traffic record
 struct pkrc_type
+{
+  timeval ptime;  //time of packet
+  pkex_type pk;  //packet
+};
+
+//legacy packet traffic record
+struct pkrc1_type
 {
   timeval ptime;  //time of packet
   pkif_type pk;  //packet
@@ -208,6 +217,10 @@ void mobjDraw(bool sel);
 
 //draw packet object
 void pobjDraw(int c);
+void pobj2Draw(int c);
+void pobj3Draw(int c);
+void psobjDraw(int c);
+void ppobjDraw(int c);
 
 //draw alert object
 void aobjDraw(bool an);

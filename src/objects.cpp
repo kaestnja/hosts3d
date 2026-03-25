@@ -15,6 +15,7 @@
    GNU General Public License for more details. */
 
 #include <GL/glfw.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>  //atoi()
 #include <string.h>  //strcat(), strcpy()
@@ -249,40 +250,146 @@ void mobjDraw(bool sel)
   glEnd();
 }
 
-//draw packet object
-void pobjDraw(int c)
+static unsigned char packetColorClamp(int value)
 {
+  if (value < 0) return 0;
+  if (value > 255) return 255;
+  return (unsigned char)value;
+}
+
+static void packetColorBase(int c, int *r, int *g, int *b)
+{
+  switch (c)
+  {
+    case 1: *r = red[0]; *g = red[1]; *b = red[2]; break;
+    case 2: *r = green[0]; *g = green[1]; *b = green[2]; break;
+    case 3: *r = blue[0]; *g = blue[1]; *b = blue[2]; break;
+    case 4: *r = yellow[0]; *g = yellow[1]; *b = yellow[2]; break;
+    default: *r = grey[0]; *g = grey[1]; *b = grey[2]; break;
+  }
+}
+
+static void packetColorShade(int c, int shade)
+{
+  int r, g, b;
+  packetColorBase(c, &r, &g, &b);
+  if (c == 0)
+  {
+    if (shade == 0) glColor3ub(brgrey[0], brgrey[1], brgrey[2]);
+    else if (shade == 1) glColor3ub(grey[0], grey[1], grey[2]);
+    else glColor3ub(dlgrey[0], dlgrey[1], dlgrey[2]);
+    return;
+  }
+  if (shade == 0) glColor3ub(packetColorClamp(r + 100), packetColorClamp(g + 100), packetColorClamp(b + 100));
+  else if (shade == 1) glColor3ub(packetColorClamp(r + 50), packetColorClamp(g + 50), packetColorClamp(b + 50));
+  else glColor3ub((unsigned char)r, (unsigned char)g, (unsigned char)b);
+}
+
+static void packetBoxDraw(int c, float zhalf)
+{
+  vtx_type vtx[8] =
+  {
+    {-1.0f,  1.0f,  zhalf},
+    {-1.0f,  1.0f, -zhalf},
+    { 1.0f,  1.0f, -zhalf},
+    { 1.0f,  1.0f,  zhalf},
+    {-1.0f, -1.0f,  zhalf},
+    {-1.0f, -1.0f, -zhalf},
+    { 1.0f, -1.0f, -zhalf},
+    { 1.0f, -1.0f,  zhalf}
+  };
+
   glBegin(GL_TRIANGLES);
   for (unsigned char obj = 0; obj < 12; obj++)
   {
-    switch (c)
-    {
-      case 0: glColor3ub(brgrey[0], brgrey[1], brgrey[2]); break;
-      case 1: glColor3ub(red[0], red[1] + 100, red[2] + 100); break;
-      case 2: glColor3ub(green[0] + 100, green[1], green[2] + 100); break;
-      case 3: glColor3ub(blue[0] + 100, blue[1] + 100, blue[2]); break;
-      case 4: glColor3ub(yellow[0], yellow[1], yellow[2] + 100); break;
-    }
-    glVertex3f(pobj.vtx[pobj.tri[obj].a].x, pobj.vtx[pobj.tri[obj].a].y, pobj.vtx[pobj.tri[obj].a].z);
-    switch (c)
-    {
-      case 0: glColor3ub(grey[0], grey[1], grey[2]); break;
-      case 1: glColor3ub(red[0], red[1] + 50, red[2] + 50); break;
-      case 2: glColor3ub(green[0] + 50, green[1], green[2] + 50); break;
-      case 3: glColor3ub(blue[0] + 50, blue[1] + 50, blue[2]); break;
-      case 4: glColor3ub(yellow[0], yellow[1], yellow[2] + 50); break;
-    }
-    glVertex3f(pobj.vtx[pobj.tri[obj].b].x, pobj.vtx[pobj.tri[obj].b].y, pobj.vtx[pobj.tri[obj].b].z);
-    switch (c)
-    {
-      case 0: glColor3ub(dlgrey[0], dlgrey[1], dlgrey[2]); break;
-      case 1: glColor3ub(red[0], red[1], red[2]); break;
-      case 2: glColor3ub(green[0], green[1], green[2]); break;
-      case 3: glColor3ub(blue[0], blue[1], blue[2]); break;
-      case 4: glColor3ub(yellow[0], yellow[1], yellow[2]); break;
-    }
-    glVertex3f(pobj.vtx[pobj.tri[obj].c].x, pobj.vtx[pobj.tri[obj].c].y, pobj.vtx[pobj.tri[obj].c].z);
+    packetColorShade(c, 0);
+    glVertex3f(vtx[pobj.tri[obj].a].x, vtx[pobj.tri[obj].a].y, vtx[pobj.tri[obj].a].z);
+    packetColorShade(c, 1);
+    glVertex3f(vtx[pobj.tri[obj].b].x, vtx[pobj.tri[obj].b].y, vtx[pobj.tri[obj].b].z);
+    packetColorShade(c, 2);
+    glVertex3f(vtx[pobj.tri[obj].c].x, vtx[pobj.tri[obj].c].y, vtx[pobj.tri[obj].c].z);
   }
+  glEnd();
+}
+
+//draw packet object
+void pobjDraw(int c)
+{
+  packetBoxDraw(c, 1.0f);
+}
+
+//draw double-length packet object
+void pobj2Draw(int c)
+{
+  packetBoxDraw(c, 2.0f);
+}
+
+//draw triple-length packet object
+void pobj3Draw(int c)
+{
+  packetBoxDraw(c, 3.0f);
+}
+
+//draw spherical packet object
+void psobjDraw(int c)
+{
+  const int stacks = 6, slices = 10;
+  const float radius = 1.35f;
+  const double PI = 3.14159265358979323846;
+  for (int lat = 0; lat < stacks; lat++)
+  {
+    double lat0 = (-PI / 2.0) + ((double)lat * PI / (double)stacks);
+    double lat1 = (-PI / 2.0) + ((double)(lat + 1) * PI / (double)stacks);
+    float y0 = (float)(sin(lat0) * radius);
+    float y1 = (float)(sin(lat1) * radius);
+    float r0 = (float)(cos(lat0) * radius);
+    float r1 = (float)(cos(lat1) * radius);
+    glBegin(GL_QUAD_STRIP);
+    for (int lon = 0; lon <= slices; lon++)
+    {
+      double ang = ((double)lon * 2.0 * PI / (double)slices);
+      float cx = (float)cos(ang), cz = (float)sin(ang);
+      packetColorShade(c, (lat < 2 ? 0 : (lat < 4 ? 1 : 2)));
+      glVertex3f(cx * r0, y0, cz * r0);
+      packetColorShade(c, (lat < 1 ? 0 : (lat < 3 ? 1 : 2)));
+      glVertex3f(cx * r1, y1, cz * r1);
+    }
+    glEnd();
+  }
+}
+
+//draw pyramid packet object
+void ppobjDraw(int c)
+{
+  static const vtx_type vtx[5] =
+  {
+    { 0.0f,  1.6f,  0.0f},
+    {-1.0f, -1.0f,  1.0f},
+    {-1.0f, -1.0f, -1.0f},
+    { 1.0f, -1.0f, -1.0f},
+    { 1.0f, -1.0f,  1.0f}
+  };
+
+  glBegin(GL_TRIANGLES);
+  for (unsigned char face = 0; face < 4; face++)
+  {
+    packetColorShade(c, 0);
+    glVertex3f(vtx[0].x, vtx[0].y, vtx[0].z);
+    packetColorShade(c, 1);
+    glVertex3f(vtx[1 + face].x, vtx[1 + face].y, vtx[1 + face].z);
+    packetColorShade(c, 2);
+    glVertex3f(vtx[1 + ((face + 1) % 4)].x, vtx[1 + ((face + 1) % 4)].y, vtx[1 + ((face + 1) % 4)].z);
+  }
+  glEnd();
+
+  glBegin(GL_TRIANGLES);
+  packetColorShade(c, 2);
+  glVertex3f(vtx[1].x, vtx[1].y, vtx[1].z);
+  glVertex3f(vtx[2].x, vtx[2].y, vtx[2].z);
+  glVertex3f(vtx[3].x, vtx[3].y, vtx[3].z);
+  glVertex3f(vtx[3].x, vtx[3].y, vtx[3].z);
+  glVertex3f(vtx[4].x, vtx[4].y, vtx[4].z);
+  glVertex3f(vtx[1].x, vtx[1].y, vtx[1].z);
   glEnd();
 }
 
@@ -462,19 +569,18 @@ void pkrcCopy(const char *ifn, const char *ofn)
   FILE *ifile, *ofile;
   if ((ifile = fopen(ifn, "rb")))
   {
-    char hpt[4];
-    if (fgets(hpt, 4, ifile))
+    char hpt[4] = {0, 0, 0, 0}, buf[4096];
+    size_t got;
+    if (fread(hpt, 1, 3, ifile) == 3)
     {
-      if (!strcmp(hpt, "HPT"))
+      if (!strcmp(hpt, "HPT") || !strcmp(hpt, "HP2"))
       {
         if ((ofile = fopen(ofn, "wb")))
         {
-          fputs("HPT", ofile);
-          pkrc_type pkcp;
-          size_t pcsz = sizeof(pkcp);
-          while (fread(&pkcp, pcsz, 1, ifile) == 1)
+          rewind(ifile);
+          while ((got = fread(buf, 1, sizeof(buf), ifile)) > 0)
           {
-            if (fwrite(&pkcp, pcsz, 1, ofile) != 1) break;
+            if (fwrite(buf, 1, got, ofile) != got) break;
           }
           fclose(ofile);
         }
