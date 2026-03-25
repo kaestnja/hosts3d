@@ -158,7 +158,7 @@ struct alrt_type
 //packet object info
 struct pckt_type
 {
-  unsigned char pr, shp;
+  unsigned char pr, shp, clr;
   unsigned short dstpt, frm;  //frame
   pos_type cu;  //current
   host_type *ht;  //destination host
@@ -188,7 +188,7 @@ enum sona_type { don, alt, ipn, hst, slt };  //on-active - do nothing, alert, IP
 struct sett_type
 {
   bool hspm;  //start hsen promiscuous mode
-  unsigned char sen, pr, mvd;  //display packets from hsen (0 for all), display packets by protocol (0 for all), master visibility duration
+  unsigned char sen, pr, psf, ptf, mvd;  //display packets from hsen (0 for all), display packets by protocol (0 for all), packet shape filter (0 for all), TCP control filter (0 for all), master visibility duration
   unsigned short prt, osd:1, bct:1, fsp:1, adh:1, anm:1, spe:1, nhl:1, nhp:1, pdp:1, spr:7;  //display packets by port (0 for all)
     //OSD, broadcasts, fast packets, add dest hosts, anomaly detect, spare, new host link, new host packets, packet dest port, spare (future use)
   unsigned int pks;  //number of packets allowed on screen before drop

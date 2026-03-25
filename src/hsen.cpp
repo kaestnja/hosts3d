@@ -167,6 +167,9 @@ void pktProcess(u_char *u, const struct pcap_pkthdr *hdr, const u_char *pkt)
         pkex.pk.dstpt = ntohs(thdr->dest);
         pkex.syn = thdr->syn;
         pkex.ack = thdr->ack;
+        pkex.rst = thdr->rst;
+        pkex.fin = thdr->fin;
+        pkex.psh = thdr->psh;
         pkex.pld = (pkex.sz > (unsigned int)(ihsz + (thdr->doff * 4)));
       }
       else pkex.pk.pr = IPPROTO_FRAG;

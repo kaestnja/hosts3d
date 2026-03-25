@@ -265,6 +265,7 @@ static void packetColorBase(int c, int *r, int *g, int *b)
     case 2: *r = green[0]; *g = green[1]; *b = green[2]; break;
     case 3: *r = blue[0]; *g = blue[1]; *b = blue[2]; break;
     case 4: *r = yellow[0]; *g = yellow[1]; *b = yellow[2]; break;
+    case 5: *r = orange[0]; *g = orange[1]; *b = orange[2]; break;
     default: *r = grey[0]; *g = grey[1]; *b = grey[2]; break;
   }
 }

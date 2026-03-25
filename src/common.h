@@ -22,6 +22,7 @@
 
 #define	IPPROTO_ARP   249  //protocol 249 unassigned used to identify ARP packet
 #define	IPPROTO_FRAG  250  //protocol 250 unassigned used to identify fragmented IP packet
+#define	IPPROTO_OTHER 251  //virtual filter id used to identify protocols outside the built-in packet families
 
 #define HOST3D_PORT  10111  //port 10111 unassigned, used for hsen-to-hosts3d comms
 
@@ -38,7 +39,7 @@ struct pkif_type
 #pragma pack(1)
 struct pkex_type
 {
-  char id, syn:1, ack:1, pld:1, spr:5;  //payload present, spare (future use)
+  char id, syn:1, ack:1, rst:1, fin:1, psh:1, pld:1, spr:2;  //TCP flags, payload present, spare
   unsigned int sz;
   unsigned char srcmc[6];
   pkif_type pk;

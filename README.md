@@ -288,6 +288,11 @@ Runtime behavior not explicitly listed in `controls.txt`:
 - The top-right OSD now spells out current filters and toggles using the same names as `settings.ini`, for example `Display Mode`, `Display Scope`, `On-Active Action`, and `Packet Limit`.
 - The OSD is grouped into `FILTERS`, `LABELS`, `PACKETS`, and `RUNTIME`, with grey labels, white values, yellow highlights for active deviations, and red alerts for important attention states.
 - The packet legend inside the OSD now renders actual miniature 3D packet examples at an angled view instead of flat markers, using the same shapes as the live animated packet objects.
+- Clicking a packet example inside the OSD legend immediately applies the matching protocol, packet-form, or TCP-control filter.
+- Packet traffic filters are exclusive: at any moment you either see all packet traffic, or exactly one active packet filter, whether that filter was chosen by sensor, protocol, port, packet form, or TCP control example.
+- The currently active OSD packet-example row is highlighted directly in the legend.
+- The `Packets` menu mirrors the same active filter state for sensor, protocol, form, port, and TCP control using the same visible choice markers.
+- Selected host details now include the last observed protocol, the last important port, and the last observed discovery name when available.
 - Legacy short forms such as `Sen`, `Pro`, `Prt`, `Act`, and `Pkts` are no longer used in the OSD.
 - `Esc` closes the open menu or dialog.
 
@@ -467,14 +472,29 @@ Conditional items depend on current display mode.
 | Item |
 |---|
 | `Show All (U)` |
+| `Sensor` |
 | `Protocol` |
+| `Form` |
 | `Port` |
+| `TCP Control` |
 | `Select Showing` |
 | `Off (K)` |
 
-#### `Packets > Protocol`
-Conditional by active protocol filter.
+#### `Packets > Sensor`
+| Possible item |
+|---|
+| `All` |
+| `Sensor 1` |
+| `Sensor 2` |
+| `Sensor 3` |
+| `Sensor 4` |
+| `Sensor 5` |
+| `Sensor 6` |
+| `Sensor 7` |
+| `Sensor 8` |
+| `Sensor 9` |
 
+#### `Packets > Protocol`
 | Possible item |
 |---|
 | `All` |
@@ -482,13 +502,31 @@ Conditional by active protocol filter.
 | `TCP` |
 | `UDP` |
 | `ARP` |
-| `Other...` |
+| `Other` |
+| `Enter...` |
+
+#### `Packets > Form`
+| Possible item |
+|---|
+| `All` |
+| `Cube` |
+| `Double` |
+| `Triple` |
+| `Sphere` |
+| `Pyramid` |
 
 #### `Packets > Port`
 | Possible item |
 |---|
-| `All` (if a port filter is active) |
-| `Enter` |
+| `All` |
+| `Enter...` |
+
+#### `Packets > TCP Control`
+| Possible item |
+|---|
+| `All` |
+| `Setup / Finish` |
+| `Reset` |
 
 ### `On-Active`
 Conditional by active on-active mode.
@@ -601,8 +639,10 @@ This section helps you map what you see on-screen back to the current implementa
 | Host colors | default/grey, orange, yellow, fluro, green, mint, aqua, blue(sky), purple, violet |
 | Selected host | bright red |
 | Multi-host collision object | red/yellow/green tones; selected variant in bright red tones |
-| ICMP packet | red |
-| TCP packet | green |
+| ICMP packet | red pyramid |
+| TCP payload packet | green |
+| TCP setup/finish control packet | orange cube |
+| TCP reset packet | red cube |
 | UDP packet | blue |
 | ARP packet | yellow |
 | Other/fragmented packet | grey |
@@ -611,7 +651,7 @@ This section helps you map what you see on-screen back to the current implementa
 | Packet form: triple cuboid | larger payload-carrying packet |
 | Packet form: sphere | name/discovery traffic such as DNS, mDNS, LLMNR, or NetBIOS name service |
 | Packet form: pyramid | exceptional traffic such as ICMP or fragmented packets |
-| Packet legend in OSD | rendered as miniature 3D examples of the real packet objects, shown from an angled view |
+| Packet legend in OSD | rendered as miniature 3D examples of the real packet objects, shown from an angled view and clickable for protocol/form filters |
 | Anomaly alert | bright red |
 | On-active alert | protocol color |
 | Link lines | dull grey |
