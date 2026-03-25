@@ -239,7 +239,7 @@ Notes:
 ### Keyboard Customization
 - Keyboard bindings live in the `[keybindings]` section of `settings.ini`.
 - `controls.txt` is regenerated from the current bindings when Hosts3D starts.
-- Supported examples: `Shift + 1`, `Shift + 0`, `F7`, `F10`, `F11`, `F12`, `Ctrl + K`, `Ctrl + Shift + F1`, `Tab`, `Plus`, `Minus`, `[` and `]`.
+- Supported examples: `1`, `0`, `F7`, `F10`, `F11`, `F12`, `Ctrl + K`, `Ctrl + Shift + F1`, `Tab`, `Plus`, `Minus`, `Comma`, and `Period`.
 
 ### Dynamic and Static Hosts
 - Automatically discovered traffic hosts start as `dynamic`.
@@ -282,6 +282,9 @@ Runtime behavior not explicitly listed in `controls.txt`:
 - The in-app help reflects the current bindings from `settings.ini`; the list below shows the default mapping.
 - When the help overlay is visible, the mouse wheel scrolls the help only while the mouse cursor is over the overlay.
 - Menus now show state markers directly: `[X]/[ ]` for toggles, `(*)/( )` for current mode choices.
+- The top-right OSD now spells out current filters and toggles using the same names as `settings.ini`, for example `Display Mode`, `Display Scope`, `On-Active Action`, and `Packet Limit`.
+- The OSD is grouped into `FILTERS`, `LABELS`, `PACKETS`, and `RUNTIME`, with grey labels, white values, yellow highlights for active deviations, and red alerts for important attention states.
+- Legacy short forms such as `Sen`, `Pro`, `Prt`, `Act`, and `Pkts` are no longer used in the OSD.
 - `Esc` closes the open menu or dialog.
 
 ### Default Controls List
@@ -344,17 +347,17 @@ P	Show Packets for Selection
 Ctrl + P	Stop Showing Packets for Selection
 U	Show Packets for All Hosts
 Ctrl + U	Toggle Show Packets for New Hosts [P]
-Shift + 1	Show Packets from Sensor 1
-Shift + 2	Show Packets from Sensor 2
-Shift + 3	Show Packets from Sensor 3
-Shift + 4	Show Packets from Sensor 4
-Shift + 5	Show Packets from Sensor 5
-Shift + 6	Show Packets from Sensor 6
-Shift + 7	Show Packets from Sensor 7
-Shift + 8	Show Packets from Sensor 8
-Shift + 9	Show Packets from Sensor 9
-Shift + 0	Show Packets from All Sensors
-[ / ]	Change Sensor to Show Packets from
+1	Show Packets from Sensor 1
+2	Show Packets from Sensor 2
+3	Show Packets from Sensor 3
+4	Show Packets from Sensor 4
+5	Show Packets from Sensor 5
+6	Show Packets from Sensor 6
+7	Show Packets from Sensor 7
+8	Show Packets from Sensor 8
+9	Show Packets from Sensor 9
+0	Show Packets from All Sensors
+Comma / Period	Change Sensor to Show Packets from
 B	Toggle Show Simulated Broadcasts [B]
 Minus	Decrease Allowed Packets
 Plus	Increase Allowed Packets
