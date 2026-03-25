@@ -374,20 +374,19 @@ host_type *hostAtpos(int px, int py, int pz, host_type *pht)
 //add an entry to the hstsByIp hashtable
 void newHostByIp(host_type *ht) {
   HtKeyType key = keyFromIpAddress(ht->hip);
-  void *ret = hstsByIp.newEntryAtBucket(key, (void *) ht);
+  (void)hstsByIp.newEntryAtBucket(key, (void *) ht);
 }
 
 // remove an entry from the hstsByPos hashtable
 void hostByPositionPreMove(host_type *ht) {
-  bool success;
   HtKeyType key = keyFromCoOrdinates(ht->px, ht->py, ht->pz);
-  success = hstsByPos.deleteEntryAtBucket(0, key, (void *) ht);
+  (void)hstsByPos.deleteEntryAtBucket(0, key, (void *) ht);
 }
 
 // add an entry to the hstsByPos hashtable
 void hostByPositionPostMove(host_type *ht) {
   HtKeyType key = keyFromCoOrdinates(ht->px, ht->py, ht->pz);
-  void *ret = hstsByPos.newEntryAtBucket(key, (void *) ht);
+  (void)hstsByPos.newEntryAtBucket(key, (void *) ht);
 }
 
 //find blank host position
@@ -574,7 +573,7 @@ void pcktCreate(pkif_type *pkt, host_type *sht, host_type *dht, bool lk)
   if ((pktsLL.Num() < setts.pks) && (sht->shp || dht->shp) && (!setts.sen || (pkt->sen == setts.sen))
     && (!setts.pr || (pkt->pr == setts.pr)) && (!setts.prt || (pkt->srcpt == setts.prt) || (pkt->dstpt == setts.prt)) && goAnim)
   {
-    pckt_type pckt = {pkt->pr, pkt->dstpt, frame, {sht->px, sht->py, sht->pz}, dht}, *pk;
+    pckt_type pckt = {pkt->pr, pkt->dstpt, frame, {(double)sht->px, (double)sht->py, (double)sht->pz}, dht}, *pk;
     pktsLL.End(2);
     while ((pk = (pckt_type *)pktsLL.Read(2)))
     {
@@ -1755,14 +1754,12 @@ void btnProcess(int gs)
         }
         else
         {
-          bool anet = false, ipok;
-          unsigned char cnt;
+          bool anet = false;
           unsigned short sprt = 0;
-          unsigned int found = 0;
           in_addr_t mask = 0, net = 0;
 	  FindHostsCbData findhostscbdata;
 
-          char ttmp[19], lmc[18], lnm[256], lrm[256], *cidr;  //lowercase MAC, name, remarks
+          char ttmp[19], *cidr;
           if (*gi1)
           {
             strcpy(ttmp, gi1);
@@ -3016,13 +3013,13 @@ void mnuProcess(int m)
         {
           view_type tview = {(seltd->pz < 0 ? 0.0 : 180.0),
 			     0.0,
-			     {seltd->px,
+			     {(double)seltd->px,
 			      seltd->py + 5.0,
-			      seltd->pz + ((seltd->pz < 0 ? -16 : 16) * MOV)
+			      (double)(seltd->pz + ((seltd->pz < 0 ? -16 : 16) * MOV))
 			     },
-			     {seltd->px,
+			     {(double)seltd->px,
 			      seltd->py + 5.0,
-			      seltd->pz + ((seltd->pz < 0 ? -15 : 15) * MOV)
+			      (double)(seltd->pz + ((seltd->pz < 0 ? -15 : 15) * MOV))
 			     }
 	  };
           setts.vws[0] = tview;

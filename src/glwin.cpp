@@ -979,11 +979,17 @@ int MyGLWin::AddCheck(int left, int top, bool state)
 }
 
 //create input object, return name of input object
-int MyGLWin::AddInput(int left, int top, unsigned int cwidth, int max, const char *text, bool lower)
+int MyGLWin::AddInput(int left, int top, unsigned int cwidth, unsigned int max, const char *text, bool lower)
 {
+  unsigned int maxChars, textLen, cursorPos, firstPos;
   if (!lastWin) return -1;  //check parent window object exists
-  glin_obj glin = {GLWIN_INPUT, lastWin, lower, names++, left, top, cwidth, strlen(text), (strlen(text) > cwidth ? strlen(text) - cwidth : 0), max};
-  strcpy(glin.text, text);  //default text
+  maxChars = (max < (sizeof(((glin_obj *)0)->text) - 1) ? max : (sizeof(((glin_obj *)0)->text) - 1));
+  textLen = strlen(text);
+  cursorPos = (textLen > maxChars ? maxChars : textLen);
+  firstPos = (cursorPos > cwidth ? cursorPos - cwidth : 0);
+  glin_obj glin = {GLWIN_INPUT, lastWin, lower, names++, left, top, cwidth, cursorPos, firstPos, maxChars};
+  strncpy(glin.text, text, maxChars);
+  glin.text[maxChars] = '\0';
   currInput = glin.name;  //set input object focus (for keys)
   lastInput = (glin_obj *)GLWinLL.Write(new glin_obj(glin));
   return glin.name;
