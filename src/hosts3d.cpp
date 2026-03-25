@@ -40,6 +40,7 @@
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
+#include "version.h"
 #include "glwin.h"
 #include "objects.h"
 #ifdef __MINGW32__
@@ -3191,7 +3192,7 @@ void mnuProcess(int m)
         break;
       case 98:  //about
         GLWin.CreateWin(-1, -1, 230, 138, "ABOUT");
-        GLWin.AddLabel(10, 10, "Hosts3D 1.16");
+        GLWin.AddLabel(10, 10, "Hosts3D " HSD_VERSION_STR);
         GLWin.AddLabel(10, 26, "Copyright (c) 2006-2011  Del Castle");
         GLWin.AddLabel(10, 42, "http://hosts3d.sourceforge.net");
         GLWin.AddLabel(10, 58, "Community-maintained continuation");
@@ -5416,7 +5417,7 @@ int main(int argc, char *argv[])
   if (getopt(argc, argv, "f") == 'f') fullscn = true;
   else if (argc != 1)
   {
-    fprintf(stderr, "hosts3d 1.16 usage: %s [-f]\n  -f : display full screen\n", argv[0]);
+    fprintf(stderr, "hosts3d " HSD_VERSION_STR " usage: %s [-f]\n  -f : display full screen\n", argv[0]);
     return 1;
   }
 
