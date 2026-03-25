@@ -59,18 +59,28 @@ static const int HELP_OVERLAY_MARGIN = 10;
 static const int HELP_OVERLAY_HEADER_H = 28;
 static const int HELP_OVERLAY_FOOTER_H = 18;
 static const int HELP_OVERLAY_KEY_COL_W = 118;
-static const int OSD_MIN_W = 300;
-static const int OSD_MIN_H = 220;
+static const int OSD_MIN_W = 420;
+static const int OSD_MIN_H = 320;
 static const int OSD_LINE_H = 13;
-static const int OSD_PKT_GAP_H = 13;
-static const int OSD_PKT_TEXT_LINES = 7;
+static const int OSD_PKT_GAP_H = 18;
+static const int OSD_CHAR_W = 6;
+static const int OSD_MARGIN_X = 10;
+static const int OSD_MARGIN_Y = 16;
+static const int OSD_BOX_PAD_X = 8;
+static const int OSD_BOX_PAD_Y = 8;
+static const int OSD_LABEL_COL_CHARS = 29;
+static const int OSD_VALUE_COL_CHARS = 16;
+static const int OSD_BOX_W = (OSD_BOX_PAD_X * 2) + ((OSD_LABEL_COL_CHARS + OSD_VALUE_COL_CHARS) * OSD_CHAR_W);
+static const int OSD_VALUE_X = OSD_BOX_PAD_X + (OSD_LABEL_COL_CHARS * OSD_CHAR_W);
+static const unsigned int OSD_MAX_ROWS = 24;
 int wWin = DEFAULT_WIN_W, hWin = DEFAULT_WIN_H, mBxx, mBxy, mPsx = 0, mPsy = 0, mWhl = 0, GLResult[6] = {0, 0, 0, 0, 0, 0};  //2D GUI result identification
 time_t atime = 0, distm;  //packet traffic display time offset
 ptrc_type ptrc = stp;  //packet traffic state
 pkrc_type pkrp;  //packet traffic replay packet
 unsigned short frame = 0;
 unsigned long long fps = 0, rpoff;  //packet traffic replay time offset
-char goHosts = 2, osdtxt[83], htdtls[570];
+char goHosts = 2, htdtls[570];
+unsigned int osdTextLineCount = 0;
 view_type vwdef[2] = {{0.0, 0.0, {0.0, 75.0, -360.0}, {0.0, 75.0, MOV - 360.0}}, {90.0, 0.0, {-360.0, 75.0, 0.0}, {MOV - 360.0, 75.0, 0.0}}};  //default views
 sett_type setts = {false, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 5000, "", "<sudo command> hsen", "1", "eth0", "", "<sudo command> killall hsen"
   , {"", "", "", ""}, ins, off, alt, {vwdef[0], vwdef[0], vwdef[0], vwdef[0], vwdef[0]}};  //settings
@@ -96,6 +106,18 @@ struct help_overlay_line_type
 };
 
 help_overlay_line_type helpOverlayLines[HELP_OVERLAY_MAX_LINES];
+
+enum osd_color_type { osdNormal, osdAccent, osdAlert };
+
+struct osd_row_type
+{
+  bool section;
+  osd_color_type valueColor;
+  char label[40];
+  char value[24];
+};
+
+osd_row_type osdRows[OSD_MAX_ROWS];
 
 struct localhsen_if_type
 {
@@ -207,18 +229,18 @@ static keybind_type keybinds[kaCount] =
   {"hide_selection_packets", CTRLKEY('P')},
   {"show_all_packets", 'U'},
   {"toggle_show_packets_new_hosts", CTRLKEY('U')},
-  {"show_sensor_1_packets", SHIFTKEY('1')},
-  {"show_sensor_2_packets", SHIFTKEY('2')},
-  {"show_sensor_3_packets", SHIFTKEY('3')},
-  {"show_sensor_4_packets", SHIFTKEY('4')},
-  {"show_sensor_5_packets", SHIFTKEY('5')},
-  {"show_sensor_6_packets", SHIFTKEY('6')},
-  {"show_sensor_7_packets", SHIFTKEY('7')},
-  {"show_sensor_8_packets", SHIFTKEY('8')},
-  {"show_sensor_9_packets", SHIFTKEY('9')},
-  {"show_all_sensor_packets", SHIFTKEY('0')},
-  {"show_previous_sensor_packets", '['},
-  {"show_next_sensor_packets", ']'},
+  {"show_sensor_1_packets", '1'},
+  {"show_sensor_2_packets", '2'},
+  {"show_sensor_3_packets", '3'},
+  {"show_sensor_4_packets", '4'},
+  {"show_sensor_5_packets", '5'},
+  {"show_sensor_6_packets", '6'},
+  {"show_sensor_7_packets", '7'},
+  {"show_sensor_8_packets", '8'},
+  {"show_sensor_9_packets", '9'},
+  {"show_all_sensor_packets", '0'},
+  {"show_previous_sensor_packets", ','},
+  {"show_next_sensor_packets", '.'},
   {"toggle_broadcasts", 'B'},
   {"decrease_packet_limit", '-'},
   {"increase_packet_limit", '='},
@@ -614,31 +636,187 @@ void alrtsDestroy()
   altsLL.Destroy();
 }
 
+static const char *osdOnOff(bool enabled)
+{
+  return (enabled ? "On" : "Off");
+}
+
+static const char *sipnToLabel(sipn_type mode)
+{
+  switch (mode)
+  {
+  case ips: return "IP";
+  case ins: return "IP + Name";
+  default: return "Name Only";
+  }
+}
+
+static const char *sipsToLabel(sips_type mode)
+{
+  switch (mode)
+  {
+  case sel: return "Selection";
+  case all: return "All";
+  default: return "Off";
+  }
+}
+
+static const char *sonaToLabel(sona_type mode)
+{
+  switch (mode)
+  {
+  case alt: return "Alert";
+  case ipn: return "Show IP + Name";
+  case hst: return "Show Host";
+  case slt: return "Select Host";
+  default: return "Do Nothing";
+  }
+}
+
+static const char *osdDisplayScopeLabel()
+{
+  return ((setts.sona == ipn) ? "On-Active" : sipsToLabel(setts.sips));
+}
+
+static void osdAddSection(const char *label)
+{
+  osd_row_type *row;
+  if (osdTextLineCount >= OSD_MAX_ROWS) return;
+  row = &osdRows[osdTextLineCount++];
+  memset(row, 0, sizeof(osd_row_type));
+  row->section = true;
+  strncpy(row->label, label, sizeof(row->label) - 1);
+}
+
+static void osdAddRow(const char *label, const char *value, osd_color_type valueColor = osdNormal)
+{
+  osd_row_type *row;
+  if (osdTextLineCount >= OSD_MAX_ROWS) return;
+  row = &osdRows[osdTextLineCount++];
+  memset(row, 0, sizeof(osd_row_type));
+  row->valueColor = valueColor;
+  strncpy(row->label, label, sizeof(row->label) - 1);
+  strncpy(row->value, value, sizeof(row->value) - 1);
+}
+
+static void osdValueColor(osd_color_type color)
+{
+  switch (color)
+  {
+  case osdAccent:
+    glColor3ub(yellow[0], yellow[1], yellow[2]);
+    break;
+  case osdAlert:
+    glColor3ub(brred[0], brred[1], brred[2]);
+    break;
+  default:
+    glColor3ub(white[0], white[1], white[2]);
+    break;
+  }
+}
+
+static void osdBounds(int *left, int *top, int *right, int *bottom)
+{
+  *right = wWin - OSD_MARGIN_X;
+  *left = *right - OSD_BOX_W;
+  if (*left < 6)
+  {
+    *left = 6;
+    *right = *left + OSD_BOX_W;
+  }
+  *top = hWin - OSD_MARGIN_Y + 5;
+  *bottom = *top - ((int)osdTextLineCount * OSD_LINE_H) - (OSD_BOX_PAD_Y * 2) + 5;
+}
+
+static void drawOsdPanel()
+{
+  int left, top, right, bottom, labelX, valueX, y;
+  osdBounds(&left, &top, &right, &bottom);
+  labelX = left + OSD_BOX_PAD_X;
+  valueX = left + OSD_VALUE_X;
+  y = top - OSD_BOX_PAD_Y - 10;
+
+  glColor3ub(15, 15, 20);
+  glRecti(left, top, right, bottom);
+  glColor3ub(dlgrey[0], dlgrey[1], dlgrey[2]);
+  glBegin(GL_LINE_LOOP);
+    glVertex2i(left, top);
+    glVertex2i(right, top);
+    glVertex2i(right, bottom);
+    glVertex2i(left, bottom);
+  glEnd();
+  glBegin(GL_LINES);
+    glVertex2i(valueX - 8, top - 5);
+    glVertex2i(valueX - 8, bottom + 5);
+  glEnd();
+
+  for (unsigned int cnt = 0; cnt < osdTextLineCount; cnt++)
+  {
+    osd_row_type *row = &osdRows[cnt];
+    if (row->section)
+    {
+      int lineStart = labelX + ((int)strlen(row->label) * OSD_CHAR_W) + 8;
+      glColor3ub(brgrey[0], brgrey[1], brgrey[2]);
+      glRasterPos2i(labelX, y);
+      GLWin.DrawString((const unsigned char *)row->label);
+      glColor3ub(dlgrey[0], dlgrey[1], dlgrey[2]);
+      if (lineStart < (right - OSD_BOX_PAD_X))
+      {
+        glBegin(GL_LINES);
+          glVertex2i(lineStart, y + 3);
+          glVertex2i(right - OSD_BOX_PAD_X, y + 3);
+        glEnd();
+      }
+    }
+    else
+    {
+      glColor3ub(grey[0], grey[1], grey[2]);
+      glRasterPos2i(labelX, y);
+      GLWin.DrawString((const unsigned char *)row->label);
+      osdValueColor(row->valueColor);
+      glRasterPos2i(valueX, y);
+      GLWin.DrawString((const unsigned char *)row->value);
+    }
+    y -= OSD_LINE_H;
+  }
+}
+
 //update osd text
 void osdUpdate()
 {
-  char sbuf[34];
-  strcpy(osdtxt, "Sen: ");  //5
-  if (setts.sen) sprintf(sbuf, "%u", setts.sen);  //3
-  else strcpy(sbuf, "All");
-  strcat(sbuf, "\nPro: ");  //6
-  strcat(osdtxt, sbuf);
-  if (setts.pr) sprintf(sbuf, "%u", setts.pr);  //3
-  else strcpy(sbuf, "All");
-  strcat(sbuf, "\nPrt: ");  //6
-  strcat(osdtxt, sbuf);
-  if (setts.prt) sprintf(sbuf, "%u", setts.prt);  //5
-  else strcpy(sbuf, "All");
-  strcat(osdtxt, sbuf);
-  sprintf(sbuf, "\n%s: %s\nAct: %s\nPkts: ", tipn[setts.sipn], (setts.sona == ipn ? "Act" : tips[setts.sips]), tona[setts.sona]);  //29
-  if (setts.fsp) strcat(sbuf, "F");  //1
-  if (setts.adh) strcat(sbuf, "D");  //1
-  else if (setts.bct) strcat(sbuf, "B");
-  if (setts.nhp) strcat(sbuf, "P");  //1
-  if (setts.nhl) strcat(sbuf, "L");  //1
-  strcat(osdtxt, sbuf);
-  sprintf(sbuf, "\n%u", setts.pks);  //11
-  strcat(osdtxt, sbuf);
+  char sensorLabel[16], protocolLabel[16], portLabel[16];
+  char packetLimitLabel[16], visiblePacketsLabel[16];
+  if (setts.sen) snprintf(sensorLabel, sizeof(sensorLabel), "%u", setts.sen);
+  else strcpy(sensorLabel, "All");
+  if (setts.pr) protoDecode(setts.pr, protocolLabel);
+  else strcpy(protocolLabel, "All");
+  if (setts.prt) snprintf(portLabel, sizeof(portLabel), "%u", setts.prt);
+  else strcpy(portLabel, "All");
+  snprintf(packetLimitLabel, sizeof(packetLimitLabel), "%7u", setts.pks);
+  snprintf(visiblePacketsLabel, sizeof(visiblePacketsLabel), "%7u", (unsigned int)pktsLL.Num());
+  osdTextLineCount = 0;
+  osdAddSection("FILTERS");
+  osdAddRow("Sensor Filter", sensorLabel, (setts.sen ? osdAccent : osdNormal));
+  osdAddRow("Protocol Filter", protocolLabel, (setts.pr ? osdAccent : osdNormal));
+  osdAddRow("Port Filter", portLabel, (setts.prt ? osdAccent : osdNormal));
+  osdAddSection("LABELS");
+  osdAddRow("Display Mode", sipnToLabel(setts.sipn));
+  osdAddRow("Display Scope", osdDisplayScopeLabel(), ((setts.sips != off) || (setts.sona == ipn) ? osdAccent : osdNormal));
+  osdAddRow("On-Active Action", sonaToLabel(setts.sona));
+  osdAddSection("PACKETS");
+  osdAddRow("Anomaly Detection", osdOnOff(setts.anm), (setts.anm ? osdNormal : osdAccent));
+  osdAddRow("Fast Packets", osdOnOff(setts.fsp), (setts.fsp ? osdAccent : osdNormal));
+  osdAddRow("Add Destination Hosts", osdOnOff(setts.adh), (setts.adh ? osdAccent : osdNormal));
+  osdAddRow("Show Broadcast Hosts", osdOnOff(setts.bct), (setts.bct ? osdAccent : osdNormal));
+  osdAddRow("New Host Packets", osdOnOff(setts.nhp), (setts.nhp ? osdAccent : osdNormal));
+  osdAddRow("New Host Links", osdOnOff(setts.nhl), (setts.nhl ? osdAccent : osdNormal));
+  osdAddRow("Show Packet Dest Port", osdOnOff(setts.pdp), (setts.pdp ? osdAccent : osdNormal));
+  osdAddRow("Packet Limit", packetLimitLabel);
+  osdAddSection("RUNTIME");
+  osdAddRow("Packet Animation", (goAnim ? "Running" : "Paused"), (goAnim ? osdNormal : osdAccent));
+  osdAddRow("Visible Packets", visiblePacketsLabel);
+  osdAddRow("Unacked Anomalies", (dAnom ? "Y" : ""), (dAnom ? osdAlert : osdNormal));
+  if (lnkht) osdAddRow("Link Line", "Pending", osdAccent);
 }
 
 struct pktlg_type
@@ -658,14 +836,33 @@ static void osdDrawPktLegend(int px, int py)
     {brgrey[0], brgrey[1], brgrey[2], "OTHER"}
   };
 
-  py -= (OSD_PKT_TEXT_LINES * OSD_LINE_H) + OSD_PKT_GAP_H;
+  int left = px, right = px + OSD_BOX_W, top, bottom;
+  py -= (osdTextLineCount * OSD_LINE_H) + OSD_PKT_GAP_H;
+  top = py + 12;
+  bottom = py - ((int)(sizeof(legend) / sizeof(legend[0])) * OSD_LINE_H) - 18;
+  glColor3ub(15, 15, 20);
+  glRecti(left, top, right, bottom);
+  glColor3ub(dlgrey[0], dlgrey[1], dlgrey[2]);
+  glBegin(GL_LINE_LOOP);
+    glVertex2i(left, top);
+    glVertex2i(right, top);
+    glVertex2i(right, bottom);
+    glVertex2i(left, bottom);
+  glEnd();
+  glColor3ub(brgrey[0], brgrey[1], brgrey[2]);
+  glRasterPos2i(left + OSD_BOX_PAD_X, py + 2);
+  GLWin.DrawString((const unsigned char *)"PACKET TYPES");
+  glBegin(GL_LINES);
+    glVertex2i(left + 84, py + 5);
+    glVertex2i(right - OSD_BOX_PAD_X, py + 5);
+  glEnd();
   for (unsigned int cnt = 0; cnt < (sizeof(legend) / sizeof(legend[0])); cnt++)
   {
     glColor3ub(legend[cnt].red, legend[cnt].green, legend[cnt].blue);
-    glRasterPos2i(px, py - (cnt * OSD_LINE_H));
+    glRasterPos2i(left + OSD_BOX_PAD_X, py - (cnt * OSD_LINE_H) - 12);
     glBitmap(8, 8, 0.0, 0.0, 0.0, 0.0, bitmaps[16]);
     glColor3ub(white[0], white[1], white[2]);
-    glRasterPos2i(px + 14, py - (cnt * OSD_LINE_H));
+    glRasterPos2i(left + OSD_BOX_PAD_X + 14, py - (cnt * OSD_LINE_H) - 12);
     GLWin.DrawString((const unsigned char *)legend[cnt].name);
   }
 }
@@ -1078,7 +1275,7 @@ void pcktsDraw()
 //draw 2D objects
 void draw2D()
 {
-  int px = wWin - 66, py = hWin - 16;
+  int py = hWin - OSD_MARGIN_Y;
   char sbuf[25];
   glDisable(GL_DEPTH_TEST);
   glMatrixMode(GL_PROJECTION);
@@ -1097,26 +1294,12 @@ void draw2D()
   }
   if (setts.osd && goSize)
   {
-    glColor3ub(white[0], white[1], white[2]);
-    glRasterPos2i(px, py);
-    GLWin.DrawString((const unsigned char *)osdtxt);
+    int px, left, top, right, bottom;
+    osdUpdate();
+    osdBounds(&left, &top, &right, &bottom);
+    px = left;
+    drawOsdPanel();
     osdDrawPktLegend(px, py);
-    if (lnkht)
-    {
-      strcpy(sbuf, "Link Line");
-      glRasterPos2i(px, 19);
-      GLWin.DrawString((const unsigned char *)sbuf);
-    }
-    if (goAnim) sprintf(sbuf, "%u", pktsLL.Num());
-    else strcpy(sbuf, "PAUSED");
-    glRasterPos2i(px, 6);
-    GLWin.DrawString((const unsigned char *)sbuf);
-    if (dAnom)
-    {
-      glColor3ub(brred[0], brred[1], brred[2]);
-      glRasterPos2i(px + 54, py);
-      GLWin.DrawChar('A');
-    }
   }
   if (ptrc > hlt)  //draw packet traffic record/replay status
   {
@@ -4303,7 +4486,7 @@ static void compactBindingToken(const char *src, char *dst, size_t dstsz)
 static int keyCodeFromToken(const char *token)
 {
   if (!token || !*token) return 0;
-  if ((strlen(token) == 1) && strchr("ABCDEFGHIJKLMNOPQRSTUVWXYZ[]=-", token[0])) return token[0];
+  if ((strlen(token) == 1) && strchr("ABCDEFGHIJKLMNOPQRSTUVWXYZ[]=-,.", token[0])) return token[0];
   if ((strlen(token) == 1) && isdigit((unsigned char)token[0])) return token[0];
   if (!strcmp(token, "UP")) return GLFW_KEY_UP;
   if (!strcmp(token, "DOWN")) return GLFW_KEY_DOWN;
@@ -4319,6 +4502,8 @@ static int keyCodeFromToken(const char *token)
   if (!strcmp(token, "PAGEDOWN") || !strcmp(token, "PGDOWN") || !strcmp(token, "PGDN")) return GLFW_KEY_PAGEDOWN;
   if (!strcmp(token, "PLUS") || !strcmp(token, "EQUAL") || !strcmp(token, "EQUALS")) return '=';
   if (!strcmp(token, "MINUS") || !strcmp(token, "DASH")) return '-';
+  if (!strcmp(token, "COMMA")) return ',';
+  if (!strcmp(token, "PERIOD") || !strcmp(token, "DOT") || !strcmp(token, "FULLSTOP")) return '.';
   if (!strcmp(token, "LEFTBRACKET") || !strcmp(token, "OPENBRACKET")) return '[';
   if (!strcmp(token, "RIGHTBRACKET") || !strcmp(token, "CLOSEBRACKET")) return ']';
   if ((token[0] == 'F') && isdigit((unsigned char)token[1]))
@@ -4407,6 +4592,8 @@ static const char *keyCodeName(int key)
   case GLFW_KEY_F10: return "F10";
   case GLFW_KEY_F11: return "F11";
   case GLFW_KEY_F12: return "F12";
+  case ',': return "Comma";
+  case '.': return "Period";
   case '[': return "[";
   case ']': return "]";
   case '-': return "Minus";
