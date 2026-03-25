@@ -48,6 +48,20 @@ if not defined GPP_EXE (
 for %%i in ("%GPP_EXE%") do set "MINGW_BIN=%%~dpi"
 set "PATH=%MINGW_BIN%;%PATH%"
 echo Using "%GPP_EXE%"
+set "WINDRES_EXE="
+if exist "%MINGW_BIN%windres.exe" set "WINDRES_EXE=%MINGW_BIN%windres.exe"
+if not defined WINDRES_EXE (
+  for /f "delims=" %%i in ('where windres.exe 2^>NUL') do (
+    set "WINDRES_EXE=%%i"
+    goto :found_windres_hsen
+  )
+)
+:found_windres_hsen
+if not defined WINDRES_EXE (
+  echo Missing windres.exe in PATH.
+  goto :fail
+)
+echo Using "%WINDRES_EXE%"
 for /f "delims=" %%i in ('"%GPP_EXE%" -dumpmachine 2^>NUL') do set "MACHINE=%%i"
 if not defined MACHINE (
   echo Unable to detect compiler target with g++ -dumpmachine.
@@ -86,10 +100,12 @@ g++ -Wall -O2 -I"%WPCAP_INCLUDE%" -c -o src/proto.o src/proto.cpp
 if errorlevel 1 goto :fail
 g++ -Wall -O2 -I"%WPCAP_INCLUDE%" -c -o src/hsen.o src/hsen.cpp
 if errorlevel 1 goto :fail
+"%WINDRES_EXE%" -I"src" -O coff -i src/hsen.rc -o src/hsen-res.o
+if errorlevel 1 goto :fail
 if "%USE_WPCAP_A%"=="1" (
-  g++ -Wall -O2 -static-libgcc -static-libstdc++ -o "%OUTDIR%\hsen.exe" src/llist.o src/misc.o src/proto.o src/hsen.o -L"%WPCAP_LIBDIR%" -lwpcap -lws2_32
+  g++ -Wall -O2 -static-libgcc -static-libstdc++ -o "%OUTDIR%\hsen.exe" src/llist.o src/misc.o src/proto.o src/hsen.o src/hsen-res.o -L"%WPCAP_LIBDIR%" -lwpcap -lws2_32
 ) else (
-  g++ -Wall -O2 -static-libgcc -static-libstdc++ -o "%OUTDIR%\hsen.exe" src/llist.o src/misc.o src/proto.o src/hsen.o "%WPCAP_LIBDIR%\wpcap.lib" -lws2_32
+  g++ -Wall -O2 -static-libgcc -static-libstdc++ -o "%OUTDIR%\hsen.exe" src/llist.o src/misc.o src/proto.o src/hsen.o src/hsen-res.o "%WPCAP_LIBDIR%\wpcap.lib" -lws2_32
 )
 if errorlevel 1 goto :fail
 if exist "%WPCAP_BINDIR%\wpcap.dll" copy /Y "%WPCAP_BINDIR%\wpcap.dll" "%OUTDIR%\wpcap.dll" >NUL

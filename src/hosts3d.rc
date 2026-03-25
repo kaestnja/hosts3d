@@ -1,0 +1,35 @@
+#include <winver.h>
+#include "version.h"
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION HSD_VERSION_RC
+ PRODUCTVERSION HSD_VERSION_RC
+ FILEFLAGSMASK 0x3fL
+#ifdef _DEBUG
+ FILEFLAGS VS_FF_DEBUG
+#else
+ FILEFLAGS 0x0L
+#endif
+ FILEOS VOS__WINDOWS32
+ FILETYPE VFT_APP
+ FILESUBTYPE 0x0L
+BEGIN
+  BLOCK "StringFileInfo"
+  BEGIN
+    BLOCK "040904B0"
+    BEGIN
+      VALUE "CompanyName", "Hosts3D Community Maintainers\0"
+      VALUE "FileDescription", "Hosts3D 3D Real-Time Network Monitor\0"
+      VALUE "FileVersion", HSD_VERSION_WIN_STR "\0"
+      VALUE "InternalName", "Hosts3D\0"
+      VALUE "LegalCopyright", "Copyright (c) 2006-2011 Del Castle; continuation contributors\0"
+      VALUE "OriginalFilename", "Hosts3D.exe\0"
+      VALUE "ProductName", "Hosts3D\0"
+      VALUE "ProductVersion", HSD_VERSION_WIN_STR "\0"
+    END
+  END
+  BLOCK "VarFileInfo"
+  BEGIN
+    VALUE "Translation", 0x0409, 1200
+  END
+END

@@ -34,6 +34,7 @@
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
+#include "version.h"
 #include "proto.h"
 #include "misc.h"
 
@@ -279,10 +280,10 @@ int main(int argc, char *argv[])
   if ((argc < 3) || (argc > 4) || !strcmp(argv[argc - 1], "-d"))
   {
 #ifdef __MINGW32__
-    fprintf(stderr, "hsen 1.16 usage: %s [-l] <id> <interface/file> [<destination>] [-p]\n"
+    fprintf(stderr, "hsen " HSD_VERSION_STR " usage: %s [-l] <id> <interface/file> [<destination>] [-p]\n"
       "  -l : display interfaces\n"
 #else
-    fprintf(stderr, "hsen 1.16 usage: %s [-l] <id> <interface/file> [<destination>] [-p] [-d]\n"
+    fprintf(stderr, "hsen " HSD_VERSION_STR " usage: %s [-l] <id> <interface/file> [<destination>] [-p] [-d]\n"
       "  -l : display interfaces\n"
 #endif
       "  id : identify packets from a specific hsen when multiple exist (1-255)\n"

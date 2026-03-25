@@ -48,6 +48,20 @@ if not defined GPP_EXE (
 for %%i in ("%GPP_EXE%") do set "MINGW_BIN=%%~dpi"
 set "PATH=%MINGW_BIN%;%PATH%"
 echo Using "%GPP_EXE%"
+set "WINDRES_EXE="
+if exist "%MINGW_BIN%windres.exe" set "WINDRES_EXE=%MINGW_BIN%windres.exe"
+if not defined WINDRES_EXE (
+  for /f "delims=" %%i in ('where windres.exe 2^>NUL') do (
+    set "WINDRES_EXE=%%i"
+    goto :found_windres_hosts3d
+  )
+)
+:found_windres_hosts3d
+if not defined WINDRES_EXE (
+  echo Missing windres.exe in PATH.
+  goto :fail
+)
+echo Using "%WINDRES_EXE%"
 for /f "delims=" %%i in ('"%GPP_EXE%" -dumpmachine 2^>NUL') do set "MACHINE=%%i"
 if not defined MACHINE (
   echo Unable to detect compiler target with g++ -dumpmachine.
@@ -89,7 +103,9 @@ g++ -Wall -O2 -I"%GLFW_INCLUDE%" -c -o src/objects.o src/objects.cpp
 if errorlevel 1 goto :fail
 g++ -Wall -O2 -I"%GLFW_INCLUDE%" -c -o src/hosts3d.o src/hosts3d.cpp
 if errorlevel 1 goto :fail
-g++ -Wall -O2 -static-libgcc -static-libstdc++ -o "%OUTDIR%\Hosts3D.exe" src/llist.o src/misc.o src/glwin.o src/objects.o src/hosts3d.o -L"%GLFW_LIBDIR%" %GLFW_LIB_OPT% -lopengl32 -lglu32 -lws2_32
+"%WINDRES_EXE%" -I"src" -O coff -i src/hosts3d.rc -o src/hosts3d-res.o
+if errorlevel 1 goto :fail
+g++ -Wall -O2 -static-libgcc -static-libstdc++ -o "%OUTDIR%\Hosts3D.exe" src/llist.o src/misc.o src/glwin.o src/objects.o src/hosts3d.o src/hosts3d-res.o -L"%GLFW_LIBDIR%" %GLFW_LIB_OPT% -lopengl32 -lglu32 -lws2_32
 if errorlevel 1 goto :fail
 if exist "%GLFW_BINDIR%\glfw.dll" copy /Y "%GLFW_BINDIR%\glfw.dll" "%OUTDIR%\glfw.dll" >NUL
 if exist "%MINGW_BIN%libwinpthread-1.dll" copy /Y "%MINGW_BIN%libwinpthread-1.dll" "%OUTDIR%\libwinpthread-1.dll" >NUL

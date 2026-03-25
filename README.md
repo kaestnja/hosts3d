@@ -243,6 +243,8 @@ Notes:
 
 ### Dynamic and Static Hosts
 - Automatically discovered traffic hosts start as `dynamic`.
+- Dynamic hosts are automatically removed again after `dynamic_host_ttl_seconds` of inactivity when dynamic cleanup is enabled. This is meant to keep one-off Internet/test sources from staying in the scene indefinitely.
+- Dynamic cleanup skips hosts that are currently selected or locked.
 - Hosts loaded from a saved layout, created manually, manually edited (`Name`/`Remarks`), or named through `Selection > Resolve Hostnames` are treated as `static`.
 - Locked hosts are protected from dynamic cleanup and are also kept when layouts are saved.
 - Saved layouts (`0network.hnl`..`4network.hnl`) persist static and locked hosts only.
@@ -628,7 +630,7 @@ Press `H` to toggle the help overlay (`controls.txt`, generated from code).
 - Protocol `250` is used internally to identify fragmented IP packets
 - Default host creation is source-IP based; enable Add Destination Hosts to include destination IPs
 - Anomalies represent new hosts or new host services
-- Dynamic hosts are aged out by inactivity according to `[dynamic_hosts]` in `settings.ini`
+- Dynamic hosts are automatically removed again after the configured inactivity timeout in `[dynamic_hosts]`, unless they are currently selected, locked, or have already been promoted to static
 - Large menu operations on thousands of hosts can take minutes
 - `settings.ini` is plain text and portable across 32-bit/64-bit builds
 - Legacy binary layout/traffic files such as `.hnl` and `.hpt` remain architecture-specific
