@@ -18,6 +18,8 @@
 - Selected host details now include the last observed protocol, packet form, important port, and discovery name when known.
 - New packet recordings preserve the extended packet-shape metadata, while older `traffic.hpt` recordings remain readable.
 - Active packet recording and replay now show a dedicated bottom-left status panel with mode, elapsed time, replay packet time, and the current file label.
+- New packet recordings now auto-increment to the next free `traffic*.hpt` name instead of overwriting the previous recording.
+- Replay now opens a list of available `.hpt` recordings from `hsd-data`.
 
 ## Notes
 - Packet colours still indicate protocol family.

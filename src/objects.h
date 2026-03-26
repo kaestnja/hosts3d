@@ -36,6 +36,7 @@
 #define HSD_SLINACT  0x0F  //select inactive
 #define HSD_HSENRUN  0x10  //run hsen
 #define HSD_HSENSTP  0x11  //stop hsen
+#define HSD_HPTRPY   0x12  //replay packet traffic file
 
 const int SPC = 32, MOV = 3, HPR = 20, SELBUF = 50000, SVCS = 32;  //host spacing, movement spacing, hosts per row, host selection buffer, services per host
 const double DEPTH = 8192.0;  //perseptive depth

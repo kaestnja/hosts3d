@@ -235,6 +235,7 @@ Notes:
 - If a legacy `settings-hsd` binary file is found, Hosts3D imports it once into `settings.ini`.
 - `traffic.hpt` contains Hosts3D/hsen packet metadata for Record/Replay; it is not a Wireshark-compatible capture format.
 - New recordings preserve packet-shape metadata; older `traffic.hpt` recordings remain readable.
+- New packet recordings no longer overwrite the previous one: Hosts3D now auto-increments the name to the next free `traffic*.hpt` file in `hsd-data`.
 - Runtime host lifetime/cleanup behavior is configured in the `[dynamic_hosts]` section of `settings.ini`.
 
 ### Keyboard Customization
@@ -293,6 +294,7 @@ Runtime behavior not explicitly listed in `controls.txt`:
 - The currently active OSD packet-example row is highlighted directly in the legend.
 - The `Packets` menu mirrors the same active filter state for sensor, filter tree, and port using the same visible choice markers.
 - Active packet recording and replay now show a dedicated bottom-left status panel with the current mode, elapsed time, replay packet time, and the active `traffic.hpt` label.
+- Replay now opens a list of available `.hpt` recordings from `hsd-data`, instead of always replaying a single fixed file.
 - Selected host details now include the last observed protocol, packet form, important port, and discovery name when available.
 - Legacy short forms such as `Sen`, `Pro`, `Prt`, `Act`, and `Pkts` are no longer used in the OSD.
 - `Esc` closes the open menu or dialog.
