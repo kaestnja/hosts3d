@@ -17,6 +17,7 @@
 - The `Packets` menu now mirrors the same packet-filter tree and the same active filter state as the OSD.
 - Selected host details now include the last observed protocol, packet form, important port, and discovery name when known.
 - New packet recordings preserve the extended packet-shape metadata, while older `traffic.hpt` recordings remain readable.
+- Active packet recording and replay now show a dedicated bottom-left status panel with mode, elapsed time, replay packet time, and the current file label.
 
 ## Notes
 - Packet colours still indicate protocol family.

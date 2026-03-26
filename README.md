@@ -292,6 +292,7 @@ Runtime behavior not explicitly listed in `controls.txt`:
 - Packet traffic filters are exclusive: at any moment you either see all packet traffic, or exactly one active packet filter, whether that filter was chosen by sensor, the packet tree, or a port filter.
 - The currently active OSD packet-example row is highlighted directly in the legend.
 - The `Packets` menu mirrors the same active filter state for sensor, filter tree, and port using the same visible choice markers.
+- Active packet recording and replay now show a dedicated bottom-left status panel with the current mode, elapsed time, replay packet time, and the active `traffic.hpt` label.
 - Selected host details now include the last observed protocol, packet form, important port, and discovery name when available.
 - Legacy short forms such as `Sen`, `Pro`, `Prt`, `Act`, and `Pkts` are no longer used in the OSD.
 - `Esc` closes the open menu or dialog.
