@@ -1,0 +1,32 @@
+{
+  "version": 4,
+  "configurations": [
+    {
+      "name": "Hosts3D Win32 MinGW",
+      "compilerPath": "C:/msys64/mingw32/bin/g++.exe",
+      "intelliSenseMode": "windows-gcc-x86",
+      "cStandard": "c17",
+      "cppStandard": "c++17",
+      "includePath": [
+        "${workspaceFolder}/src",
+        "${workspaceFolder}/third_party/glfw2/include",
+        "${workspaceFolder}/third_party/wpcap/include",
+        "${workspaceFolder}/third_party/wpcap/include/pcap"
+      ],
+      "defines": [
+        "__MINGW32__",
+        "WIN32",
+        "_WIN32"
+      ],
+      "browse": {
+        "path": [
+          "${workspaceFolder}/src",
+          "${workspaceFolder}/third_party/glfw2/include",
+          "${workspaceFolder}/third_party/wpcap/include",
+          "${workspaceFolder}/third_party/wpcap/include/pcap"
+        ],
+        "limitSymbolsToIncludedHeaders": true
+      }
+    }
+  ]
+}

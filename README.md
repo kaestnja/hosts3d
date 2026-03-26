@@ -697,7 +697,7 @@ This repository is an independent, community-maintained continuation of the orig
 
 - Original upstream project and authorship remain credited to Del Castle.
 - This repository is not an official upstream by the original author.
-- Historical upstream reference: http://hosts3d.sourceforge.net/
+- Historical upstream reference: <http://hosts3d.sourceforge.net/>
 
 For attribution and maintenance context:
 - See `CREDITS.md`
@@ -709,7 +709,7 @@ GNU General Public License v2
 
 ## Reporting Bugs
 Open an issue in this repository with repro steps and platform/build details.
-- https://github.com/kaestnja/hosts3d/issues
+- <https://github.com/kaestnja/hosts3d/issues>
 
 ## Copyright
 Copyright (c) 2006-2011 Del Castle
