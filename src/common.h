@@ -39,7 +39,7 @@ struct pkif_type
 #pragma pack(1)
 struct pkex_type
 {
-  char id, syn:1, ack:1, rst:1, fin:1, psh:1, pld:1, spr:2;  //TCP flags, payload present, spare
+  char id, syn:1, ack:1, rst:1, fin:1, psh:1, pld:1, spr:2;  //TCP flags, payload present, ARP subtype / spare
   unsigned int sz;
   unsigned char srcmc[6];
   pkif_type pk;

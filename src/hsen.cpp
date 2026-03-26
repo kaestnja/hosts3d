@@ -70,6 +70,7 @@ void hsenStop(int sig)
 //pcap_loop
 void pktProcess(u_char *u, const struct pcap_pkthdr *hdr, const u_char *pkt)
 {
+  const unsigned short arpRequest = 1, arpReply = 2;
   if (rpy)  //pcap replay
   {
     nowtm = microTime(0);
@@ -104,9 +105,13 @@ void pktProcess(u_char *u, const struct pcap_pkthdr *hdr, const u_char *pkt)
     {
       if (clen < ahsz) return;  //malformed packet check
       ether_arp *ahdr = (ether_arp *)(pkt + ehsz);
+      unsigned short arop = ntohs(ahdr->ar_op);
       pkex.pk.pr = IPPROTO_ARP;
       memcpy(&pkex.pk.srcip, &ahdr->arp_spa, 4);
       memcpy(&pkex.pk.dstip, &ahdr->arp_tpa, 4);
+      if (!memcmp(&ahdr->arp_spa, &ahdr->arp_tpa, 4)) pkex.spr = 3;
+      else if (arop == arpRequest) pkex.spr = 1;
+      else if (arop == arpReply) pkex.spr = 2;
       arp = true;
     }
     else return;
