@@ -74,6 +74,10 @@ static const int OSD_PKT_ROW_TEXT_Y = 20;
 static const int OSD_PKT_ROW_HILITE_TOP_Y = 2;
 static const int OSD_PKT_ROW_HILITE_BOTTOM_Y = 26;
 static const unsigned int OSD_PKT_HIT_MAX = 24;
+static const int PACKET_STATUS_W = 260;
+static const int PACKET_STATUS_LINE_H = 13;
+static const int PACKET_STATUS_PAD_X = 8;
+static const int PACKET_STATUS_PAD_Y = 8;
 static const int OSD_CHAR_W = 6;
 static const int OSD_MARGIN_X = 10;
 static const int OSD_MARGIN_Y = 16;
@@ -95,6 +99,7 @@ static const int ALERT_LIST_BASE = PACKET_LIST_BASE + (PACKET_COLOR_COUNT * PACK
 static const int OBJ_LIST_COUNT = ALERT_LIST_BASE + 2;
 int wWin = DEFAULT_WIN_W, hWin = DEFAULT_WIN_H, mBxx, mBxy, mPsx = 0, mPsy = 0, mWhl = 0, GLResult[6] = {0, 0, 0, 0, 0, 0};  //2D GUI result identification
 time_t atime = 0, distm;  //packet traffic display time offset
+time_t packetTrafficStarted = 0;
 ptrc_type ptrc = stp;  //packet traffic state
 pkrc_type pkrp;  //packet traffic replay packet
 bool pkrLegacy = false;
@@ -188,6 +193,7 @@ std::map<unsigned long, host_runtime_meta_type> hostRuntimeMetaByIp;
 osd_pkt_hit_type osdPacketHits[OSD_PKT_HIT_MAX];
 unsigned int osdPacketHitCount = 0;
 unsigned char packetTreeFilter = pfAll;
+char packetTrafficLabel[128] = "traffic.hpt";
 
 struct localhsen_if_type
 {
@@ -392,6 +398,9 @@ static void packetFilterSetPort(unsigned short port);
 static void osdPacketHitsClear();
 static void osdPacketHitAdd(int left, int top, int right, int bottom, unsigned char filter);
 static bool osdPacketHitProcess(int x, int y);
+static void packetTrafficLabelSet(const char *path);
+static void packetTrafficDurationLabel(time_t started, char *buf, size_t bufsz);
+static void drawPacketTrafficStatus();
 void hostDetails();
 void mnuProcess(int m);
 static void hostDeleteManaged(host_type *ht);
@@ -1131,6 +1140,33 @@ static const char *osdDisplayScopeLabel()
   return ((setts.sona == ipn) ? "On-Active" : sipsToLabel(setts.sips));
 }
 
+static void packetTrafficLabelSet(const char *path)
+{
+  const char *base = "traffic.hpt";
+  if (path && *path)
+  {
+    base = path;
+    for (const char *ptr = path; *ptr; ptr++)
+    {
+      if ((*ptr == '\\') || (*ptr == '/')) base = ptr + 1;
+    }
+    if (!*base) base = "traffic.hpt";
+  }
+  strncpy(packetTrafficLabel, base, sizeof(packetTrafficLabel) - 1);
+  packetTrafficLabel[sizeof(packetTrafficLabel) - 1] = '\0';
+}
+
+static void packetTrafficDurationLabel(time_t started, char *buf, size_t bufsz)
+{
+  unsigned int hours, mins, secs;
+  time_t elapsed = (started ? (time(0) - started) : 0);
+  if (elapsed < 0) elapsed = 0;
+  hours = (unsigned int)(elapsed / 3600);
+  mins = (unsigned int)((elapsed % 3600) / 60);
+  secs = (unsigned int)(elapsed % 60);
+  snprintf(buf, bufsz, "%02u:%02u:%02u", hours, mins, secs);
+}
+
 static void osdAddSection(const char *label)
 {
   osd_row_type *row;
@@ -1397,6 +1433,58 @@ static void osdDrawPktLegend(int px, int py)
     glRasterPos2i(left + OSD_BOX_PAD_X + OSD_PKT_ICON_COL_W + indent, rowTextY);
     GLWin.DrawString((const unsigned char *)rows[cnt].label);
   }
+}
+
+static void drawPacketTrafficStatus()
+{
+  int left, bottom, top, right, y;
+  char elapsed[16], replayTime[32];
+  if (ptrc <= hlt) return;
+  left = 6;
+  bottom = 6;
+  top = bottom + 72;
+  if (ptrc == rpy) top += PACKET_STATUS_LINE_H;
+  right = left + PACKET_STATUS_W;
+  packetTrafficDurationLabel(packetTrafficStarted, elapsed, sizeof(elapsed));
+
+  glColor3ub(15, 15, 20);
+  glRecti(left, top, right, bottom);
+  if (ptrc == rec) glColor3ub(red[0], red[1], red[2]);
+  else glColor3ub(green[0], green[1], green[2]);
+  glBegin(GL_LINE_LOOP);
+    glVertex2i(left, top);
+    glVertex2i(right, top);
+    glVertex2i(right, bottom);
+    glVertex2i(left, bottom);
+  glEnd();
+
+  y = top - PACKET_STATUS_PAD_Y - 10;
+  glColor3ub(brgrey[0], brgrey[1], brgrey[2]);
+  glRasterPos2i(left + PACKET_STATUS_PAD_X, y);
+  GLWin.DrawString((const unsigned char *)"PACKET TRAFFIC");
+  y -= PACKET_STATUS_LINE_H + 2;
+
+  glColor3ub(white[0], white[1], white[2]);
+  glRasterPos2i(left + PACKET_STATUS_PAD_X, y);
+  GLWin.DrawString((const unsigned char *)(ptrc == rec ? "Mode: Recording" : "Mode: Replay"));
+  y -= PACKET_STATUS_LINE_H;
+
+  glRasterPos2i(left + PACKET_STATUS_PAD_X, y);
+  snprintf(replayTime, sizeof(replayTime), "Elapsed: %s", elapsed);
+  GLWin.DrawString((const unsigned char *)replayTime);
+  y -= PACKET_STATUS_LINE_H;
+
+  if (ptrc == rpy)
+  {
+    strftime(replayTime, sizeof(replayTime), "Packet Time: %d-%m-%y %H:%M:%S", localtime(&pkrp.ptime.tv_sec));
+    glRasterPos2i(left + PACKET_STATUS_PAD_X, y);
+    GLWin.DrawString((const unsigned char *)replayTime);
+    y -= PACKET_STATUS_LINE_H;
+  }
+
+  snprintf(replayTime, sizeof(replayTime), "File: %.36s", packetTrafficLabel);
+  glRasterPos2i(left + PACKET_STATUS_PAD_X, y);
+  GLWin.DrawString((const unsigned char *)replayTime);
 }
 
 static void helpOverlayBounds(int *left, int *top, int *right, int *bottom)
@@ -1809,7 +1897,6 @@ void pcktsDraw()
 void draw2D()
 {
   int py = hWin - OSD_MARGIN_Y;
-  char sbuf[25];
   glDisable(GL_DEPTH_TEST);
   glMatrixMode(GL_PROJECTION);
   glPushMatrix();
@@ -1834,23 +1921,7 @@ void draw2D()
     drawOsdPanel();
     osdDrawPktLegend(px, py);
   }
-  if (ptrc > hlt)  //draw packet traffic record/replay status
-  {
-    time_t dt = time(0) - distm;
-    if (ptrc == rec)
-    {
-      glColor3ub(red[0], red[1], red[2]);
-      if (distm) strftime(sbuf, 17, "REC %j %H:%M:%S", gmtime(&dt));
-      else strcpy(sbuf, "REC");
-    }
-    else
-    {
-      glColor3ub(green[0], green[1], green[2]);
-      strftime(sbuf, 25, "REPLAY %d-%m-%y %H:%M:%S", localtime(&dt));
-    }
-    glRasterPos2i(6, 6);
-    GLWin.DrawString((const unsigned char *)sbuf);
-  }
+  if (ptrc > hlt) drawPacketTrafficStatus();
   if (helpOverlayVisible) drawHelpOverlay();
   if (GLWin.On()) GLWin.Draw(GL_RENDER);  //draw 2D GUI
   else if (mMove)  //draw selection box
@@ -2384,7 +2455,11 @@ void btnProcess(int gs)
           goHosts = 0;
         }
         while (ptrc == hlt) usleep(1000);
-        if (gr == HSD_HPTOPEN) pkrcCopy(gi1, hsddata("traffic.hpt"));
+        if (gr == HSD_HPTOPEN)
+        {
+          pkrcCopy(gi1, hsddata("traffic.hpt"));
+          packetTrafficLabelSet(gi1);
+        }
         else
         {
           extensionAdd(gi1, ".hpt");
@@ -3067,6 +3142,8 @@ void GLFWCALL keyboardGL(int key, int action)
         {
           fputs("HP2", pfile);
           distm = 0;
+          packetTrafficLabelSet("traffic.hpt");
+          packetTrafficStarted = time(0);
           ptrc = rec;
         }
         break;
@@ -3084,6 +3161,7 @@ void GLFWCALL keyboardGL(int key, int action)
               if (fread(&pkrp, sizeof(pkrp), 1, pfile) == 1)
               {
                 pcktsDestroy();
+                packetTrafficStarted = time(0);
                 ptrc = rpy;
                 offsetReset();
                 goHosts = 0;
@@ -3101,6 +3179,7 @@ void GLFWCALL keyboardGL(int key, int action)
                 pkrp.pk.id = 85;
                 pkrp.pk.pk = pkr1.pk;
                 pcktsDestroy();
+                packetTrafficStarted = time(0);
                 ptrc = rpy;
                 offsetReset();
                 goHosts = 0;
@@ -5989,6 +6068,7 @@ void GLFWCALL pktProcess(void *arg)
       if (ptrc == hlt)
       {
         fclose(pfile);
+        packetTrafficStarted = 0;
         ptrc = stp;
       }
       if (ptrc == rpy)
