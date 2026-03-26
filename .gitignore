@@ -19,7 +19,7 @@ Tools/Wireshark/WiresharkPortable64_4.6.4.paf.exe
 **/hsd-data/netpos.txt
 **/hsd-data/settings.ini
 **/hsd-data/settings-hsd
-**/hsd-data/traffic.hpt
+**/hsd-data/traffic*.hpt
 **/hsd-data/local-hsen-windows.state
 **/hsd-data/local-hsen.state
 **/hsd-data/tmp-hinfo-hsd
