@@ -15,19 +15,23 @@
    GNU General Public License for more details. */
 
 #include <ctype.h>  //tolower()
+#include <algorithm>
 #include <map>
 #include <math.h>  //cos(), sin(), sqrt()
 #include <signal.h>  //signal()
 #include <stdio.h>
 #include <stdlib.h>  //abs(), atoi(), system()
+#include <string>
 #include <string.h>
 #include <sys/stat.h>  //mkdir()
 #include <time.h>
+#include <vector>
 #ifdef __MINGW32__
 #include <getopt.h>  //getopt()
 #include <winsock2.h>
 #else
 #include <arpa/inet.h>  //inet_addr(), inet_ntoa()
+#include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>  //fcntl()
 #include <limits.h>
@@ -194,6 +198,7 @@ osd_pkt_hit_type osdPacketHits[OSD_PKT_HIT_MAX];
 unsigned int osdPacketHitCount = 0;
 unsigned char packetTreeFilter = pfAll;
 char packetTrafficLabel[128] = "traffic.hpt";
+char packetTrafficPath[512] = "";
 
 struct localhsen_if_type
 {
@@ -398,13 +403,21 @@ static void packetFilterSetPort(unsigned short port);
 static void osdPacketHitsClear();
 static void osdPacketHitAdd(int left, int top, int right, int bottom, unsigned char filter);
 static bool osdPacketHitProcess(int x, int y);
+static void setStringValue(char *dst, size_t dstsz, const char *src);
 static void packetTrafficLabelSet(const char *path);
+static const char *packetTrafficPathGet();
+static void packetTrafficPathSet(const char *path);
+static bool packetTrafficRecordPathNext(char *path, size_t pathsz, char *label, size_t labelsz);
+static void packetTrafficResolvePath(const char *name, char *path, size_t pathsz);
+static unsigned int packetTrafficReplayListCreate(const char *fl, char *firstName, size_t firstNameSz);
+static bool packetTrafficReplayStart(const char *path);
 static void packetTrafficDurationLabel(time_t started, char *buf, size_t bufsz);
 static void drawPacketTrafficStatus();
 void hostDetails();
 void mnuProcess(int m);
 static void hostDeleteManaged(host_type *ht);
-void pcktsDestroy(bool gh);
+void pcktsDestroy(bool gh = false);
+void offsetReset();
 static void dynamicHostsCleanupMaybe();
 static void settsSave();
 static void localHsenDialogOpen();
@@ -1156,6 +1169,138 @@ static void packetTrafficLabelSet(const char *path)
   packetTrafficLabel[sizeof(packetTrafficLabel) - 1] = '\0';
 }
 
+static const char *packetTrafficPathGet()
+{
+  if (!*packetTrafficPath) packetTrafficPathSet(hsddata("traffic.hpt"));
+  return packetTrafficPath;
+}
+
+static void packetTrafficPathSet(const char *path)
+{
+  if (path && *path) setStringValue(packetTrafficPath, sizeof(packetTrafficPath), path);
+  else setStringValue(packetTrafficPath, sizeof(packetTrafficPath), hsddata("traffic.hpt"));
+  packetTrafficLabelSet(packetTrafficPath);
+}
+
+static bool packetTrafficRecordPathNext(char *path, size_t pathsz, char *label, size_t labelsz)
+{
+  char name[64];
+  setStringValue(path, pathsz, hsddata("traffic.hpt"));
+  if (!fileExists(path))
+  {
+    setStringValue(label, labelsz, "traffic.hpt");
+    return true;
+  }
+  for (unsigned int cnt = 1; cnt < 10000; cnt++)
+  {
+    snprintf(name, sizeof(name), "traffic-%03u.hpt", cnt);
+    setStringValue(path, pathsz, hsddata(name));
+    if (!fileExists(path))
+    {
+      setStringValue(label, labelsz, name);
+      return true;
+    }
+  }
+  path[0] = '\0';
+  label[0] = '\0';
+  return false;
+}
+
+static void packetTrafficResolvePath(const char *name, char *path, size_t pathsz)
+{
+  if (name && *name && (strchr(name, '\\') || strchr(name, '/') || strchr(name, ':'))) setStringValue(path, pathsz, name);
+  else if (name && *name) setStringValue(path, pathsz, hsddata(name));
+  else setStringValue(path, pathsz, hsddata("traffic.hpt"));
+}
+
+static unsigned int packetTrafficReplayListCreate(const char *fl, char *firstName, size_t firstNameSz)
+{
+  std::vector<std::string> files;
+  FILE *flist = fopen(fl, "w");
+  if (firstNameSz) firstName[0] = '\0';
+  if (!flist) return 0;
+#ifdef __MINGW32__
+  char mask[512];
+  WIN32_FIND_DATA nlist;
+  setStringValue(mask, sizeof(mask), hsddata("*.hpt"));
+  HANDLE nl = FindFirstFile(mask, &nlist);
+  if (nl != INVALID_HANDLE_VALUE)
+  {
+    do
+    {
+      if ((nlist.cFileName[0] != '.') && !(nlist.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) files.push_back(nlist.cFileName);
+    } while (FindNextFile(nl, &nlist));
+    FindClose(nl);
+  }
+#else
+  DIR *dir = opendir(HSDDATA);
+  if (dir)
+  {
+    dirent *ent;
+    while ((ent = readdir(dir)))
+    {
+      std::string name = ent->d_name;
+      if ((name.size() > 4) && (name[0] != '.') && (name.rfind(".hpt") == (name.size() - 4))) files.push_back(name);
+    }
+    closedir(dir);
+  }
+#endif
+  std::sort(files.begin(), files.end());
+  for (size_t cnt = 0; cnt < files.size(); cnt++)
+  {
+    fprintf(flist, "%s\n", files[cnt].c_str());
+    if (!cnt && firstNameSz) setStringValue(firstName, firstNameSz, files[cnt].c_str());
+  }
+  fclose(flist);
+  return (unsigned int)files.size();
+}
+
+static bool packetTrafficReplayStart(const char *path)
+{
+  if ((pfile = fopen(path, "rb")))
+  {
+    char hpt[4] = {0, 0, 0, 0};
+    pkrLegacy = false;
+    if (fread(hpt, 1, 3, pfile) == 3)
+    {
+      if (!strcmp(hpt, "HP2"))
+      {
+        if (fread(&pkrp, sizeof(pkrp), 1, pfile) == 1)
+        {
+          pcktsDestroy();
+          packetTrafficPathSet(path);
+          packetTrafficStarted = time(0);
+          ptrc = rpy;
+          offsetReset();
+          goHosts = 0;
+          return true;
+        }
+      }
+      else if (!strcmp(hpt, "HPT"))
+      {
+        pkrc1_type pkr1;
+        if (fread(&pkr1, sizeof(pkr1), 1, pfile) == 1)
+        {
+          memset(&pkrp, 0, sizeof(pkrp));
+          pkrLegacy = true;
+          pkrp.ptime = pkr1.ptime;
+          pkrp.pk.id = 85;
+          pkrp.pk.pk = pkr1.pk;
+          pcktsDestroy();
+          packetTrafficPathSet(path);
+          packetTrafficStarted = time(0);
+          ptrc = rpy;
+          offsetReset();
+          goHosts = 0;
+          return true;
+        }
+      }
+    }
+    fclose(pfile);
+  }
+  return false;
+}
+
 static void packetTrafficDurationLabel(time_t started, char *buf, size_t bufsz)
 {
   unsigned int hours, mins, secs;
@@ -1652,7 +1797,7 @@ static void drawHelpOverlay()
 }
 
 //destroy packets LL
-void pcktsDestroy(bool gh = false)
+void pcktsDestroy(bool gh)
 {
   if (!goHosts)
   {
@@ -2443,7 +2588,7 @@ void btnProcess(int gs)
       }
       else messageBox("ERROR", "Enter File Name!");
       break;
-    case HSD_HPTOPEN: case HSD_HPTSAVE:
+    case HSD_HPTOPEN: case HSD_HPTSAVE: case HSD_HPTRPY:
       if (*gi1)
       {
         waitShow();
@@ -2458,12 +2603,21 @@ void btnProcess(int gs)
         if (gr == HSD_HPTOPEN)
         {
           pkrcCopy(gi1, hsddata("traffic.hpt"));
+          packetTrafficPathSet(hsddata("traffic.hpt"));
           packetTrafficLabelSet(gi1);
+        }
+        else if (gr == HSD_HPTRPY)
+        {
+          char hptname[256], hptpath[512];
+          setStringValue(hptname, sizeof(hptname), gi1);
+          extensionAdd(hptname, ".hpt");
+          packetTrafficResolvePath(hptname, hptpath, sizeof(hptpath));
+          if (!packetTrafficReplayStart(hptpath)) messageBox("ERROR", "Unable to replay packet traffic file.");
         }
         else
         {
           extensionAdd(gi1, ".hpt");
-          pkrcCopy(hsddata("traffic.hpt"), gi1);
+          pkrcCopy(packetTrafficPathGet(), gi1);
         }
         GLWin.Close();  //close all 2D GUI windows
       }
@@ -3136,61 +3290,46 @@ void GLFWCALL keyboardGL(int key, int action)
         pcktsDestroy(true);
         break;
       case kaRecordPacketTraffic:  //packet traffic record
+      {
+        char recordPath[512], recordLabel[128];
         if (ptrc > hlt) ptrc = hlt;
         while (ptrc == hlt) usleep(1000);
-        if ((pfile = fopen(hsddata("traffic.hpt"), "wb")))
+        if (!packetTrafficRecordPathNext(recordPath, sizeof(recordPath), recordLabel, sizeof(recordLabel)))
+        {
+          messageBox("ERROR", "Unable to create next packet traffic file name.");
+          break;
+        }
+        if ((pfile = fopen(recordPath, "wb")))
         {
           fputs("HP2", pfile);
           distm = 0;
-          packetTrafficLabelSet("traffic.hpt");
+          packetTrafficPathSet(recordPath);
+          packetTrafficLabelSet(recordLabel);
           packetTrafficStarted = time(0);
           ptrc = rec;
         }
+        else messageBox("ERROR", "Unable to create packet traffic file.");
         break;
+      }
       case kaReplayPacketTraffic:  //packet traffic replay
-        if (ptrc > hlt) ptrc = hlt;
-        while (ptrc == hlt) usleep(1000);
-        if ((pfile = fopen(hsddata("traffic.hpt"), "rb")))
+      {
+        char firstReplay[128], replayName[256];
+        unsigned int files = packetTrafficReplayListCreate(hsddata("tmp-flist-hsd"), firstReplay, sizeof(firstReplay));
+        if (!files)
         {
-          char hpt[4] = {0, 0, 0, 0};
-          pkrLegacy = false;
-          if (fread(hpt, 1, 3, pfile) == 3)
-          {
-            if (!strcmp(hpt, "HP2"))
-            {
-              if (fread(&pkrp, sizeof(pkrp), 1, pfile) == 1)
-              {
-                pcktsDestroy();
-                packetTrafficStarted = time(0);
-                ptrc = rpy;
-                offsetReset();
-                goHosts = 0;
-              }
-              else fclose(pfile);
-            }
-            else if (!strcmp(hpt, "HPT"))
-            {
-              pkrc1_type pkr1;
-              if (fread(&pkr1, sizeof(pkr1), 1, pfile) == 1)
-              {
-                memset(&pkrp, 0, sizeof(pkrp));
-                pkrLegacy = true;
-                pkrp.ptime = pkr1.ptime;
-                pkrp.pk.id = 85;
-                pkrp.pk.pk = pkr1.pk;
-                pcktsDestroy();
-                packetTrafficStarted = time(0);
-                ptrc = rpy;
-                offsetReset();
-                goHosts = 0;
-              }
-              else fclose(pfile);
-            }
-            else fclose(pfile);
-          }
-          else fclose(pfile);
+          messageBox("INFO", "No packet traffic recordings found in hsd-data.");
+          break;
         }
+        if (fileExists(hsddata(packetTrafficLabel))) setStringValue(replayName, sizeof(replayName), packetTrafficLabel);
+        else setStringValue(replayName, sizeof(replayName), firstReplay);
+        GLWin.CreateWin(-1, -1, 332, 234, "REPLAY PACKET TRAFFIC FILE...", true, true);
+        GLWin.AddLabel(10, 10, "Choose Recording:");
+        GLResult[0] = (GLWin.AddInput(10, 26, 50, 251, replayName) * 100) + HSD_HPTRPY;
+        GLWin.AddList(10, 52, 10, 50, hsddata("tmp-flist-hsd"));
+        GLWin.AddButton(128, 60, GLWIN_OK, "Replay", false, true);
+        GLWin.AddButton(70, 60, GLWIN_CLOSE, "Cancel", false, false);
         break;
+      }
       case kaSkipReplayPacket: if (ptrc == rpy) offsetReset(); break;  //packet traffic replay - jump to next packet
       case kaStopPacketTraffic:  //packet traffic record/replay stop
         if (ptrc == rec) ptrc = hlt;
@@ -3203,6 +3342,8 @@ void GLFWCALL keyboardGL(int key, int action)
         break;
       case kaOpenPacketTrafficFile:
       case kaSavePacketTrafficFile:  //2D GUI open/save packet traffic file
+      {
+        char saveName[256];
         filelistCreate(hsddata("tmp-flist-hsd"), ".hpt");
         if (keyact == kaOpenPacketTrafficFile)
         {
@@ -3212,13 +3353,15 @@ void GLFWCALL keyboardGL(int key, int action)
         else
         {
           GLWin.CreateWin(-1, -1, 332, 234, "SAVE PACKET TRAFFIC FILE AS...", true, true);
-          GLResult[0] = (GLWin.AddInput(10, 26, 50, 251, "") * 100) + HSD_HPTSAVE;
+          setStringValue(saveName, sizeof(saveName), packetTrafficLabel);
+          GLResult[0] = (GLWin.AddInput(10, 26, 50, 251, saveName) * 100) + HSD_HPTSAVE;
         }
         GLWin.AddLabel(10, 10, "Enter File Name:");
         GLWin.AddList(10, 52, 10, 50, hsddata("tmp-flist-hsd"));
         GLWin.AddButton(128, 60, GLWIN_OK, "OK", false, true);
         GLWin.AddButton(76, 60, GLWIN_CLOSE, "Cancel", false, false);
         break;
+      }
       case kaToggleAnimation: goAnim = !goAnim; break;  //toggle animation
       case kaAcknowledgeAllAnomalies: hostsSet(2, 0); break;  //acknowledge all anomalies
       case kaToggleOsd: setts.osd = !setts.osd; break;  //toggle OSD
