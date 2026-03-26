@@ -68,11 +68,12 @@ static const int OSD_PKT_ICON_SCALE = 6;
 static const int OSD_PKT_ICON_COL_W = 34;
 static const int OSD_PKT_ROW_H = 28;
 static const int OSD_PKT_SECTION_GAP_H = 16;
+static const int OSD_PKT_TREE_INDENT_W = 8;
 static const int OSD_PKT_ROW_ICON_Y = 16;
 static const int OSD_PKT_ROW_TEXT_Y = 20;
 static const int OSD_PKT_ROW_HILITE_TOP_Y = 2;
 static const int OSD_PKT_ROW_HILITE_BOTTOM_Y = 26;
-static const unsigned int OSD_PKT_HIT_MAX = 16;
+static const unsigned int OSD_PKT_HIT_MAX = 24;
 static const int OSD_CHAR_W = 6;
 static const int OSD_MARGIN_X = 10;
 static const int OSD_MARGIN_Y = 16;
@@ -139,6 +140,35 @@ struct osd_row_type
 
 osd_row_type osdRows[OSD_MAX_ROWS];
 
+enum pflt_type
+{
+  pfAll = 0,
+  pfTcpAll,
+  pfTcpControl,
+  pfTcpSetupFinish,
+  pfTcpReset,
+  pfTcpPayload,
+  pfTcpLargePayload,
+  pfTcpDiscovery,
+  pfUdpAll,
+  pfUdpPayload,
+  pfUdpLargePayload,
+  pfUdpDiscovery,
+  pfIcmpAll,
+  pfArpAll,
+  pfArpRequest,
+  pfArpReply,
+  pfArpGratuitous,
+  pfOtherAll,
+  pfOtherFragmented
+};
+
+struct packet_tree_row_type
+{
+  unsigned char filter, indent, colorIndex, shape;
+  const char *label;
+};
+
 struct host_runtime_meta_type
 {
   unsigned char pr, shp, clr;
@@ -149,7 +179,7 @@ struct host_runtime_meta_type
 struct osd_pkt_hit_type
 {
   int left, top, right, bottom;
-  unsigned char pr, psf, ptf;
+  unsigned char filter;
   bool active;
 };
 
@@ -157,6 +187,7 @@ host_runtime_meta_type hostRuntimeMetaDefault = {0, 0, 0, 0, ""};
 std::map<unsigned long, host_runtime_meta_type> hostRuntimeMetaByIp;
 osd_pkt_hit_type osdPacketHits[OSD_PKT_HIT_MAX];
 unsigned int osdPacketHitCount = 0;
+unsigned char packetTreeFilter = pfAll;
 
 struct localhsen_if_type
 {
@@ -339,24 +370,27 @@ static host_runtime_meta_type *hostRuntimeMeta(host_type *ht, bool create = true
 static void hostRuntimeNotePacket(host_type *ht, const pkex_type *pkex, unsigned short port);
 static void hostRuntimeNoteDiscoveryName(host_type *ht, const char *name);
 static const char *packetShapeFilterLabel(unsigned char psf);
-static const char *packetShapeFilterString(unsigned char psf);
 static bool parsePacketShapeFilterValue(const char *value, unsigned char *out);
-static const char *packetTcpFilterLabel(unsigned char ptf);
-static const char *packetTcpFilterString(unsigned char ptf);
 static bool parsePacketTcpFilterValue(const char *value, unsigned char *out);
-static bool packetProtocolMatches(const pkex_type *pkex, unsigned char filter);
-static bool packetTcpControlMatches(const pkex_type *pkex, unsigned char filter);
+static unsigned char packetArpSubtype(const pkex_type *pkex);
 static unsigned short packetImportantPort(const pkif_type *pkt);
+static bool packetIsNameDiscovery(const pkif_type *pkt);
 static unsigned char packetColorIndex(const pkex_type *pkex);
 static unsigned char packetShape(const pkex_type *pkex);
-static bool packetLegendFilterActive(unsigned char pr, unsigned char psf, unsigned char ptf);
+static const packet_tree_row_type *packetTreeRows(unsigned int *count = 0);
+static const char *packetTreeFilterLabel(unsigned char filter);
+static const char *packetTreeFilterString(unsigned char filter);
+static bool parsePacketTreeFilterValue(const char *value, unsigned char *out);
+static bool packetFilterAllActive();
+static bool packetTreeFilterActive(unsigned char filter);
+static bool packetTreeMatches(const pkex_type *pkex, unsigned char filter);
+static void packetTreeFilterMigrateLegacy();
 static void packetFilterResetAll();
 static void packetFilterSetSensor(unsigned char sen);
-static void packetFilterSetProtocol(unsigned char pr);
-static void packetFilterSetShape(unsigned char psf);
-static void packetFilterSetTcp(unsigned char ptf);
+static void packetFilterSetTree(unsigned char filter);
+static void packetFilterSetPort(unsigned short port);
 static void osdPacketHitsClear();
-static void osdPacketHitAdd(int left, int top, int right, int bottom, unsigned char pr, unsigned char psf, unsigned char ptf);
+static void osdPacketHitAdd(int left, int top, int right, int bottom, unsigned char filter);
 static bool osdPacketHitProcess(int x, int y);
 void hostDetails();
 void mnuProcess(int m);
@@ -669,32 +703,20 @@ void alrtCreate(aobj_type ao, unsigned char pr, host_type *ht)
   altsLL.Write(new alrt_type(alrt));
 }
 
-static bool packetProtocolMatches(const pkex_type *pkex, unsigned char filter)
+static unsigned char packetArpSubtype(const pkex_type *pkex)
 {
-  unsigned char pr;
-  if (!filter) return true;
-  if (!pkex) return false;
-  pr = pkex->pk.pr;
-  if (filter == IPPROTO_OTHER)
-    return (pr != IPPROTO_ICMP) && (pr != IPPROTO_TCP) && (pr != IPPROTO_UDP) && (pr != IPPROTO_ARP);
-  return (pr == filter);
+  if (!pkex || (pkex->pk.pr != IPPROTO_ARP)) return 0;
+  return pkex->spr;
 }
 
-static bool packetTcpControlMatches(const pkex_type *pkex, unsigned char filter)
+static bool packetFilterAllActive()
 {
-  if (!filter) return true;
-  if (!pkex || (pkex->pk.pr != IPPROTO_TCP) || pkex->pld) return false;
-  if (filter == 1) return ((pkex->syn || pkex->fin) && !pkex->rst);
-  if (filter == 2) return (pkex->rst != 0);
-  return true;
+  return (!setts.sen && !setts.prt && (packetTreeFilter == pfAll));
 }
 
-static bool packetLegendFilterActive(unsigned char pr, unsigned char psf, unsigned char ptf)
+static bool packetTreeFilterActive(unsigned char filter)
 {
-  if (pr) return (setts.pr == pr) && !setts.sen && !setts.psf && !setts.ptf && !setts.prt;
-  if (psf) return (setts.psf == psf) && !setts.sen && !setts.pr && !setts.ptf && !setts.prt;
-  if (ptf) return (setts.ptf == ptf) && !setts.sen && (setts.pr == IPPROTO_TCP) && !setts.psf && !setts.prt;
-  return (!setts.sen && !setts.pr && !setts.psf && !setts.ptf && !setts.prt);
+  return !setts.sen && !setts.prt && (packetTreeFilter == filter);
 }
 
 static void packetFilterResetAll()
@@ -704,11 +726,12 @@ static void packetFilterResetAll()
   setts.psf = 0;
   setts.ptf = 0;
   setts.prt = 0;
+  packetTreeFilter = pfAll;
 }
 
 static void packetFilterSetSensor(unsigned char sen)
 {
-  if ((setts.sen == sen) && !setts.pr && !setts.psf && !setts.ptf && !setts.prt) packetFilterResetAll();
+  if ((setts.sen == sen) && (packetTreeFilter == pfAll) && !setts.prt) packetFilterResetAll();
   else
   {
     packetFilterResetAll();
@@ -716,34 +739,23 @@ static void packetFilterSetSensor(unsigned char sen)
   }
 }
 
-static void packetFilterSetProtocol(unsigned char pr)
+static void packetFilterSetTree(unsigned char filter)
 {
-  if (packetLegendFilterActive(pr, 0, 0)) packetFilterResetAll();
+  if ((packetTreeFilter == filter) && !setts.sen && !setts.prt) packetFilterResetAll();
   else
   {
     packetFilterResetAll();
-    setts.pr = pr;
+    packetTreeFilter = filter;
   }
 }
 
-static void packetFilterSetShape(unsigned char psf)
+static void packetFilterSetPort(unsigned short port)
 {
-  if (packetLegendFilterActive(0, psf, 0)) packetFilterResetAll();
+  if ((setts.prt == port) && (packetTreeFilter == pfAll) && !setts.sen) packetFilterResetAll();
   else
   {
     packetFilterResetAll();
-    setts.psf = psf;
-  }
-}
-
-static void packetFilterSetTcp(unsigned char ptf)
-{
-  if (packetLegendFilterActive(0, 0, ptf)) packetFilterResetAll();
-  else
-  {
-    packetFilterResetAll();
-    setts.pr = IPPROTO_TCP;
-    setts.ptf = ptf;
+    setts.prt = port;
   }
 }
 
@@ -760,19 +772,6 @@ static const char *packetShapeFilterLabel(unsigned char psf)
   }
 }
 
-static const char *packetShapeFilterString(unsigned char psf)
-{
-  switch (psf)
-  {
-    case pCube + 1: return "cube";
-    case pDouble + 1: return "double";
-    case pTriple + 1: return "triple";
-    case pSphere + 1: return "sphere";
-    case pPyramid + 1: return "pyramid";
-    default: return "all";
-  }
-}
-
 static bool parsePacketShapeFilterValue(const char *value, unsigned char *out)
 {
   if (!value || !out) return false;
@@ -786,26 +785,6 @@ static bool parsePacketShapeFilterValue(const char *value, unsigned char *out)
   return true;
 }
 
-static const char *packetTcpFilterLabel(unsigned char ptf)
-{
-  switch (ptf)
-  {
-    case 1: return "Setup / Finish";
-    case 2: return "Reset";
-    default: return "All";
-  }
-}
-
-static const char *packetTcpFilterString(unsigned char ptf)
-{
-  switch (ptf)
-  {
-    case 1: return "setup_finish";
-    case 2: return "reset";
-    default: return "all";
-  }
-}
-
 static bool parsePacketTcpFilterValue(const char *value, unsigned char *out)
 {
   if (!value || !out) return false;
@@ -814,6 +793,175 @@ static bool parsePacketTcpFilterValue(const char *value, unsigned char *out)
   else if (!strcmp(value, "reset")) *out = 2;
   else return false;
   return true;
+}
+
+static const packet_tree_row_type *packetTreeRows(unsigned int *count)
+{
+  static const packet_tree_row_type rows[] =
+  {
+    {pfAll,               0, 0, pDouble,  "All Traffic"},
+    {pfTcpAll,            0, 2, pDouble,  "TCP"},
+    {pfTcpControl,        1, 2, pCube,    "control / no payload"},
+    {pfTcpSetupFinish,    1, 5, pCube,    "setup / finish"},
+    {pfTcpReset,          1, 1, pCube,    "reset"},
+    {pfTcpPayload,        1, 2, pDouble,  "payload"},
+    {pfTcpLargePayload,   1, 2, pTriple,  "larger payload"},
+    {pfTcpDiscovery,      1, 2, pSphere,  "discovery"},
+    {pfUdpAll,            0, 3, pDouble,  "UDP"},
+    {pfUdpPayload,        1, 3, pDouble,  "payload"},
+    {pfUdpLargePayload,   1, 3, pTriple,  "larger payload"},
+    {pfUdpDiscovery,      1, 3, pSphere,  "discovery"},
+    {pfIcmpAll,           0, 1, pPyramid, "ICMP"},
+    {pfArpAll,            0, 4, pCube,    "ARP"},
+    {pfArpRequest,        1, 4, pCube,    "request"},
+    {pfArpReply,          1, 4, pDouble,  "reply"},
+    {pfArpGratuitous,     1, 4, pSphere,  "gratuitous"},
+    {pfOtherAll,          0, 0, pCube,    "OTHER"},
+    {pfOtherFragmented,   1, 0, pPyramid, "fragmented"}
+  };
+  if (count) *count = sizeof(rows) / sizeof(rows[0]);
+  return rows;
+}
+
+static const char *packetTreeFilterLabel(unsigned char filter)
+{
+  switch (filter)
+  {
+    case pfTcpAll: return "TCP";
+    case pfTcpControl: return "TCP control / no payload";
+    case pfTcpSetupFinish: return "TCP setup / finish";
+    case pfTcpReset: return "TCP reset";
+    case pfTcpPayload: return "TCP payload";
+    case pfTcpLargePayload: return "TCP larger payload";
+    case pfTcpDiscovery: return "TCP discovery";
+    case pfUdpAll: return "UDP";
+    case pfUdpPayload: return "UDP payload";
+    case pfUdpLargePayload: return "UDP larger payload";
+    case pfUdpDiscovery: return "UDP discovery";
+    case pfIcmpAll: return "ICMP";
+    case pfArpAll: return "ARP";
+    case pfArpRequest: return "ARP request";
+    case pfArpReply: return "ARP reply";
+    case pfArpGratuitous: return "ARP gratuitous";
+    case pfOtherAll: return "OTHER";
+    case pfOtherFragmented: return "OTHER fragmented";
+    default: return "All Traffic";
+  }
+}
+
+static const char *packetTreeFilterString(unsigned char filter)
+{
+  switch (filter)
+  {
+    case pfTcpAll: return "tcp";
+    case pfTcpControl: return "tcp_control";
+    case pfTcpSetupFinish: return "tcp_setup_finish";
+    case pfTcpReset: return "tcp_reset";
+    case pfTcpPayload: return "tcp_payload";
+    case pfTcpLargePayload: return "tcp_large_payload";
+    case pfTcpDiscovery: return "tcp_discovery";
+    case pfUdpAll: return "udp";
+    case pfUdpPayload: return "udp_payload";
+    case pfUdpLargePayload: return "udp_large_payload";
+    case pfUdpDiscovery: return "udp_discovery";
+    case pfIcmpAll: return "icmp";
+    case pfArpAll: return "arp";
+    case pfArpRequest: return "arp_request";
+    case pfArpReply: return "arp_reply";
+    case pfArpGratuitous: return "arp_gratuitous";
+    case pfOtherAll: return "other";
+    case pfOtherFragmented: return "other_fragmented";
+    default: return "all";
+  }
+}
+
+static bool parsePacketTreeFilterValue(const char *value, unsigned char *out)
+{
+  if (!value || !out) return false;
+  if (!strcmp(value, "all")) *out = pfAll;
+  else if (!strcmp(value, "tcp")) *out = pfTcpAll;
+  else if (!strcmp(value, "tcp_control")) *out = pfTcpControl;
+  else if (!strcmp(value, "tcp_setup_finish")) *out = pfTcpSetupFinish;
+  else if (!strcmp(value, "tcp_reset")) *out = pfTcpReset;
+  else if (!strcmp(value, "tcp_payload")) *out = pfTcpPayload;
+  else if (!strcmp(value, "tcp_large_payload")) *out = pfTcpLargePayload;
+  else if (!strcmp(value, "tcp_discovery")) *out = pfTcpDiscovery;
+  else if (!strcmp(value, "udp")) *out = pfUdpAll;
+  else if (!strcmp(value, "udp_payload")) *out = pfUdpPayload;
+  else if (!strcmp(value, "udp_large_payload")) *out = pfUdpLargePayload;
+  else if (!strcmp(value, "udp_discovery")) *out = pfUdpDiscovery;
+  else if (!strcmp(value, "icmp")) *out = pfIcmpAll;
+  else if (!strcmp(value, "arp")) *out = pfArpAll;
+  else if (!strcmp(value, "arp_request")) *out = pfArpRequest;
+  else if (!strcmp(value, "arp_reply")) *out = pfArpReply;
+  else if (!strcmp(value, "arp_gratuitous")) *out = pfArpGratuitous;
+  else if (!strcmp(value, "other")) *out = pfOtherAll;
+  else if (!strcmp(value, "other_fragmented")) *out = pfOtherFragmented;
+  else return false;
+  return true;
+}
+
+static bool packetTreeMatches(const pkex_type *pkex, unsigned char filter)
+{
+  const pkif_type *pkt;
+  bool discovery;
+  if (!pkex || (filter == pfAll)) return true;
+  pkt = &pkex->pk;
+  discovery = packetIsNameDiscovery(pkt);
+  switch (filter)
+  {
+    case pfTcpAll: return (pkt->pr == IPPROTO_TCP);
+    case pfTcpControl: return (pkt->pr == IPPROTO_TCP) && !discovery && !pkex->pld;
+    case pfTcpSetupFinish: return (pkt->pr == IPPROTO_TCP) && !discovery && !pkex->pld && (pkex->syn || pkex->fin) && !pkex->rst;
+    case pfTcpReset: return (pkt->pr == IPPROTO_TCP) && !discovery && !pkex->pld && (pkex->rst != 0);
+    case pfTcpPayload: return (pkt->pr == IPPROTO_TCP) && !discovery && pkex->pld && (pkex->sz < PACKET_TRIPLE_SIZE_THRESHOLD);
+    case pfTcpLargePayload: return (pkt->pr == IPPROTO_TCP) && !discovery && pkex->pld && (pkex->sz >= PACKET_TRIPLE_SIZE_THRESHOLD);
+    case pfTcpDiscovery: return (pkt->pr == IPPROTO_TCP) && discovery;
+    case pfUdpAll: return (pkt->pr == IPPROTO_UDP);
+    case pfUdpPayload: return (pkt->pr == IPPROTO_UDP) && !discovery && pkex->pld && (pkex->sz < PACKET_TRIPLE_SIZE_THRESHOLD);
+    case pfUdpLargePayload: return (pkt->pr == IPPROTO_UDP) && !discovery && pkex->pld && (pkex->sz >= PACKET_TRIPLE_SIZE_THRESHOLD);
+    case pfUdpDiscovery: return (pkt->pr == IPPROTO_UDP) && discovery;
+    case pfIcmpAll: return (pkt->pr == IPPROTO_ICMP);
+    case pfArpAll: return (pkt->pr == IPPROTO_ARP);
+    case pfArpRequest: return (pkt->pr == IPPROTO_ARP) && (packetArpSubtype(pkex) == 1);
+    case pfArpReply: return (pkt->pr == IPPROTO_ARP) && (packetArpSubtype(pkex) == 2);
+    case pfArpGratuitous: return (pkt->pr == IPPROTO_ARP) && (packetArpSubtype(pkex) == 3);
+    case pfOtherAll: return (pkt->pr != IPPROTO_ICMP) && (pkt->pr != IPPROTO_TCP) && (pkt->pr != IPPROTO_UDP) && (pkt->pr != IPPROTO_ARP);
+    case pfOtherFragmented: return (pkt->pr == IPPROTO_FRAG);
+    default: return true;
+  }
+}
+
+static void packetTreeFilterMigrateLegacy()
+{
+  if (packetTreeFilter != pfAll) return;
+  if (setts.ptf == 1) packetTreeFilter = pfTcpSetupFinish;
+  else if (setts.ptf == 2) packetTreeFilter = pfTcpReset;
+  else if (setts.pr == IPPROTO_TCP)
+  {
+    if (setts.psf == (pCube + 1)) packetTreeFilter = pfTcpControl;
+    else if (setts.psf == (pTriple + 1)) packetTreeFilter = pfTcpLargePayload;
+    else if (setts.psf == (pSphere + 1)) packetTreeFilter = pfTcpDiscovery;
+    else if (setts.psf == (pDouble + 1)) packetTreeFilter = pfTcpPayload;
+    else packetTreeFilter = pfTcpAll;
+  }
+  else if (setts.pr == IPPROTO_UDP)
+  {
+    if (setts.psf == (pTriple + 1)) packetTreeFilter = pfUdpLargePayload;
+    else if (setts.psf == (pSphere + 1)) packetTreeFilter = pfUdpDiscovery;
+    else if (setts.psf == (pDouble + 1)) packetTreeFilter = pfUdpPayload;
+    else packetTreeFilter = pfUdpAll;
+  }
+  else if (setts.pr == IPPROTO_ICMP) packetTreeFilter = pfIcmpAll;
+  else if (setts.pr == IPPROTO_ARP) packetTreeFilter = pfArpAll;
+  else if (setts.pr == IPPROTO_OTHER)
+  {
+    if (setts.psf == (pPyramid + 1)) packetTreeFilter = pfOtherFragmented;
+    else packetTreeFilter = pfOtherAll;
+  }
+  setts.pr = 0;
+  setts.psf = 0;
+  setts.ptf = 0;
 }
 
 static unsigned char packetColorIndex(const pkex_type *pkex)
@@ -849,6 +997,12 @@ static unsigned char packetShape(const pkex_type *pkex)
   const pkif_type *pkt = &pkex->pk;
   if (packetIsNameDiscovery(pkt)) return pSphere;
   if ((pkt->pr == IPPROTO_ICMP) || (pkt->pr == IPPROTO_FRAG)) return pPyramid;
+  if (pkt->pr == IPPROTO_ARP)
+  {
+    if (packetArpSubtype(pkex) == 2) return pDouble;
+    if (packetArpSubtype(pkex) == 3) return pSphere;
+    return pCube;
+  }
   if ((pkt->pr == IPPROTO_TCP) || (pkt->pr == IPPROTO_UDP))
   {
     if (!pkex->pld) return pCube;
@@ -868,8 +1022,8 @@ void pcktCreate(pkex_type *pkex, host_type *sht, host_type *dht, bool lk)
   pkif_type *pkt = &pkex->pk;
   unsigned char shape = packetShape(pkex), color = packetColorIndex(pkex);
   if ((pktsLL.Num() < setts.pks) && (sht->shp || dht->shp) && (!setts.sen || (pkt->sen == setts.sen))
-    && packetProtocolMatches(pkex, setts.pr) && (!setts.prt || (pkt->srcpt == setts.prt) || (pkt->dstpt == setts.prt))
-    && (!setts.psf || (shape == (setts.psf - 1))) && packetTcpControlMatches(pkex, setts.ptf) && goAnim)
+    && (!setts.prt || (pkt->srcpt == setts.prt) || (pkt->dstpt == setts.prt))
+    && packetTreeMatches(pkex, packetTreeFilter) && goAnim)
   {
     pckt_type pckt = {pkt->pr, shape, color, pkt->dstpt, frame, {(double)sht->px, (double)sht->py, (double)sht->pz}, dht}, *pk;
     pktsLL.End(2);
@@ -1083,15 +1237,11 @@ static void drawOsdPanel()
 //update osd text
 void osdUpdate()
 {
-  char sensorLabel[16], protocolLabel[16], portLabel[16], shapeLabel[16], tcpLabel[20];
+  char sensorLabel[16], packetFilterLabel[32], portLabel[16];
   char packetLimitLabel[16], visiblePacketsLabel[16];
   if (setts.sen) snprintf(sensorLabel, sizeof(sensorLabel), "%u", setts.sen);
   else strcpy(sensorLabel, "All");
-  if (setts.pr == IPPROTO_OTHER) strcpy(protocolLabel, "Other");
-  else if (setts.pr) protoDecode(setts.pr, protocolLabel);
-  else strcpy(protocolLabel, "All");
-  strcpy(shapeLabel, packetShapeFilterLabel(setts.psf));
-  strcpy(tcpLabel, packetTcpFilterLabel(setts.ptf));
+  strcpy(packetFilterLabel, packetTreeFilterLabel(packetTreeFilter));
   if (setts.prt) snprintf(portLabel, sizeof(portLabel), "%u", setts.prt);
   else strcpy(portLabel, "All");
   snprintf(packetLimitLabel, sizeof(packetLimitLabel), "%7u", setts.pks);
@@ -1099,9 +1249,7 @@ void osdUpdate()
   osdTextLineCount = 0;
   osdAddSection("FILTERS");
   osdAddRow("Sensor Filter", sensorLabel, (setts.sen ? osdAccent : osdNormal));
-  osdAddRow("Protocol Filter", protocolLabel, (setts.pr ? osdAccent : osdNormal));
-  osdAddRow("Packet Form", shapeLabel, (setts.psf ? osdAccent : osdNormal));
-  osdAddRow("TCP Control", tcpLabel, (setts.ptf ? osdAccent : osdNormal));
+  osdAddRow("Packet Filter", packetFilterLabel, ((packetTreeFilter != pfAll) ? osdAccent : osdNormal));
   osdAddRow("Port Filter", portLabel, (setts.prt ? osdAccent : osdNormal));
   osdAddSection("LABELS");
   osdAddRow("Display Mode", sipnToLabel(setts.sipn));
@@ -1123,27 +1271,19 @@ void osdUpdate()
   if (lnkht) osdAddRow("Link Line", "Pending", osdAccent);
 }
 
-struct pktlg_type
-{
-  unsigned char colorIndex, shape, pr, psf;
-  const char *name;
-};
-
 static void osdPacketHitsClear()
 {
   osdPacketHitCount = 0;
 }
 
-static void osdPacketHitAdd(int left, int top, int right, int bottom, unsigned char pr, unsigned char psf, unsigned char ptf)
+static void osdPacketHitAdd(int left, int top, int right, int bottom, unsigned char filter)
 {
   if (osdPacketHitCount >= OSD_PKT_HIT_MAX) return;
   osdPacketHits[osdPacketHitCount].left = left;
   osdPacketHits[osdPacketHitCount].top = top;
   osdPacketHits[osdPacketHitCount].right = right;
   osdPacketHits[osdPacketHitCount].bottom = bottom;
-  osdPacketHits[osdPacketHitCount].pr = pr;
-  osdPacketHits[osdPacketHitCount].psf = psf;
-  osdPacketHits[osdPacketHitCount].ptf = ptf;
+  osdPacketHits[osdPacketHitCount].filter = filter;
   osdPacketHits[osdPacketHitCount].active = true;
   osdPacketHitCount++;
 }
@@ -1156,18 +1296,8 @@ static bool osdPacketHitProcess(int x, int y)
     if (!hit->active) continue;
     if ((x >= hit->left) && (x <= hit->right) && (y >= hit->bottom) && (y <= hit->top))
     {
-      if (hit->pr)
-      {
-        packetFilterSetProtocol(hit->pr);
-      }
-      else if (hit->psf)
-      {
-        packetFilterSetShape(hit->psf);
-      }
-      else if (hit->ptf)
-      {
-        packetFilterSetTcp(hit->ptf);
-      }
+      if (hit->filter == pfAll) packetFilterResetAll();
+      else packetFilterSetTree(hit->filter);
       pcktsDestroy(true);
       osdUpdate();
       refresh = true;
@@ -1190,42 +1320,16 @@ static void osdDrawPacketMini(int cx, int cy, unsigned char colorIndex, unsigned
 
 static void osdDrawPktLegend(int px, int py)
 {
-  static const pktlg_type legend[] =
-  {
-    {1, pPyramid, IPPROTO_ICMP, 0, "ICMP"},
-    {2, pDouble, IPPROTO_TCP, 0, "TCP"},
-    {3, pDouble, IPPROTO_UDP, 0, "UDP"},
-    {4, pCube, IPPROTO_ARP, 0, "ARP"},
-    {0, pCube, IPPROTO_OTHER, 0, "OTHER"}
-  };
-  static const pktlg_type forms[] =
-  {
-    {0, pCube, 0, pCube + 1, "Cube: control / no payload"},
-    {2, pDouble, 0, pDouble + 1, "Double cuboid: payload"},
-    {2, pTriple, 0, pTriple + 1, "Triple cuboid: larger payload"},
-    {3, pSphere, 0, pSphere + 1, "Sphere: name / discovery"},
-    {1, pPyramid, 0, pPyramid + 1, "Pyramid: ICMP / fragmented"}
-  };
-  static const pktlg_type tcpctrl[] =
-  {
-    {5, pCube, 0, 0, "TCP setup / finish"},
-    {1, pCube, 0, 0, "TCP reset"}
-  };
-
+  unsigned int rowsCount = 0;
+  const packet_tree_row_type *rows = packetTreeRows(&rowsCount);
   int left = px, right = px + OSD_BOX_W, top, bottom;
-  int legendRows = (int)(sizeof(legend) / sizeof(legend[0]));
-  int formRows = (int)(sizeof(forms) / sizeof(forms[0]));
-  int tcpctrlRows = (int)(sizeof(tcpctrl) / sizeof(tcpctrl[0]));
-  int coloursTop, formsTop, tcpctrlTop, iconX;
-  int rowTop, rowBottom, rowIconY, rowTextY;
+  int listTop, iconX, rowTop, rowBottom, rowIconY, rowTextY;
   py -= (osdTextLineCount * OSD_LINE_H) + OSD_PKT_GAP_H;
   osdPacketHitsClear();
   top = py + 12;
-  coloursTop = py - 12;
-  formsTop = coloursTop - (legendRows * OSD_PKT_ROW_H) - OSD_PKT_SECTION_GAP_H - 6;
-  tcpctrlTop = formsTop - (formRows * OSD_PKT_ROW_H) - OSD_PKT_SECTION_GAP_H - 6;
+  listTop = py - 12;
   iconX = left + OSD_BOX_PAD_X + 13;
-  bottom = tcpctrlTop - (tcpctrlRows * OSD_PKT_ROW_H) - 24;
+  bottom = listTop - ((int)rowsCount * OSD_PKT_ROW_H) - 24;
   glColor3ub(15, 15, 20);
   glRecti(left, top, right, bottom);
   glColor3ub(dlgrey[0], dlgrey[1], dlgrey[2]);
@@ -1237,65 +1341,11 @@ static void osdDrawPktLegend(int px, int py)
   glEnd();
   glColor3ub(brgrey[0], brgrey[1], brgrey[2]);
   glRasterPos2i(left + OSD_BOX_PAD_X, py + 2);
-  GLWin.DrawString((const unsigned char *)"PACKET LEGEND");
+  GLWin.DrawString((const unsigned char *)"PACKET FILTERS");
   glBegin(GL_LINES);
-    glVertex2i(left + 92, py + 5);
+    glVertex2i(left + 96, py + 5);
     glVertex2i(right - OSD_BOX_PAD_X, py + 5);
   glEnd();
-  glColor3ub(brgrey[0], brgrey[1], brgrey[2]);
-  glRasterPos2i(left + OSD_BOX_PAD_X, coloursTop);
-  GLWin.DrawString((const unsigned char *)"COLOURS");
-  for (int cnt = 0; cnt < legendRows; cnt++)
-  {
-    if (packetLegendFilterActive(legend[cnt].pr, 0, 0))
-    {
-      rowTop = coloursTop - OSD_PKT_ROW_HILITE_TOP_Y - (cnt * OSD_PKT_ROW_H);
-      rowBottom = coloursTop - OSD_PKT_ROW_HILITE_BOTTOM_Y - (cnt * OSD_PKT_ROW_H);
-      glColor3ub(dlblue[0], dlblue[1], dlblue[2]);
-      glRecti(left + OSD_BOX_PAD_X, rowTop, right - OSD_BOX_PAD_X, rowBottom);
-      glColor3ub(yellow[0], yellow[1], yellow[2]);
-      glBegin(GL_LINE_LOOP);
-        glVertex2i(left + OSD_BOX_PAD_X, rowTop);
-        glVertex2i(right - OSD_BOX_PAD_X, rowTop);
-        glVertex2i(right - OSD_BOX_PAD_X, rowBottom);
-        glVertex2i(left + OSD_BOX_PAD_X, rowBottom);
-      glEnd();
-    }
-  }
-  for (int cnt = 0; cnt < formRows; cnt++)
-  {
-    if (packetLegendFilterActive(0, forms[cnt].psf, 0))
-    {
-      rowTop = formsTop - OSD_PKT_ROW_HILITE_TOP_Y - (cnt * OSD_PKT_ROW_H);
-      rowBottom = formsTop - OSD_PKT_ROW_HILITE_BOTTOM_Y - (cnt * OSD_PKT_ROW_H);
-      glColor3ub(dlblue[0], dlblue[1], dlblue[2]);
-      glRecti(left + OSD_BOX_PAD_X, rowTop, right - OSD_BOX_PAD_X, rowBottom);
-      glColor3ub(yellow[0], yellow[1], yellow[2]);
-      glBegin(GL_LINE_LOOP);
-        glVertex2i(left + OSD_BOX_PAD_X, rowTop);
-        glVertex2i(right - OSD_BOX_PAD_X, rowTop);
-        glVertex2i(right - OSD_BOX_PAD_X, rowBottom);
-        glVertex2i(left + OSD_BOX_PAD_X, rowBottom);
-      glEnd();
-    }
-  }
-  for (int cnt = 0; cnt < tcpctrlRows; cnt++)
-  {
-    if (packetLegendFilterActive(0, 0, (unsigned char)(cnt + 1)))
-    {
-      rowTop = tcpctrlTop - OSD_PKT_ROW_HILITE_TOP_Y - (cnt * OSD_PKT_ROW_H);
-      rowBottom = tcpctrlTop - OSD_PKT_ROW_HILITE_BOTTOM_Y - (cnt * OSD_PKT_ROW_H);
-      glColor3ub(dlblue[0], dlblue[1], dlblue[2]);
-      glRecti(left + OSD_BOX_PAD_X, rowTop, right - OSD_BOX_PAD_X, rowBottom);
-      glColor3ub(yellow[0], yellow[1], yellow[2]);
-      glBegin(GL_LINE_LOOP);
-        glVertex2i(left + OSD_BOX_PAD_X, rowTop);
-        glVertex2i(right - OSD_BOX_PAD_X, rowTop);
-        glVertex2i(right - OSD_BOX_PAD_X, rowBottom);
-        glVertex2i(left + OSD_BOX_PAD_X, rowBottom);
-      glEnd();
-    }
-  }
   glMatrixMode(GL_PROJECTION);
   glPushMatrix();
   glLoadIdentity();
@@ -1303,60 +1353,49 @@ static void osdDrawPktLegend(int px, int py)
   glMatrixMode(GL_MODELVIEW);
   glClear(GL_DEPTH_BUFFER_BIT);
   glEnable(GL_DEPTH_TEST);
-  for (int cnt = 0; cnt < legendRows; cnt++)
+  for (unsigned int cnt = 0; cnt < rowsCount; cnt++)
   {
-    rowTop = coloursTop - OSD_PKT_ROW_HILITE_TOP_Y - (cnt * OSD_PKT_ROW_H);
-    rowBottom = coloursTop - OSD_PKT_ROW_HILITE_BOTTOM_Y - (cnt * OSD_PKT_ROW_H);
-    rowIconY = coloursTop - OSD_PKT_ROW_ICON_Y - (cnt * OSD_PKT_ROW_H);
-    osdPacketHitAdd(left + OSD_BOX_PAD_X, rowTop, right - OSD_BOX_PAD_X, rowBottom, legend[cnt].pr, 0, 0);
-    osdDrawPacketMini(iconX, rowIconY, legend[cnt].colorIndex, legend[cnt].shape, OSD_PKT_ICON_SCALE);
-  }
-  for (int cnt = 0; cnt < formRows; cnt++)
-  {
-    rowTop = formsTop - OSD_PKT_ROW_HILITE_TOP_Y - (cnt * OSD_PKT_ROW_H);
-    rowBottom = formsTop - OSD_PKT_ROW_HILITE_BOTTOM_Y - (cnt * OSD_PKT_ROW_H);
-    rowIconY = formsTop - OSD_PKT_ROW_ICON_Y - (cnt * OSD_PKT_ROW_H);
-    osdPacketHitAdd(left + OSD_BOX_PAD_X, rowTop, right - OSD_BOX_PAD_X, rowBottom, 0, forms[cnt].psf, 0);
-    osdDrawPacketMini(iconX, rowIconY, forms[cnt].colorIndex, forms[cnt].shape, OSD_PKT_ICON_SCALE);
-  }
-  for (int cnt = 0; cnt < tcpctrlRows; cnt++)
-  {
-    rowTop = tcpctrlTop - OSD_PKT_ROW_HILITE_TOP_Y - (cnt * OSD_PKT_ROW_H);
-    rowBottom = tcpctrlTop - OSD_PKT_ROW_HILITE_BOTTOM_Y - (cnt * OSD_PKT_ROW_H);
-    rowIconY = tcpctrlTop - OSD_PKT_ROW_ICON_Y - (cnt * OSD_PKT_ROW_H);
-    osdPacketHitAdd(left + OSD_BOX_PAD_X, rowTop, right - OSD_BOX_PAD_X, rowBottom, 0, 0, (unsigned char)(cnt + 1));
-    osdDrawPacketMini(iconX, rowIconY, tcpctrl[cnt].colorIndex, tcpctrl[cnt].shape, OSD_PKT_ICON_SCALE);
+    int indent = rows[cnt].indent * OSD_PKT_TREE_INDENT_W;
+    bool active = ((rows[cnt].filter == pfAll) ? packetFilterAllActive() : packetTreeFilterActive(rows[cnt].filter));
+    rowTop = listTop - OSD_PKT_ROW_HILITE_TOP_Y - ((int)cnt * OSD_PKT_ROW_H);
+    rowBottom = listTop - OSD_PKT_ROW_HILITE_BOTTOM_Y - ((int)cnt * OSD_PKT_ROW_H);
+    rowIconY = listTop - OSD_PKT_ROW_ICON_Y - ((int)cnt * OSD_PKT_ROW_H);
+    rowTextY = listTop - OSD_PKT_ROW_TEXT_Y - ((int)cnt * OSD_PKT_ROW_H);
+    if (active)
+    {
+      glColor3ub(dlblue[0], dlblue[1], dlblue[2]);
+      glRecti(left + OSD_BOX_PAD_X, rowTop, right - OSD_BOX_PAD_X, rowBottom);
+      glColor3ub(yellow[0], yellow[1], yellow[2]);
+      glBegin(GL_LINE_LOOP);
+        glVertex2i(left + OSD_BOX_PAD_X, rowTop);
+        glVertex2i(right - OSD_BOX_PAD_X, rowTop);
+        glVertex2i(right - OSD_BOX_PAD_X, rowBottom);
+        glVertex2i(left + OSD_BOX_PAD_X, rowBottom);
+      glEnd();
+    }
+    if (rows[cnt].indent)
+    {
+      glColor3ub(dlgrey[0], dlgrey[1], dlgrey[2]);
+      glBegin(GL_LINES);
+        glVertex2i(left + OSD_BOX_PAD_X + 8, rowTextY - 3);
+        glVertex2i(left + OSD_BOX_PAD_X + 8 + indent - 2, rowTextY - 3);
+      glEnd();
+    }
+    osdPacketHitAdd(left + OSD_BOX_PAD_X, rowTop, right - OSD_BOX_PAD_X, rowBottom, rows[cnt].filter);
+    osdDrawPacketMini(iconX + indent, rowIconY, rows[cnt].colorIndex, rows[cnt].shape, OSD_PKT_ICON_SCALE);
   }
   glDisable(GL_DEPTH_TEST);
   glMatrixMode(GL_PROJECTION);
   glPopMatrix();
   glMatrixMode(GL_MODELVIEW);
-  for (int cnt = 0; cnt < legendRows; cnt++)
+  for (unsigned int cnt = 0; cnt < rowsCount; cnt++)
   {
-    rowTextY = coloursTop - OSD_PKT_ROW_TEXT_Y - (cnt * OSD_PKT_ROW_H);
-    glColor3ub(white[0], white[1], white[2]);
-    glRasterPos2i(left + OSD_BOX_PAD_X + OSD_PKT_ICON_COL_W, rowTextY);
-    GLWin.DrawString((const unsigned char *)legend[cnt].name);
-  }
-  glColor3ub(brgrey[0], brgrey[1], brgrey[2]);
-  glRasterPos2i(left + OSD_BOX_PAD_X, formsTop);
-  GLWin.DrawString((const unsigned char *)"FORMS");
-  for (int cnt = 0; cnt < formRows; cnt++)
-  {
-    rowTextY = formsTop - OSD_PKT_ROW_TEXT_Y - (cnt * OSD_PKT_ROW_H);
-    glColor3ub(white[0], white[1], white[2]);
-    glRasterPos2i(left + OSD_BOX_PAD_X + OSD_PKT_ICON_COL_W, rowTextY);
-    GLWin.DrawString((const unsigned char *)forms[cnt].name);
-  }
-  glColor3ub(brgrey[0], brgrey[1], brgrey[2]);
-  glRasterPos2i(left + OSD_BOX_PAD_X, tcpctrlTop);
-  GLWin.DrawString((const unsigned char *)"TCP CONTROL");
-  for (int cnt = 0; cnt < tcpctrlRows; cnt++)
-  {
-    rowTextY = tcpctrlTop - OSD_PKT_ROW_TEXT_Y - (cnt * OSD_PKT_ROW_H);
-    glColor3ub(white[0], white[1], white[2]);
-    glRasterPos2i(left + OSD_BOX_PAD_X + OSD_PKT_ICON_COL_W, rowTextY);
-    GLWin.DrawString((const unsigned char *)tcpctrl[cnt].name);
+    int indent = rows[cnt].indent * OSD_PKT_TREE_INDENT_W;
+    rowTextY = listTop - OSD_PKT_ROW_TEXT_Y - ((int)cnt * OSD_PKT_ROW_H);
+    if (rows[cnt].indent) glColor3ub(white[0], white[1], white[2]);
+    else glColor3ub(brgrey[0], brgrey[1], brgrey[2]);
+    glRasterPos2i(left + OSD_BOX_PAD_X + OSD_PKT_ICON_COL_W + indent, rowTextY);
+    GLWin.DrawString((const unsigned char *)rows[cnt].label);
   }
 }
 
@@ -2469,14 +2508,12 @@ void btnProcess(int gs)
         if (gr == HSD_PKTSPRO)
         {
           packetFilterResetAll();
-          setts.pr = atoi(gi1);
-          if (setts.pr) pcktsDestroy(true);
-          else osdUpdate();
+          osdUpdate();
         }
         else
         {
           packetFilterResetAll();
-          setts.prt = atoi(gi1);
+          packetFilterSetPort((unsigned short)atoi(gi1));
           if (setts.prt) pcktsDestroy(true);
           else osdUpdate();
         }
@@ -3636,7 +3673,8 @@ void mnuProcess(int m)
         osdUpdate();
         break;
       case 60: triggerKeyAction(kaShowAllPackets); break;  //show packets for all hosts
-      case 139: packetFilterResetAll(); osdUpdate(); break;  //show all sensors / clear packet filter
+      case 61:  //legacy all protocols / show all tree filters
+      case 139: packetFilterResetAll(); osdUpdate(); break;
       case 140: packetFilterSetSensor(1); pcktsDestroy(true); break;
       case 141: packetFilterSetSensor(2); pcktsDestroy(true); break;
       case 142: packetFilterSetSensor(3); pcktsDestroy(true); break;
@@ -3646,37 +3684,11 @@ void mnuProcess(int m)
       case 146: packetFilterSetSensor(7); pcktsDestroy(true); break;
       case 147: packetFilterSetSensor(8); pcktsDestroy(true); break;
       case 148: packetFilterSetSensor(9); pcktsDestroy(true); break;
-      case 61:  //show all protocols packets
-        packetFilterResetAll();
-        osdUpdate();
-        break;
-      case 62:  //show ICMP packets
-        packetFilterSetProtocol(IPPROTO_ICMP);
-        pcktsDestroy(true);
-        break;
-      case 63:  //show TCP packets
-        packetFilterSetProtocol(IPPROTO_TCP);
-        pcktsDestroy(true);
-        break;
-      case 64:  //show UDP packets
-        packetFilterSetProtocol(IPPROTO_UDP);
-        pcktsDestroy(true);
-        break;
-      case 65:  //show ARP packets
-        packetFilterSetProtocol(IPPROTO_ARP);
-        pcktsDestroy(true);
-        break;
-      case 133:  //show other protocol packets
-        packetFilterSetProtocol(IPPROTO_OTHER);
-        pcktsDestroy(true);
-        break;
-      case 66:  //enter protocol to show packets for
-        GLWin.CreateWin(-1, -1, 170, 100, "PACKETS PROTOCOL");
-        GLWin.AddLabel(10, 15, "Enter Protocol No.:");
-        GLResult[0] = (GLWin.AddInput(130, 10, 3, 3, "") * 100) + HSD_PKTSPRO;
-        GLWin.AddButton(42, 40, GLWIN_OK, "OK", true, true);
-        GLWin.AddButton(94, 40, GLWIN_CLOSE, "Cancel");
-        break;
+      case 62: packetFilterSetTree(pfIcmpAll); pcktsDestroy(true); break;  //legacy ICMP
+      case 63: packetFilterSetTree(pfTcpAll); pcktsDestroy(true); break;  //legacy TCP
+      case 64: packetFilterSetTree(pfUdpAll); pcktsDestroy(true); break;  //legacy UDP
+      case 65: packetFilterSetTree(pfArpAll); pcktsDestroy(true); break;  //legacy ARP
+      case 133: packetFilterSetTree(pfOtherAll); pcktsDestroy(true); break;  //legacy OTHER
       case 67:  //show all ports packets
         packetFilterResetAll();
         osdUpdate();
@@ -3688,15 +3700,37 @@ void mnuProcess(int m)
         GLWin.AddButton(30, 40, GLWIN_OK, "OK", true, true);
         GLWin.AddButton(82, 40, GLWIN_CLOSE, "Cancel");
         break;
-      case 127: packetFilterResetAll(); osdUpdate(); break;  //all packet forms
-      case 128: packetFilterSetShape(pCube + 1); pcktsDestroy(true); break;
-      case 129: packetFilterSetShape(pDouble + 1); pcktsDestroy(true); break;
-      case 130: packetFilterSetShape(pTriple + 1); pcktsDestroy(true); break;
-      case 131: packetFilterSetShape(pSphere + 1); pcktsDestroy(true); break;
-      case 132: packetFilterSetShape(pPyramid + 1); pcktsDestroy(true); break;
-      case 135: packetFilterResetAll(); osdUpdate(); break;  //all tcp control / clear packet filter
-      case 136: packetFilterSetTcp(1); pcktsDestroy(true); break;  //setup / finish
-      case 137: packetFilterSetTcp(2); pcktsDestroy(true); break;  //reset
+      case 127: packetFilterResetAll(); osdUpdate(); break;  //legacy form all
+      case 128: packetFilterSetTree(pfTcpControl); pcktsDestroy(true); break;  //legacy cube
+      case 129: packetFilterSetTree(pfTcpPayload); pcktsDestroy(true); break;  //legacy double
+      case 130: packetFilterSetTree(pfTcpLargePayload); pcktsDestroy(true); break;  //legacy triple
+      case 131: packetFilterSetTree(pfUdpDiscovery); pcktsDestroy(true); break;  //legacy sphere
+      case 132: packetFilterSetTree(pfIcmpAll); pcktsDestroy(true); break;  //legacy pyramid
+      case 135: packetFilterResetAll(); osdUpdate(); break;  //legacy tcp control all
+      case 136: packetFilterSetTree(pfTcpSetupFinish); pcktsDestroy(true); break;
+      case 137: packetFilterSetTree(pfTcpReset); pcktsDestroy(true); break;
+      case 149: case 150: case 151: case 152: case 153: case 154: case 155: case 156:
+      case 157: case 158: case 159: case 160: case 161: case 162: case 163: case 164:
+      case 165: case 166: case 167:
+      {
+        unsigned int rowsCount = 0;
+        const packet_tree_row_type *rows = packetTreeRows(&rowsCount);
+        unsigned int idx = (unsigned int)(m - 149);
+        if (idx < rowsCount)
+        {
+          if (rows[idx].filter == pfAll)
+          {
+            packetFilterResetAll();
+            osdUpdate();
+          }
+          else
+          {
+            packetFilterSetTree(rows[idx].filter);
+            pcktsDestroy(true);
+          }
+        }
+        break;
+      }
       case 69: triggerKeyAction(kaPacketsOff); break;  //packets off
       case 70: triggerKeyAction(kaViewHome); break;  //recall home view
       case 71: triggerKeyAction(kaViewPos1); break;  //recall view position 1
@@ -3883,10 +3917,8 @@ void mnuProcess(int m)
         addMenuItem("PACKETS", 9, 2, 100, GLFW_KEY_BACKSPACE);
         addMenuItem("Show All", 7, 0, 60, 0, kaShowAllPackets);
         addMenuItem("Sensor", 9, 1, 138, 'N', kaCount, msChoice, (setts.sen != 0));
-        addMenuItem("Protocol", 9, 1, 118, 'P', kaCount, msChoice, (setts.pr != 0) && !setts.ptf && !setts.prt && !setts.psf && !setts.sen);
-        addMenuItem("Form", 9, 1, 126, 'F', kaCount, msChoice, (setts.psf != 0));
+        addMenuItem("Filter", 9, 1, 118, 'F', kaCount, msChoice, (packetTreeFilter != pfAll));
         addMenuItem("Port", 9, 1, 119, 'T', kaCount, msChoice, (setts.prt != 0));
-        addMenuItem("TCP Control", 9, 1, 134, 'C', kaCount, msChoice, (setts.ptf != 0));
         addMenuItem("Select Showing", 9, 0, 32, 'S');
         addMenuItem("Off", 9, 0, 69, 0, kaPacketsOff);
         break;
@@ -3984,20 +4016,16 @@ void mnuProcess(int m)
         break;
       case 118:
       {
-        bool customProtocol = (setts.pr && !setts.sen && !setts.psf && !setts.ptf && !setts.prt
-          && (setts.pr != IPPROTO_ICMP) && (setts.pr != IPPROTO_TCP) && (setts.pr != IPPROTO_UDP)
-          && (setts.pr != IPPROTO_ARP) && (setts.pr != IPPROTO_OTHER));
-        char otherLabel[32];
-        if (customProtocol) snprintf(otherLabel, sizeof(otherLabel), "Enter... [%u]", setts.pr);
-        else strcpy(otherLabel, "Enter...");
-        addMenuItem("PROTOCOL", 8, 2, 105, GLFW_KEY_BACKSPACE);
-        addMenuItem("All", 8, 0, 61, 'A', kaCount, msChoice, packetLegendFilterActive(0, 0, 0));
-        addMenuItem("ICMP", 8, 0, 62, 'I', kaCount, msChoice, packetLegendFilterActive(IPPROTO_ICMP, 0, 0));
-        addMenuItem("TCP", 8, 0, 63, 'T', kaCount, msChoice, packetLegendFilterActive(IPPROTO_TCP, 0, 0));
-        addMenuItem("UDP", 8, 0, 64, 'U', kaCount, msChoice, packetLegendFilterActive(IPPROTO_UDP, 0, 0));
-        addMenuItem("ARP", 8, 0, 65, 'R', kaCount, msChoice, packetLegendFilterActive(IPPROTO_ARP, 0, 0));
-        addMenuItem("Other", 8, 0, 133, 'O', kaCount, msChoice, packetLegendFilterActive(IPPROTO_OTHER, 0, 0));
-        addMenuItem(otherLabel, 8, 0, 66, 'E', kaCount, msChoice, customProtocol);
+        unsigned int rowsCount = 0;
+        const packet_tree_row_type *rows = packetTreeRows(&rowsCount);
+        addMenuItem("FILTER", (int)rowsCount + 1, 2, 105, GLFW_KEY_BACKSPACE);
+        for (unsigned int cnt = 0; cnt < rowsCount; cnt++)
+        {
+          char label[64];
+          snprintf(label, sizeof(label), "%s%s", (rows[cnt].indent ? " " : ""), rows[cnt].label);
+          addMenuItem(label, (int)rowsCount + 1, 0, 149 + (int)cnt, 0, kaCount, msChoice,
+                      ((rows[cnt].filter == pfAll) ? packetFilterAllActive() : packetTreeFilterActive(rows[cnt].filter)));
+        }
         break;
       }
       case 119:
@@ -4006,37 +4034,22 @@ void mnuProcess(int m)
         if (setts.prt) snprintf(portLabel, sizeof(portLabel), "Enter... [%u]", setts.prt);
         else strcpy(portLabel, "Enter...");
         addMenuItem("PORT", 3, 2, 105, GLFW_KEY_BACKSPACE);
-        addMenuItem("All", 3, 0, 67, 'A', kaCount, msChoice, packetLegendFilterActive(0, 0, 0));
-        addMenuItem(portLabel, 3, 0, 68, 'E', kaCount, msChoice, (setts.prt != 0) && !setts.sen && !setts.pr && !setts.psf && !setts.ptf);
+        addMenuItem("All", 3, 0, 67, 'A', kaCount, msChoice, packetFilterAllActive());
+        addMenuItem(portLabel, 3, 0, 68, 'E', kaCount, msChoice, (setts.prt != 0) && !setts.sen && (packetTreeFilter == pfAll));
         break;
       }
-      case 126:
-        addMenuItem("FORM", 6, 2, 105, GLFW_KEY_BACKSPACE);
-        addMenuItem("All", 6, 0, 127, 'A', kaCount, msChoice, packetLegendFilterActive(0, 0, 0));
-        addMenuItem("Cube", 6, 0, 128, 'C', kaCount, msChoice, (setts.psf == (pCube + 1)));
-        addMenuItem("Double", 6, 0, 129, 'D', kaCount, msChoice, (setts.psf == (pDouble + 1)));
-        addMenuItem("Triple", 6, 0, 130, 'T', kaCount, msChoice, (setts.psf == (pTriple + 1)));
-        addMenuItem("Sphere", 6, 0, 131, 'S', kaCount, msChoice, (setts.psf == (pSphere + 1)));
-        addMenuItem("Pyramid", 6, 0, 132, 'P', kaCount, msChoice, (setts.psf == (pPyramid + 1)));
-        break;
-      case 134:
-        addMenuItem("TCP CONTROL", 4, 2, 105, GLFW_KEY_BACKSPACE);
-        addMenuItem("All", 4, 0, 135, 'A', kaCount, msChoice, packetLegendFilterActive(0, 0, 0));
-        addMenuItem("Setup / Finish", 4, 0, 136, 'S', kaCount, msChoice, (setts.ptf == 1) && !setts.sen && (setts.pr == IPPROTO_TCP) && !setts.psf && !setts.prt);
-        addMenuItem("Reset", 4, 0, 137, 'R', kaCount, msChoice, (setts.ptf == 2) && !setts.sen && (setts.pr == IPPROTO_TCP) && !setts.psf && !setts.prt);
-        break;
       case 138:
         addMenuItem("SENSOR", 11, 2, 105, GLFW_KEY_BACKSPACE);
-        addMenuItem("All", 11, 0, 139, 'A', kaCount, msChoice, packetLegendFilterActive(0, 0, 0));
-        addMenuItem("Sensor 1", 11, 0, 140, '1', kaCount, msChoice, (setts.sen == 1) && !setts.pr && !setts.psf && !setts.ptf && !setts.prt);
-        addMenuItem("Sensor 2", 11, 0, 141, '2', kaCount, msChoice, (setts.sen == 2) && !setts.pr && !setts.psf && !setts.ptf && !setts.prt);
-        addMenuItem("Sensor 3", 11, 0, 142, '3', kaCount, msChoice, (setts.sen == 3) && !setts.pr && !setts.psf && !setts.ptf && !setts.prt);
-        addMenuItem("Sensor 4", 11, 0, 143, '4', kaCount, msChoice, (setts.sen == 4) && !setts.pr && !setts.psf && !setts.ptf && !setts.prt);
-        addMenuItem("Sensor 5", 11, 0, 144, '5', kaCount, msChoice, (setts.sen == 5) && !setts.pr && !setts.psf && !setts.ptf && !setts.prt);
-        addMenuItem("Sensor 6", 11, 0, 145, '6', kaCount, msChoice, (setts.sen == 6) && !setts.pr && !setts.psf && !setts.ptf && !setts.prt);
-        addMenuItem("Sensor 7", 11, 0, 146, '7', kaCount, msChoice, (setts.sen == 7) && !setts.pr && !setts.psf && !setts.ptf && !setts.prt);
-        addMenuItem("Sensor 8", 11, 0, 147, '8', kaCount, msChoice, (setts.sen == 8) && !setts.pr && !setts.psf && !setts.ptf && !setts.prt);
-        addMenuItem("Sensor 9", 11, 0, 148, '9', kaCount, msChoice, (setts.sen == 9) && !setts.pr && !setts.psf && !setts.ptf && !setts.prt);
+        addMenuItem("All", 11, 0, 139, 'A', kaCount, msChoice, packetFilterAllActive());
+        addMenuItem("Sensor 1", 11, 0, 140, '1', kaCount, msChoice, (setts.sen == 1) && !setts.prt && (packetTreeFilter == pfAll));
+        addMenuItem("Sensor 2", 11, 0, 141, '2', kaCount, msChoice, (setts.sen == 2) && !setts.prt && (packetTreeFilter == pfAll));
+        addMenuItem("Sensor 3", 11, 0, 142, '3', kaCount, msChoice, (setts.sen == 3) && !setts.prt && (packetTreeFilter == pfAll));
+        addMenuItem("Sensor 4", 11, 0, 143, '4', kaCount, msChoice, (setts.sen == 4) && !setts.prt && (packetTreeFilter == pfAll));
+        addMenuItem("Sensor 5", 11, 0, 144, '5', kaCount, msChoice, (setts.sen == 5) && !setts.prt && (packetTreeFilter == pfAll));
+        addMenuItem("Sensor 6", 11, 0, 145, '6', kaCount, msChoice, (setts.sen == 6) && !setts.prt && (packetTreeFilter == pfAll));
+        addMenuItem("Sensor 7", 11, 0, 146, '7', kaCount, msChoice, (setts.sen == 7) && !setts.prt && (packetTreeFilter == pfAll));
+        addMenuItem("Sensor 8", 11, 0, 147, '8', kaCount, msChoice, (setts.sen == 8) && !setts.prt && (packetTreeFilter == pfAll));
+        addMenuItem("Sensor 9", 11, 0, 148, '9', kaCount, msChoice, (setts.sen == 9) && !setts.prt && (packetTreeFilter == pfAll));
         break;
       case 120:
         addMenuItem("RECALL", 7, 2, 107, GLFW_KEY_BACKSPACE);
@@ -5353,6 +5366,7 @@ static bool settsLoadIni(const char *path)
 {
   FILE *sts;
   char line[1024];
+  bool packetTreeLoaded = false;
   if (!(sts = fopen(path, "r"))) return false;
   while (fgets(line, sizeof(line), sts))
   {
@@ -5411,6 +5425,14 @@ static bool settsLoadIni(const char *path)
     else if (!strcmp(key, "sensor_filter"))
     {
       if (parseUnsignedCharValue(value, &uc)) setts.sen = uc;
+    }
+    else if (!strcmp(key, "packet_tree_filter"))
+    {
+      if (parsePacketTreeFilterValue(value, &uc))
+      {
+        packetTreeFilter = uc;
+        packetTreeLoaded = true;
+      }
     }
     else if (!strcmp(key, "protocol_filter"))
     {
@@ -5541,6 +5563,13 @@ static bool settsLoadIni(const char *path)
     }
   }
   fclose(sts);
+  if (!packetTreeLoaded) packetTreeFilterMigrateLegacy();
+  else
+  {
+    setts.pr = 0;
+    setts.psf = 0;
+    setts.ptf = 0;
+  }
   return true;
 }
 
@@ -5584,9 +5613,7 @@ static bool settsSaveIni(const char *path)
 
   fputs("[filters]\n", sts);
   fprintf(sts, "sensor_filter=%u\n", setts.sen);
-  fprintf(sts, "protocol_filter=%u\n", setts.pr);
-  fprintf(sts, "packet_form_filter=%s\n", packetShapeFilterString(setts.psf));
-  fprintf(sts, "packet_tcp_filter=%s\n", packetTcpFilterString(setts.ptf));
+  fprintf(sts, "packet_tree_filter=%s\n", packetTreeFilterString(packetTreeFilter));
   fprintf(sts, "port_filter=%u\n\n", setts.prt);
 
   fputs("[hsen]\n", sts);
@@ -5660,15 +5687,18 @@ void settsLoad()
 
   if (settsLoadIni(inipath))
   {
+    packetTreeFilterMigrateLegacy();
     settsSaveIni(inipath);
     if (fileExists(legacypath)) remove(legacypath);
     return;
   }
   if (settsLoadLegacy(legacypath))
   {
+    packetTreeFilterMigrateLegacy();
     if (settsSaveIni(inipath)) remove(legacypath);
     return;
   }
+  packetFilterResetAll();
   if (fileExists(legacypath)) remove(legacypath);
   if (!fileExists(inipath)) settsSaveIni(inipath);
 }
