@@ -140,6 +140,9 @@ Notes:
 Use these helpers when you want the old script-driven workflow or a manual/distributed setup.  
 For normal local use, the built-in `Local hsen` dialog is now the preferred path.
 
+Related Windows helper notes:
+- Quick copy/paste PowerShell snippets: `POWERSHELL_SNIPPETS.md`
+
 If `start-hsenW.local.bat` is missing:
 - `start-hsenW.bat` creates `hsen-interfaces-<COMPUTERNAME>.txt`
 - it copies `start-hsenW.local.example.bat` to `start-hsenW.local.bat`
