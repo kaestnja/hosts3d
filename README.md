@@ -225,7 +225,7 @@ Main files:
 | `settings.ini` | human-readable runtime settings |
 | `0network.hnl` | network layout on exit |
 | `1network.hnl`..`4network.hnl` | saved layouts |
-| `netpos.txt` | CIDR-to-position/color mapping |
+| `netpos.txt` | CIDR-to-position/color mapping; exact `/32` entries also materialize known hosts at startup |
 | `traffic.hpt` | Hosts3D packet traffic record/replay data (not PCAP) |
 | `local-hsen.state` | machine-local state file for managed local `hsen` PIDs/process stamps on Linux/macOS |
 | `local-hsen-windows.state` | machine-local state file for managed local `hsen.exe` PIDs/process stamps on Windows |
@@ -251,6 +251,7 @@ Notes:
 - Dynamic hosts are automatically removed again after `dynamic_host_ttl_seconds` of inactivity when dynamic cleanup is enabled. This is meant to keep one-off Internet/test sources from staying in the scene indefinitely.
 - Dynamic cleanup skips hosts that are currently selected or locked.
 - Hosts loaded from a saved layout, created manually, manually edited (`Name`/`Remarks`), or named through `Selection > Resolve Hostnames` are treated as `static`.
+- Exact `/32` entries in `netpos.txt` are also treated as known hosts: Hosts3D materializes them at startup, keeps them static, and shows them immediately even when `On-Active Action` is set to `Show Host`.
 - Locked hosts are protected from dynamic cleanup and are also kept when layouts are saved.
 - Saved layouts (`0network.hnl`..`4network.hnl`) persist static and locked hosts only.
 - `[dynamic_hosts]` keys:
@@ -291,6 +292,7 @@ Runtime behavior not explicitly listed in `controls.txt`:
 - Menus now show state markers directly: `[X]/[ ]` for toggles, `(*)/( )` for current mode choices.
 - The top-right OSD now spells out current filters and toggles using the same names as `settings.ini`, for example `Display Mode`, `Display Scope`, `On-Active Action`, and `Packet Limit`.
 - The OSD is grouped into `FILTERS`, `LABELS`, `PACKETS`, and `RUNTIME`, with grey labels, white values, yellow highlights for active deviations, and red alerts for important attention states.
+- The `LABELS` group now also shows `Known NetPos /32`, so it stays obvious when exact hosts from `netpos.txt` are being kept visible and labelled independently of the normal on-active host mode.
 - The packet legend inside the OSD now renders actual miniature 3D packet examples at an angled view instead of flat markers, using the same shapes as the live animated packet objects.
 - Clicking a packet example inside the OSD legend immediately applies the matching packet-tree filter.
 - Packet traffic filters are exclusive: at any moment you either see all packet traffic, or exactly one active packet filter, whether that filter was chosen by sensor, the packet tree, or a port filter.
@@ -597,6 +599,12 @@ Example:
 ```text
 pos 123.123.123.123/32 10 0 -10 green
 ```
+
+Important behavior:
+- General CIDR entries continue to act as placement/color rules only.
+- Exact `/32` entries now also materialize those hosts immediately at startup if they are not already present in the current layout.
+- These exact `/32` hosts are treated as known/static hosts, inherit their `netpos.txt` position/color, and show an IP or resolved name immediately.
+- If an exact `/32` host already exists in the layout, `netpos.txt` still wins for its startup position/color.
 
 Host positioning axes:
 - Grey/Red: positive x

@@ -183,6 +183,7 @@ struct host_runtime_meta_type
   unsigned char pr, shp, clr;
   unsigned short port;
   char dnm[256];
+  bool knownNetpos;
 };
 
 struct osd_pkt_hit_type
@@ -192,13 +193,14 @@ struct osd_pkt_hit_type
   bool active;
 };
 
-host_runtime_meta_type hostRuntimeMetaDefault = {0, 0, 0, 0, ""};
+host_runtime_meta_type hostRuntimeMetaDefault = {0, 0, 0, 0, "", false};
 std::map<unsigned long, host_runtime_meta_type> hostRuntimeMetaByIp;
 osd_pkt_hit_type osdPacketHits[OSD_PKT_HIT_MAX];
 unsigned int osdPacketHitCount = 0;
 unsigned char packetTreeFilter = pfAll;
 char packetTrafficLabel[128] = "traffic.hpt";
 char packetTrafficPath[512] = "";
+unsigned int knownNetposExactHostCount = 0;
 
 struct localhsen_if_type
 {
@@ -378,8 +380,15 @@ static void hostSetDynamic(host_type *ht, bool dynamic);
 static void hostPromoteStatic(host_type *ht);
 static bool hostShouldPersist(host_type *ht);
 static host_runtime_meta_type *hostRuntimeMeta(host_type *ht, bool create = true);
+static bool hostIsKnownNetpos(host_type *ht);
+static bool hostShouldDrawInShowHostMode(host_type *ht);
+static bool hostShouldDrawLabel(host_type *ht);
+static const char *hostLabelText(host_type *ht);
 static void hostRuntimeNotePacket(host_type *ht, const pkex_type *pkex, unsigned short port);
 static void hostRuntimeNoteDiscoveryName(host_type *ht, const char *name);
+static bool parseNetposExactIpToken(const char *token, in_addr *ip);
+static bool hostApplyNetposLayout(host_type *ht);
+static void netposExactHostsSync();
 static const char *packetShapeFilterLabel(unsigned char psf);
 static bool parsePacketShapeFilterValue(const char *value, unsigned char *out);
 static bool parsePacketTcpFilterValue(const char *value, unsigned char *out);
@@ -413,6 +422,9 @@ static unsigned int packetTrafficReplayListCreate(const char *fl, char *firstNam
 static bool packetTrafficReplayStart(const char *path);
 static void packetTrafficDurationLabel(time_t started, char *buf, size_t bufsz);
 static void drawPacketTrafficStatus();
+void osdUpdate();
+host_type *hostIP(in_addr ip, bool crt);
+host_type *hostCreate(in_addr ip, bool dynamic);
 void hostDetails();
 void mnuProcess(int m);
 static void hostDeleteManaged(host_type *ht);
@@ -586,6 +598,32 @@ static host_runtime_meta_type *hostRuntimeMeta(host_type *ht, bool create)
   return &hostRuntimeMetaByIp[hostDynamicStateKey(ht->hip)];
 }
 
+static bool hostIsKnownNetpos(host_type *ht)
+{
+  host_runtime_meta_type *meta = hostRuntimeMeta(ht, false);
+  return (meta && meta->knownNetpos);
+}
+
+static bool hostShouldDrawInShowHostMode(host_type *ht)
+{
+  return (ht && (hostIsKnownNetpos(ht) || ht->vis || ht->sld || ht->anm));
+}
+
+static bool hostShouldDrawLabel(host_type *ht)
+{
+  if (!ht) return false;
+  if (!(hostIsKnownNetpos(ht) || ht->pip || (setts.sips == all) || ((setts.sips == sel) && ht->sld))) return false;
+  if ((setts.sipn == nms) && !hostIsKnownNetpos(ht) && !*ht->htnm) return false;
+  return true;
+}
+
+static const char *hostLabelText(host_type *ht)
+{
+  if (!ht) return "";
+  if (*ht->htnm && (setts.sipn != ips)) return ht->htnm;
+  return ht->htip;
+}
+
 static unsigned short packetImportantPort(const pkif_type *pkt)
 {
   if (!pkt || ((pkt->pr != IPPROTO_TCP) && (pkt->pr != IPPROTO_UDP))) return 0;
@@ -612,6 +650,116 @@ static void hostRuntimeNoteDiscoveryName(host_type *ht, const char *name)
   if (!meta || !name || !*name) return;
   strncpy(meta->dnm, name, sizeof(meta->dnm) - 1);
   meta->dnm[sizeof(meta->dnm) - 1] = '\0';
+}
+
+static bool parseNetposExactIpToken(const char *token, in_addr *ip)
+{
+  char buf[32], *slash;
+  unsigned long addr;
+  if (!token || !*token || !ip) return false;
+  strncpy(buf, token, sizeof(buf) - 1);
+  buf[sizeof(buf) - 1] = '\0';
+  slash = strchr(buf, '/');
+  if (!slash || strcmp(slash, "/32")) return false;
+  *slash = '\0';
+  if (!*buf) return false;
+  addr = inet_addr(buf);
+  if ((addr == INADDR_NONE) && strcmp(buf, "255.255.255.255")) return false;
+  ip->s_addr = addr;
+  return true;
+}
+
+static bool hostApplyNetposLayout(host_type *ht)
+{
+  int oldx, oldy, oldz, hnet;
+  unsigned char oldclr;
+  if (!ht) return false;
+  oldx = ht->px;
+  oldy = ht->py;
+  oldz = ht->pz;
+  oldclr = ht->clr;
+  hostByPositionPreMove(ht);
+  hnet = hostNet(ht);
+  if (!hnet)
+  {
+    hostByPositionPostMove(ht);
+    return false;
+  }
+  if (hnet == 1) hostPos(ht, HPR, 1);
+  hostByPositionPostMove(ht);
+  moveCollision(ht);
+  return ((oldx != ht->px) || (oldy != ht->py) || (oldz != ht->pz) || (oldclr != ht->clr));
+}
+
+static void netposExactHostsSync()
+{
+  std::map<unsigned long, bool>::iterator mit;
+  std::map<unsigned long, bool> exactHosts;
+  FILE *npos;
+  char line[512], net[19];
+  unsigned int exactCount = 0;
+  bool changed = false;
+  bool pausedHosts = false;
+
+  if (!goHosts)
+  {
+    goHosts = 1;
+    while (goHosts == 1) usleep(1000);
+    pausedHosts = true;
+  }
+
+  for (std::map<unsigned long, host_runtime_meta_type>::iterator it = hostRuntimeMetaByIp.begin(); it != hostRuntimeMetaByIp.end(); ++it)
+    it->second.knownNetpos = false;
+
+  if ((npos = fopen(hsddata("netpos.txt"), "r")))
+  {
+    while (fgets(line, sizeof(line), npos))
+    {
+      in_addr ip;
+      if ((sscanf(line, "pos %18s", net) == 1) && parseNetposExactIpToken(net, &ip))
+        exactHosts[(unsigned long)ip.s_addr] = true;
+    }
+    fclose(npos);
+  }
+
+  for (mit = exactHosts.begin(); mit != exactHosts.end(); ++mit)
+  {
+    host_type *ht;
+    in_addr ip;
+    ip.s_addr = (in_addr_t)mit->first;
+    ht = hostIP(ip, false);
+    if (!ht)
+    {
+      ht = hostCreate(ip, false);
+      changed = true;
+    }
+    else
+    {
+      if (hostIsDynamic(ht))
+      {
+        hostPromoteStatic(ht);
+        changed = true;
+      }
+      if (hostApplyNetposLayout(ht)) changed = true;
+    }
+    hostRuntimeMeta(ht)->knownNetpos = true;
+    if (seltd == ht) hostDetails();
+    exactCount++;
+  }
+
+  if (knownNetposExactHostCount != exactCount)
+  {
+    knownNetposExactHostCount = exactCount;
+    changed = true;
+  }
+
+  if (changed)
+  {
+    refresh = true;
+    osdUpdate();
+  }
+
+  if (pausedHosts) goHosts = 0;
 }
 
 static void hostPromoteStatic(host_type *ht)
@@ -1418,13 +1566,15 @@ static void drawOsdPanel()
 //update osd text
 void osdUpdate()
 {
-  char sensorLabel[16], packetFilterLabel[32], portLabel[16];
+  char sensorLabel[16], packetFilterLabel[32], portLabel[16], knownLabel[24];
   char packetLimitLabel[16], visiblePacketsLabel[16];
   if (setts.sen) snprintf(sensorLabel, sizeof(sensorLabel), "%u", setts.sen);
   else strcpy(sensorLabel, "All");
   strcpy(packetFilterLabel, packetTreeFilterLabel(packetTreeFilter));
   if (setts.prt) snprintf(portLabel, sizeof(portLabel), "%u", setts.prt);
   else strcpy(portLabel, "All");
+  if (knownNetposExactHostCount) snprintf(knownLabel, sizeof(knownLabel), "Always (%u)", knownNetposExactHostCount);
+  else strcpy(knownLabel, "None");
   snprintf(packetLimitLabel, sizeof(packetLimitLabel), "%7u", setts.pks);
   snprintf(visiblePacketsLabel, sizeof(visiblePacketsLabel), "%7u", (unsigned int)pktsLL.Num());
   osdTextLineCount = 0;
@@ -1435,6 +1585,7 @@ void osdUpdate()
   osdAddSection("LABELS");
   osdAddRow("Display Mode", sipnToLabel(setts.sipn));
   osdAddRow("Display Scope", osdDisplayScopeLabel(), ((setts.sips != off) || (setts.sona == ipn) ? osdAccent : osdNormal));
+  osdAddRow("Known NetPos /32", knownLabel, (knownNetposExactHostCount ? osdAccent : osdNormal));
   osdAddRow("On-Active Action", sonaToLabel(setts.sona));
   osdAddSection("PACKETS");
   osdAddRow("Anomaly Detection", osdOnOff(setts.anm), (setts.anm ? osdNormal : osdAccent));
@@ -1847,7 +1998,7 @@ void hostDrawCb(void **data, long arg1, long arg2, long arg3, long arg4)
 
   if (ht != seltd)  //draw host
   {
-    if ((setts.sona != hst) || ht->vis || ht->sld || ht->anm)
+    if ((setts.sona != hst) || hostShouldDrawInShowHostMode(ht))
     {
       glPushMatrix();
 
@@ -1863,11 +2014,11 @@ void hostDrawCb(void **data, long arg1, long arg2, long arg3, long arg4)
 
       glPopMatrix();
 
-      if (dips && !ht->col && (ht->pip || (setts.sips == all) || ((setts.sips == sel) && ht->sld)) && ((setts.sipn != nms) || *ht->htnm))  //draw host IP/name
+      if (dips && !ht->col && hostShouldDrawLabel(ht))  //draw host IP/name
       {
 	glColor3ub(white[0], white[1], white[2]);
 	glRasterPos3i(ht->px, ht->py + 11, ht->pz);
-	GLWin.DrawString((const unsigned char *)(*ht->htnm && setts.sipn ? ht->htnm : ht->htip));
+	GLWin.DrawString((const unsigned char *)hostLabelText(ht));
       }
       if (anms && ht->anm)
       {
@@ -1893,11 +2044,11 @@ void hostsDraw(GLenum mode)
     glTranslated(seltd->px, seltd->py, seltd->pz);
     glCallList(objsDraw + (seltd->col ? 13 : 11));
     glPopMatrix();
-    if (dips && (seltd->pip || setts.sips) && ((setts.sipn != nms) || *seltd->htnm))  //draw host IP/name
+    if (dips && hostShouldDrawLabel(seltd))  //draw host IP/name
     {
       glColor3ub(white[0], white[1], white[2]);
       glRasterPos3i(seltd->px, seltd->py + 11, seltd->pz);
-      GLWin.DrawString((const unsigned char *)(*seltd->htnm && setts.sipn ? seltd->htnm : seltd->htip));
+      GLWin.DrawString((const unsigned char *)hostLabelText(seltd));
     }
     if (anms && seltd->anm)
     {
@@ -1918,7 +2069,7 @@ void linksDraw()
   lnksLL.Start(1);
   while ((lk = (link_type *)lnksLL.Read(1)))
   {
-    if ((setts.sona != hst) || ((lk->sht->vis || lk->sht->sld || lk->sht->anm) && (lk->dht->vis || lk->dht->sld || lk->dht->anm)))
+    if ((setts.sona != hst) || (hostShouldDrawInShowHostMode(lk->sht) && hostShouldDrawInShowHostMode(lk->dht)))
     {
       glBegin(GL_LINES);
         glVertex3i(lk->sht->px, lk->sht->py + 5, lk->sht->pz);
@@ -2168,6 +2319,7 @@ void hostDetails()
     strcat(htdtls, "\nLast Discovery Name: ");
     strcat(htdtls, meta->dnm);
   }
+  if (hostIsKnownNetpos(seltd)) strcat(htdtls, "\nKnown Host: netpos /32");
 }
 
 //2D GUI window "please wait"
@@ -2578,7 +2730,11 @@ void btnProcess(int gs)
       if (*gi1)
       {
         waitShow();
-        if (gr == HSD_HNLOPEN) netLoad(gi1);
+        if (gr == HSD_HNLOPEN)
+        {
+          netLoad(gi1);
+          netposExactHostsSync();
+        }
         else
         {
           extensionAdd(gi1, ".hnl");
@@ -2728,6 +2884,7 @@ void btnProcess(int gs)
         goHosts = 1;
         while (goHosts == 1) usleep(1000);
         netpsLoad();  //reload netpos
+        netposExactHostsSync();
         goHosts = 0;
       }
       break;
@@ -2847,6 +3004,7 @@ void infoHost()
       , (seltd->anm ? "Yes" : "No"), seltd->lsn, ctime(&seltd->lpk), (seltd->shp ? "Yes" : "No"), formatBytes(seltd->dld, buf));
     fprintf(info, "\nUploads: %s\nAuto Link Lines: %s\nLock: %s\nLifetime: %s"
       , formatBytes(seltd->uld, buf), (seltd->alk ? "Yes" : "No"), (seltd->lck ? "On" : "Off"), (hostIsDynamic(seltd) ? "Dynamic" : "Static"));  //reuse buf
+    if (hostIsKnownNetpos(seltd)) fprintf(info, "\nKnown Host: netpos /32");
     if (meta && meta->pr)
     {
       fprintf(info, "\nLast Protocol: %s", (meta->pr == IPPROTO_OTHER ? "Other" : protoDecode(meta->pr, pbuf)));
@@ -3074,10 +3232,10 @@ void GLFWCALL keyboardGL(int key, int action)
       case kaViewSave2: memcpy(&setts.vws[2], &setts.vws[0], sizeof(view_type)); break;
       case kaViewSave3: memcpy(&setts.vws[3], &setts.vws[0], sizeof(view_type)); break;
       case kaViewSave4: memcpy(&setts.vws[4], &setts.vws[0], sizeof(view_type)); break;
-      case kaLayoutRestore1: netLoad(hsddata("1network.hnl")); break;
-      case kaLayoutRestore2: netLoad(hsddata("2network.hnl")); break;
-      case kaLayoutRestore3: netLoad(hsddata("3network.hnl")); break;
-      case kaLayoutRestore4: netLoad(hsddata("4network.hnl")); break;
+      case kaLayoutRestore1: netLoad(hsddata("1network.hnl")); netposExactHostsSync(); break;
+      case kaLayoutRestore2: netLoad(hsddata("2network.hnl")); netposExactHostsSync(); break;
+      case kaLayoutRestore3: netLoad(hsddata("3network.hnl")); netposExactHostsSync(); break;
+      case kaLayoutRestore4: netLoad(hsddata("4network.hnl")); netposExactHostsSync(); break;
       case kaLayoutSave1: netSave(hsddata("1network.hnl")); break;
       case kaLayoutSave2: netSave(hsddata("2network.hnl")); break;
       case kaLayoutSave3: netSave(hsddata("3network.hnl")); break;
@@ -3978,10 +4136,10 @@ void mnuProcess(int m)
         GLWin.AddButton(128, 60, GLWIN_OK, "OK", false, true);
         GLWin.AddButton(76, 60, GLWIN_CLOSE, "Cancel", false, false);
         break;
-      case 81: netLoad(hsddata("1network.hnl")); break;  //restore network layout 1
-      case 82: netLoad(hsddata("2network.hnl")); break;  //restore network layout 2
-      case 83: netLoad(hsddata("3network.hnl")); break;  //restore network layout 3
-      case 84: netLoad(hsddata("4network.hnl")); break;  //restore network layout 4
+      case 81: netLoad(hsddata("1network.hnl")); netposExactHostsSync(); break;  //restore network layout 1
+      case 82: netLoad(hsddata("2network.hnl")); netposExactHostsSync(); break;  //restore network layout 2
+      case 83: netLoad(hsddata("3network.hnl")); netposExactHostsSync(); break;  //restore network layout 3
+      case 84: netLoad(hsddata("4network.hnl")); netposExactHostsSync(); break;  //restore network layout 4
       case 86: netSave(hsddata("1network.hnl")); break;  //save current network layout as network layout 1
       case 87: netSave(hsddata("2network.hnl")); break;  //save current network layout as network layout 2
       case 88: netSave(hsddata("3network.hnl")); break;  //save current network layout as network layout 3
@@ -6381,10 +6539,11 @@ int main(int argc, char *argv[])
   settsLoad();  //load settings
   checkControls();  //write controls file from current settings
   helpOverlayLoad();
+  netpsLoad();  //load netpos
   osdUpdate();
   netLoad(hsddata("0network.hnl"));  //load network layout 0
+  netposExactHostsSync();
   if (goHosts) goHosts = 0;
-  netpsLoad();  //load netpos
   glfwSetWindowTitle("Hosts3D");  //window title
   glfwSetWindowRefreshCallback(refreshGL);
   glfwSetWindowSizeCallback(resizeGL);

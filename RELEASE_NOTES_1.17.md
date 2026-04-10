@@ -20,6 +20,7 @@
 - Active packet recording and replay now show a dedicated bottom-left status panel with mode, elapsed time, replay packet time, and the current file label.
 - New packet recordings now auto-increment to the next free `traffic*.hpt` name instead of overwriting the previous recording.
 - Replay now opens a list of available `.hpt` recordings from `hsd-data`.
+- Exact `/32` entries in `netpos.txt` now materialize known hosts immediately at startup, keep them visible in `Show Host` mode, and label them with IP or name when available.
 
 ## Notes
 - Packet colours still indicate protocol family.
