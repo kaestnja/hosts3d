@@ -139,15 +139,46 @@ help_overlay_line_type helpOverlayLines[HELP_OVERLAY_MAX_LINES];
 
 enum osd_color_type { osdNormal, osdAccent, osdAlert };
 
+enum osd_row_action_type
+{
+  osaNone = 0,
+  osaSensorFilter,
+  osaPacketFilter,
+  osaPortFilter,
+  osaDisplayMode,
+  osaDisplayScope,
+  osaOnActiveAction,
+  osaAnomalyDetection,
+  osaFastPackets,
+  osaAddDestinationHosts,
+  osaShowBroadcastHosts,
+  osaNewHostPackets,
+  osaNewHostLinks,
+  osaShowPacketDestPort,
+  osaPacketLimit,
+  osaPacketAnimation,
+  osaAcknowledgeAnomalies
+};
+
 struct osd_row_type
 {
   bool section;
   osd_color_type valueColor;
+  unsigned char action;
   char label[40];
   char value[24];
 };
 
 osd_row_type osdRows[OSD_MAX_ROWS];
+
+struct osd_row_hit_type
+{
+  int left, top, right, bottom;
+  unsigned char action;
+};
+
+osd_row_hit_type osdRowHits[OSD_MAX_ROWS];
+unsigned int osdRowHitCount = 0;
 
 enum pflt_type
 {
@@ -409,6 +440,9 @@ static void packetFilterResetAll();
 static void packetFilterSetSensor(unsigned char sen);
 static void packetFilterSetTree(unsigned char filter);
 static void packetFilterSetPort(unsigned short port);
+static void osdRowHitsClear();
+static void osdRowHitAdd(int left, int top, int right, int bottom, unsigned char action);
+static bool osdRowHitProcess(int x, int y);
 static void osdPacketHitsClear();
 static void osdPacketHitAdd(int left, int top, int right, int bottom, unsigned char filter);
 static bool osdPacketHitProcess(int x, int y);
@@ -422,6 +456,8 @@ static unsigned int packetTrafficReplayListCreate(const char *fl, char *firstNam
 static bool packetTrafficReplayStart(const char *path);
 static void packetTrafficDurationLabel(time_t started, char *buf, size_t bufsz);
 static void drawPacketTrafficStatus();
+void alrtsDestroy();
+void hostsSet(unsigned char mbr, unsigned char val);
 void osdUpdate();
 host_type *hostIP(in_addr ip, bool crt);
 host_type *hostCreate(in_addr ip, bool dynamic);
@@ -927,6 +963,168 @@ static void packetFilterSetPort(unsigned short port)
     packetFilterResetAll();
     setts.prt = port;
   }
+}
+
+static void osdRowHitsClear()
+{
+  osdRowHitCount = 0;
+}
+
+static void osdRowHitAdd(int left, int top, int right, int bottom, unsigned char action)
+{
+  if (!action || (osdRowHitCount >= OSD_MAX_ROWS)) return;
+  osdRowHits[osdRowHitCount].left = left;
+  osdRowHits[osdRowHitCount].top = top;
+  osdRowHits[osdRowHitCount].right = right;
+  osdRowHits[osdRowHitCount].bottom = bottom;
+  osdRowHits[osdRowHitCount].action = action;
+  osdRowHitCount++;
+}
+
+static void osdCycleSensorFilter()
+{
+  if (setts.sen && (setts.sen < 9)) packetFilterSetSensor(setts.sen + 1);
+  else if (setts.sen == 9) packetFilterResetAll();
+  else packetFilterSetSensor(1);
+  pcktsDestroy(true);
+}
+
+static void osdCyclePacketFilter()
+{
+  unsigned int count = 0;
+  const packet_tree_row_type *rows = packetTreeRows(&count);
+  unsigned int idx = 0;
+
+  if (!rows || !count) return;
+  if (!setts.sen && !setts.prt)
+  {
+    for (idx = 0; idx < count; idx++)
+      if (rows[idx].filter == packetTreeFilter) break;
+    if (idx >= count) idx = 0;
+    idx = (idx + 1) % count;
+  }
+  else idx = 1;  // leave "all" and move directly to the first real tree filter
+
+  if (!idx) packetFilterResetAll();
+  else packetFilterSetTree(rows[idx].filter);
+  pcktsDestroy(true);
+}
+
+static void osdCyclePortFilter()
+{
+  static const unsigned short ports[] = {0, 53, 80, 137, 443, 5353, 5355};
+  unsigned int idx = 0;
+  for (; idx < (sizeof(ports) / sizeof(ports[0])); idx++)
+    if (setts.prt == ports[idx]) break;
+  if (idx >= (sizeof(ports) / sizeof(ports[0]))) idx = 0;
+  idx = (idx + 1) % (sizeof(ports) / sizeof(ports[0]));
+  if (!ports[idx]) packetFilterResetAll();
+  else packetFilterSetPort(ports[idx]);
+  pcktsDestroy(true);
+}
+
+static void osdCycleDisplayMode()
+{
+  if (setts.sipn == ips) setts.sipn = ins;
+  else if (setts.sipn == ins) setts.sipn = nms;
+  else setts.sipn = ips;
+}
+
+static unsigned char osdDisplayScopeIndex()
+{
+  if (setts.sona == ipn) return 3;
+  if (setts.sips == sel) return 1;
+  if (setts.sips == all) return 2;
+  return 0;
+}
+
+static void osdCycleDisplayScope()
+{
+  unsigned char next = (osdDisplayScopeIndex() + 1) % 4;
+  if (next == 0)
+  {
+    setts.sips = off;
+    if (setts.sona == ipn) setts.sona = don;
+  }
+  else if (next == 1)
+  {
+    setts.sips = sel;
+    if (setts.sona == ipn) setts.sona = don;
+  }
+  else if (next == 2)
+  {
+    setts.sips = all;
+    if (setts.sona == ipn) setts.sona = don;
+  }
+  else setts.sona = ipn;
+}
+
+static void osdCycleOnActiveAction()
+{
+  if (setts.sona == don) setts.sona = alt;
+  else if (setts.sona == alt) setts.sona = ipn;
+  else if (setts.sona == ipn) setts.sona = hst;
+  else if (setts.sona == hst) setts.sona = slt;
+  else setts.sona = don;
+}
+
+static void osdCyclePacketLimit()
+{
+  static const unsigned int limits[] = {1000, 5000, 10000, 25000, 50000, 100000, 250000, 500000, 1000000};
+  unsigned int idx = 0;
+  for (; idx < (sizeof(limits) / sizeof(limits[0])); idx++)
+    if (setts.pks == limits[idx]) break;
+  if (idx >= (sizeof(limits) / sizeof(limits[0]))) idx = 0;
+  else idx = (idx + 1) % (sizeof(limits) / sizeof(limits[0]));
+  setts.pks = limits[idx];
+  pcktsDestroy(true);
+}
+
+static bool osdRowHitProcess(int x, int y)
+{
+  for (unsigned int cnt = 0; cnt < osdRowHitCount; cnt++)
+  {
+    osd_row_hit_type *hit = &osdRowHits[cnt];
+    if ((x < hit->left) || (x > hit->right) || (y > hit->top) || (y < hit->bottom)) continue;
+    switch (hit->action)
+    {
+      case osaSensorFilter: osdCycleSensorFilter(); break;
+      case osaPacketFilter: osdCyclePacketFilter(); break;
+      case osaPortFilter: osdCyclePortFilter(); break;
+      case osaDisplayMode: osdCycleDisplayMode(); break;
+      case osaDisplayScope: osdCycleDisplayScope(); break;
+      case osaOnActiveAction: osdCycleOnActiveAction(); break;
+      case osaAnomalyDetection:
+        setts.anm = !setts.anm;
+        dAnom = setts.anm;
+        break;
+      case osaFastPackets: setts.fsp = !setts.fsp; break;
+      case osaAddDestinationHosts:
+        setts.adh = !setts.adh;
+        if (setts.adh && setts.bct) setts.bct = 0;
+        break;
+      case osaShowBroadcastHosts:
+        setts.bct = !setts.bct;
+        if (setts.bct && setts.adh) setts.adh = 0;
+        break;
+      case osaNewHostPackets: setts.nhp = !setts.nhp; break;
+      case osaNewHostLinks: setts.nhl = !setts.nhl; break;
+      case osaShowPacketDestPort: setts.pdp = !setts.pdp; break;
+      case osaPacketLimit: osdCyclePacketLimit(); break;
+      case osaPacketAnimation: goAnim = !goAnim; break;
+      case osaAcknowledgeAnomalies:
+        hostsSet(2, 0);
+        dAnom = false;
+        alrtsDestroy();
+        break;
+      default:
+        return false;
+    }
+    refresh = true;
+    osdUpdate();
+    return true;
+  }
+  return false;
 }
 
 static const char *packetShapeFilterLabel(unsigned char psf)
@@ -1470,13 +1668,14 @@ static void osdAddSection(const char *label)
   strncpy(row->label, label, sizeof(row->label) - 1);
 }
 
-static void osdAddRow(const char *label, const char *value, osd_color_type valueColor = osdNormal)
+static void osdAddRow(const char *label, const char *value, osd_color_type valueColor = osdNormal, unsigned char action = osaNone)
 {
   osd_row_type *row;
   if (osdTextLineCount >= OSD_MAX_ROWS) return;
   row = &osdRows[osdTextLineCount++];
   memset(row, 0, sizeof(osd_row_type));
   row->valueColor = valueColor;
+  row->action = action;
   strncpy(row->label, label, sizeof(row->label) - 1);
   strncpy(row->value, value, sizeof(row->value) - 1);
 }
@@ -1514,6 +1713,7 @@ static void drawOsdPanel()
 {
   int left, top, right, bottom, labelX, valueX, y;
   osdBounds(&left, &top, &right, &bottom);
+  osdRowHitsClear();
   labelX = left + OSD_BOX_PAD_X;
   valueX = left + OSD_VALUE_X;
   y = top - OSD_BOX_PAD_Y - 10;
@@ -1552,6 +1752,8 @@ static void drawOsdPanel()
     }
     else
     {
+      if (row->action)
+        osdRowHitAdd(left + 2, y + 5, right - 2, y - OSD_LINE_H + 4, row->action);
       glColor3ub(grey[0], grey[1], grey[2]);
       glRasterPos2i(labelX, y);
       GLWin.DrawString((const unsigned char *)row->label);
@@ -1579,27 +1781,27 @@ void osdUpdate()
   snprintf(visiblePacketsLabel, sizeof(visiblePacketsLabel), "%7u", (unsigned int)pktsLL.Num());
   osdTextLineCount = 0;
   osdAddSection("FILTERS");
-  osdAddRow("Sensor Filter", sensorLabel, (setts.sen ? osdAccent : osdNormal));
-  osdAddRow("Packet Filter", packetFilterLabel, ((packetTreeFilter != pfAll) ? osdAccent : osdNormal));
-  osdAddRow("Port Filter", portLabel, (setts.prt ? osdAccent : osdNormal));
+  osdAddRow("Sensor Filter", sensorLabel, (setts.sen ? osdAccent : osdNormal), osaSensorFilter);
+  osdAddRow("Packet Filter", packetFilterLabel, ((packetTreeFilter != pfAll) ? osdAccent : osdNormal), osaPacketFilter);
+  osdAddRow("Port Filter", portLabel, (setts.prt ? osdAccent : osdNormal), osaPortFilter);
   osdAddSection("LABELS");
-  osdAddRow("Display Mode", sipnToLabel(setts.sipn));
-  osdAddRow("Display Scope", osdDisplayScopeLabel(), ((setts.sips != off) || (setts.sona == ipn) ? osdAccent : osdNormal));
+  osdAddRow("Display Mode", sipnToLabel(setts.sipn), osdNormal, osaDisplayMode);
+  osdAddRow("Display Scope", osdDisplayScopeLabel(), ((setts.sips != off) || (setts.sona == ipn) ? osdAccent : osdNormal), osaDisplayScope);
   osdAddRow("Known NetPos /32", knownLabel, (knownNetposExactHostCount ? osdAccent : osdNormal));
-  osdAddRow("On-Active Action", sonaToLabel(setts.sona));
+  osdAddRow("On-Active Action", sonaToLabel(setts.sona), osdNormal, osaOnActiveAction);
   osdAddSection("PACKETS");
-  osdAddRow("Anomaly Detection", osdOnOff(setts.anm), (setts.anm ? osdNormal : osdAccent));
-  osdAddRow("Fast Packets", osdOnOff(setts.fsp), (setts.fsp ? osdAccent : osdNormal));
-  osdAddRow("Add Destination Hosts", osdOnOff(setts.adh), (setts.adh ? osdAccent : osdNormal));
-  osdAddRow("Show Broadcast Hosts", osdOnOff(setts.bct), (setts.bct ? osdAccent : osdNormal));
-  osdAddRow("New Host Packets", osdOnOff(setts.nhp), (setts.nhp ? osdAccent : osdNormal));
-  osdAddRow("New Host Links", osdOnOff(setts.nhl), (setts.nhl ? osdAccent : osdNormal));
-  osdAddRow("Show Packet Dest Port", osdOnOff(setts.pdp), (setts.pdp ? osdAccent : osdNormal));
-  osdAddRow("Packet Limit", packetLimitLabel);
+  osdAddRow("Anomaly Detection", osdOnOff(setts.anm), (setts.anm ? osdNormal : osdAccent), osaAnomalyDetection);
+  osdAddRow("Fast Packets", osdOnOff(setts.fsp), (setts.fsp ? osdAccent : osdNormal), osaFastPackets);
+  osdAddRow("Add Destination Hosts", osdOnOff(setts.adh), (setts.adh ? osdAccent : osdNormal), osaAddDestinationHosts);
+  osdAddRow("Show Broadcast Hosts", osdOnOff(setts.bct), (setts.bct ? osdAccent : osdNormal), osaShowBroadcastHosts);
+  osdAddRow("New Host Packets", osdOnOff(setts.nhp), (setts.nhp ? osdAccent : osdNormal), osaNewHostPackets);
+  osdAddRow("New Host Links", osdOnOff(setts.nhl), (setts.nhl ? osdAccent : osdNormal), osaNewHostLinks);
+  osdAddRow("Show Packet Dest Port", osdOnOff(setts.pdp), (setts.pdp ? osdAccent : osdNormal), osaShowPacketDestPort);
+  osdAddRow("Packet Limit", packetLimitLabel, osdNormal, osaPacketLimit);
   osdAddSection("RUNTIME");
-  osdAddRow("Packet Animation", (goAnim ? "Running" : "Paused"), (goAnim ? osdNormal : osdAccent));
+  osdAddRow("Packet Animation", (goAnim ? "Running" : "Paused"), (goAnim ? osdNormal : osdAccent), osaPacketAnimation);
   osdAddRow("Visible Packets", visiblePacketsLabel);
-  osdAddRow("Unacked Anomalies", (dAnom ? "Y" : ""), (dAnom ? osdAlert : osdNormal));
+  osdAddRow("Unacked Anomalies", (dAnom ? "Y" : ""), (dAnom ? osdAlert : osdNormal), osaAcknowledgeAnomalies);
   if (lnkht) osdAddRow("Link Line", "Pending", osdAccent);
 }
 
@@ -4551,7 +4753,7 @@ void GLFWCALL clickGL(int button, int action)
         }
       }
     }
-    else if (action && setts.osd && osdPacketHitProcess(mPsx, hWin - mPsy))
+    else if (action && setts.osd && (osdRowHitProcess(mPsx, hWin - mPsy) || osdPacketHitProcess(mPsx, hWin - mPsy)))
     {
       mMove = false;
     }
@@ -6127,6 +6329,8 @@ void checkControls()
     controlLine(ctls, "", "Click Selected Host to Toggle Persistant IP/Name");
     controlLine(ctls, "Middle Mouse Button", "Click-and-Drag to Change View");
     controlLine(ctls, "Right Mouse Button", "Show Menu");
+    controlLine(ctls, "Left Mouse Button on OSD Row", "Cycle Clicked OSD Setting or Toggle");
+    controlLine(ctls, "Left Mouse Button on OSD Packet Example", "Apply Matching Packet Filter");
     controlLine(ctls, "Esc", "Close Open Menu or Dialog");
     controlLine(ctls, "", "Menu state markers: [X]/[ ] = toggle, (*)/( ) = current mode");
     controlLine(ctls, "Mouse Wheel", "Move Up/Down");

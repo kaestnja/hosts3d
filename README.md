@@ -291,6 +291,7 @@ Runtime behavior not explicitly listed in `controls.txt`:
 - When the help overlay is visible, the mouse wheel scrolls the help only while the mouse cursor is over the overlay.
 - Menus now show state markers directly: `[X]/[ ]` for toggles, `(*)/( )` for current mode choices.
 - The top-right OSD now spells out current filters and toggles using the same names as `settings.ini`, for example `Display Mode`, `Display Scope`, `On-Active Action`, and `Packet Limit`.
+- Most mode/toggle rows in the top-right OSD can now be clicked directly to cycle them, so you do not have to remember the corresponding keyboard shortcut first.
 - The OSD is grouped into `FILTERS`, `LABELS`, `PACKETS`, and `RUNTIME`, with grey labels, white values, yellow highlights for active deviations, and red alerts for important attention states.
 - The `LABELS` group now also shows `Known NetPos /32`, so it stays obvious when exact hosts from `netpos.txt` are being kept visible and labelled independently of the normal on-active host mode.
 - The packet legend inside the OSD now renders actual miniature 3D packet examples at an angled view instead of flat markers, using the same shapes as the live animated packet objects.
@@ -313,6 +314,8 @@ Left Mouse Button	Select Host
 	Click Selected Host to Toggle Persistant IP/Name
 Middle Mouse Button	Click-and-Drag to Change View
 Right Mouse Button	Show Menu
+Left Mouse Button on OSD Row	Cycle Clicked OSD Setting or Toggle
+Left Mouse Button on OSD Packet Example	Apply Matching Packet Filter
 Esc	Close Open Menu or Dialog
 	Menu state markers: [X]/[ ] = toggle, (*)/( ) = current mode
 Mouse Wheel	Move Up/Down

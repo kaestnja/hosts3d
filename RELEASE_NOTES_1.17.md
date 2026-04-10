@@ -21,6 +21,7 @@
 - New packet recordings now auto-increment to the next free `traffic*.hpt` name instead of overwriting the previous recording.
 - Replay now opens a list of available `.hpt` recordings from `hsd-data`.
 - Exact `/32` entries in `netpos.txt` now materialize known hosts immediately at startup, keep them visible in `Show Host` mode, and label them with IP or name when available.
+- Most mode/toggle rows in the top-right OSD can now be clicked directly to cycle them, in addition to the existing keyboard shortcuts and menu entries.
 
 ## Notes
 - Packet colours still indicate protocol family.

@@ -173,6 +173,7 @@ If controls, menus, OSD labels, or packet meanings change, documentation should 
 - avoid turning it into a rainbow; use limited, meaningful emphasis
 - OSD legend items are part of the interaction model now, not just decoration
 - if host-visibility behavior gains exceptions, reflect that explicitly in the OSD instead of leaving `Display Scope` or `On-Active Action` misleading
+- most mode/toggle rows in the top-right OSD are now clickable and should stay consistent with both the visible value and the corresponding keyboard/menu behavior
 
 ### Packet filter rules
 
