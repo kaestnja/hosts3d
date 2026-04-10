@@ -68,6 +68,9 @@ static const int HELP_OVERLAY_KEY_COL_W = 118;
 static const int OSD_MIN_W = 420;
 static const int OSD_MIN_H = 380;
 static const int OSD_LINE_H = 13;
+static const int OSD_ROW_TEXT_Y = 0;
+static const int OSD_ROW_HIT_TOP_Y = 2;
+static const int OSD_ROW_HIT_BOTTOM_Y = -11;
 static const int OSD_PKT_GAP_H = 18;
 static const int OSD_PKT_ICON_SCALE = 6;
 static const int OSD_PKT_ICON_COL_W = 34;
@@ -1889,12 +1892,12 @@ static void drawOsdPanel()
     else
     {
       if (row->action)
-        osdRowHitAdd(left + 2, y + 5, right - 2, y - OSD_LINE_H + 4, row->action);
+        osdRowHitAdd(left + 2, y + OSD_ROW_HIT_TOP_Y, right - 2, y + OSD_ROW_HIT_BOTTOM_Y, row->action);
       glColor3ub(grey[0], grey[1], grey[2]);
-      glRasterPos2i(labelX, y);
+      glRasterPos2i(labelX, y + OSD_ROW_TEXT_Y);
       GLWin.DrawString((const unsigned char *)row->label);
       osdValueColor(row->valueColor);
-      glRasterPos2i(valueX, y);
+      glRasterPos2i(valueX, y + OSD_ROW_TEXT_Y);
       GLWin.DrawString((const unsigned char *)row->value);
     }
     y -= OSD_LINE_H;
