@@ -273,6 +273,30 @@ Before or after meaningful feature work, check these areas if relevant:
 4. Check recent commits with `git log --oneline -n 10`
 5. Only then start changing behavior
 
+## Planned / TODO
+
+Current idea under consideration; not implemented yet:
+
+- before any in-OSD update button, first build a small Windows launcher/update EXE
+- the launcher/update EXE should own the start/update flow so it can safely swap binaries while `Hosts3D.exe` is not running, then launch the main app
+- this is expected to become a real small product surface of its own, not just a hidden helper
+- likely needs its own name, icon, short explanatory texts, window, buttons, and help entry
+- possible later extras include a tray icon, richer colors/styling, and more polished progress/error UI
+
+Recommended phasing:
+
+- MVP first: small window with `Start`, `Check for Updates`, `Help`, and possibly `Open Data Folder`
+- keep tray behavior out of the first version unless there is a strong reason; it adds UX/state complexity quickly
+- after the basic launcher works, add update staging, progress feedback, release text, and clearer failure handling
+- only after that consider an OSD-level update button that hands off to the launcher/update flow
+
+Architecture notes to preserve:
+
+- prefer packaged GitHub release ZIPs / runtime bundles over raw `git pull` style updates
+- keep runtime data in `hsd-data` separate from binaries
+- stage replacement files for the next restart instead of trying to overwrite the currently running `Hosts3D.exe`
+- treat rollback/backup and user-visible error handling as part of the real update design, not as an afterthought
+
 ## Open Guidance
 
 This file should be kept compact and practical.
