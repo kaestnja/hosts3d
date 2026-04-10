@@ -25,6 +25,12 @@ Quick script builds:
 Script output layout:
     Release/<os>/<arch>/
     Debug/<os>/<arch>/
+    build/windows/<target>/<arch>/<config>/
+
+Parallel Windows build note:
+    compile-hosts3d.bat and compile-hsen.bat now use separate object directories per
+    target and architecture, so x86/x64 and Hosts3D/hsen builds can run in parallel
+    without clobbering each other's object files.
 
 Windows local third-party layout:
     See third_party/README.md

@@ -67,6 +67,8 @@ echo Using "%WINDRES_EXE%"
 
 set "OUTDIR=%CONFIG%\windows\%ARCH%"
 if not exist "%OUTDIR%" mkdir "%OUTDIR%"
+set "OBJDIR=build\windows\hsen\%ARCH%\%CONFIG%"
+if not exist "%OBJDIR%" mkdir "%OBJDIR%"
 
 set "WPCAP_INCLUDE=third_party\wpcap\include"
 set "WPCAP_LIBDIR=third_party\wpcap\lib\windows\%ARCH%"
@@ -86,20 +88,20 @@ if "%USE_WPCAP_A%"=="0" if not exist "%WPCAP_LIBDIR%\wpcap.lib" (
   goto :fail
 )
 
-"%GPP_EXE%" -Wall -O2 -I"%WPCAP_INCLUDE%" -c -o src/llist.o src/llist.cpp
+"%GPP_EXE%" -Wall -O2 -I"%WPCAP_INCLUDE%" -c -o "%OBJDIR%\llist.o" src/llist.cpp
 if errorlevel 1 goto :fail
-"%GPP_EXE%" -Wall -O2 -I"%WPCAP_INCLUDE%" -c -o src/misc.o src/misc.cpp
+"%GPP_EXE%" -Wall -O2 -I"%WPCAP_INCLUDE%" -c -o "%OBJDIR%\misc.o" src/misc.cpp
 if errorlevel 1 goto :fail
-"%GPP_EXE%" -Wall -O2 -I"%WPCAP_INCLUDE%" -c -o src/proto.o src/proto.cpp
+"%GPP_EXE%" -Wall -O2 -I"%WPCAP_INCLUDE%" -c -o "%OBJDIR%\proto.o" src/proto.cpp
 if errorlevel 1 goto :fail
-"%GPP_EXE%" -Wall -O2 -I"%WPCAP_INCLUDE%" -c -o src/hsen.o src/hsen.cpp
+"%GPP_EXE%" -Wall -O2 -I"%WPCAP_INCLUDE%" -c -o "%OBJDIR%\hsen.o" src/hsen.cpp
 if errorlevel 1 goto :fail
-"%WINDRES_EXE%" -I"src" -O coff -i src/hsen.rc -o src/hsen-res.o
+"%WINDRES_EXE%" -I"src" -O coff -i src/hsen.rc -o "%OBJDIR%\hsen-res.o"
 if errorlevel 1 goto :fail
 if "%USE_WPCAP_A%"=="1" (
-  "%GPP_EXE%" -Wall -O2 -static-libgcc -static-libstdc++ -o "%OUTDIR%\hsen.exe" src/llist.o src/misc.o src/proto.o src/hsen.o src/hsen-res.o -L"%WPCAP_LIBDIR%" -lwpcap -lws2_32
+  "%GPP_EXE%" -Wall -O2 -static-libgcc -static-libstdc++ -o "%OUTDIR%\hsen.exe" "%OBJDIR%\llist.o" "%OBJDIR%\misc.o" "%OBJDIR%\proto.o" "%OBJDIR%\hsen.o" "%OBJDIR%\hsen-res.o" -L"%WPCAP_LIBDIR%" -lwpcap -lws2_32
 ) else (
-  "%GPP_EXE%" -Wall -O2 -static-libgcc -static-libstdc++ -o "%OUTDIR%\hsen.exe" src/llist.o src/misc.o src/proto.o src/hsen.o src/hsen-res.o "%WPCAP_LIBDIR%\wpcap.lib" -lws2_32
+  "%GPP_EXE%" -Wall -O2 -static-libgcc -static-libstdc++ -o "%OUTDIR%\hsen.exe" "%OBJDIR%\llist.o" "%OBJDIR%\misc.o" "%OBJDIR%\proto.o" "%OBJDIR%\hsen.o" "%OBJDIR%\hsen-res.o" "%WPCAP_LIBDIR%\wpcap.lib" -lws2_32
 )
 if errorlevel 1 goto :fail
 if exist "%WPCAP_BINDIR%\wpcap.dll" copy /Y "%WPCAP_BINDIR%\wpcap.dll" "%OUTDIR%\wpcap.dll" >NUL

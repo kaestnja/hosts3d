@@ -145,6 +145,7 @@ With explicit arch selection, the same scripts also produce:
 Notes:
 - Scripts overwrite known targets but do not wipe the whole `Release`/`Debug` tree.
 - The Windows scripts now accept an explicit arch such as `x86` or `x64`.
+- Windows builds now place intermediate object files under `build/windows/<target>/<arch>/<config>/`, so `x86`/`x64` and `Hosts3D`/`hsen` builds can run in parallel without mixing object files.
 - Local dependency layout for build scripts: see `third_party/README.md`.
 - Archived old binaries for comparison: `Original/windows/x86/`.
 - Portable Wireshark helper location: `Tools/Wireshark/`.
@@ -445,7 +446,7 @@ The running UI is authoritative: menu items now show direct shortcuts in parenth
 ### Main Menu
 | Menu | Items |
 |---|---|
-| `MAIN` | `Selected` (if a host is selected), `Selection`, `Anomalies`, `IP/Name`, `Packets`, `On-Active`, `View`, `Layout`, `Other`, `Local hsen`, `Exit` (fullscreen only) |
+| `MAIN` | `Selected` (if a host is selected), `Selection`, `Anomalies`, `IP/Name`, `Packets`, `On-Active`, `View`, `Layout`, `Other`, `Local hsen`, `Exit` |
 
 ### `Selected`
 | Item |
