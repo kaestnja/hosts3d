@@ -131,6 +131,7 @@ unsigned int dynamicHostTtlSeconds = DEFAULT_DYNAMIC_HOST_TTL_SECONDS;
 unsigned int dynamicHostCleanupIntervalSeconds = DEFAULT_DYNAMIC_HOST_CLEANUP_INTERVAL_SECONDS;
 time_t dynamicHostLastCleanup = 0;
 bool guiReadyForDialogs = false;
+bool packetThreadStarted = false;
 bool helpOverlayVisible = false;
 unsigned int helpOverlayLineCount = 0, helpOverlayScroll = 0;
 char layoutCompatWarningFile[128] = "";
@@ -776,7 +777,7 @@ static void netposExactHostsSync()
   bool changed = false;
   bool pausedHosts = false;
 
-  if (!goHosts)
+  if (packetThreadStarted && !goHosts)
   {
     goHosts = 1;
     while (goHosts == 1) usleep(1000);
@@ -7010,6 +7011,7 @@ int main(int argc, char *argv[])
   guiReadyForDialogs = true;
   layoutWarnShowPending();
   GLFWthread gthrd = glfwCreateThread(pktProcess, 0);  //packet gatherer
+  if (gthrd) packetThreadStarted = true;
   localHsenAutostartMaybe();
   signal(SIGINT, hsdStop);  //capture ctrl+c
   signal(SIGTERM, hsdStop);  //capture kill
