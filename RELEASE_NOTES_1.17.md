@@ -22,6 +22,8 @@
 - Replay now opens a list of available `.hpt` recordings from `hsd-data`.
 - Exact `/32` entries in `netpos.txt` now materialize known hosts immediately at startup, keep them visible in `Show Host` mode, and label them with IP or name when available.
 - Most mode/toggle rows in the top-right OSD can now be clicked directly to cycle them, in addition to the existing keyboard shortcuts and menu entries.
+- Newly written `.hnl` layout files now use a versioned `HN2` format; older incompatible `0network.hnl` files are skipped cleanly with a warning instead of blocking startup, and a new compatible layout is written on exit.
+- `netpos.txt` exact `/32` rules now override broader matching nets, and `hold` can now be combined with a colour token such as `green hold`.
 
 ## Notes
 - Packet colours still indicate protocol family.

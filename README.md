@@ -223,8 +223,8 @@ Main files:
 |---|---|
 | `controls.txt` | generated controls/help text |
 | `settings.ini` | human-readable runtime settings |
-| `0network.hnl` | network layout on exit |
-| `1network.hnl`..`4network.hnl` | saved layouts |
+| `0network.hnl` | network layout on exit; newly written layouts now use the versioned `HN2` format |
+| `1network.hnl`..`4network.hnl` | saved layouts; newly written layouts now use the versioned `HN2` format |
 | `netpos.txt` | CIDR-to-position/color mapping; exact `/32` entries also materialize known hosts at startup |
 | `traffic.hpt` | Hosts3D packet traffic record/replay data (not PCAP) |
 | `local-hsen.state` | machine-local state file for managed local `hsen` PIDs/process stamps on Linux/macOS |
@@ -239,6 +239,8 @@ Notes:
 - `traffic.hpt` contains Hosts3D/hsen packet metadata for Record/Replay; it is not a Wireshark-compatible capture format.
 - New recordings preserve packet-shape metadata; older `traffic.hpt` recordings remain readable.
 - New packet recordings no longer overwrite the previous one: Hosts3D now auto-increments the name to the next free `traffic*.hpt` file in `hsd-data`.
+- Newly written `.hnl` layout files use a versioned `HN2` format with explicit record sizes instead of raw in-memory structs.
+- Older `HN1`/`HNL` layouts are still read when they pass basic size checks; obviously incompatible layout files are skipped cleanly with a warning instead of wedging startup.
 - Runtime host lifetime/cleanup behavior is configured in the `[dynamic_hosts]` section of `settings.ini`.
 
 ### Keyboard Customization
@@ -254,6 +256,7 @@ Notes:
 - Exact `/32` entries in `netpos.txt` are also treated as known hosts: Hosts3D materializes them at startup, keeps them static, and shows them immediately even when `On-Active Action` is set to `Show Host`.
 - Locked hosts are protected from dynamic cleanup and are also kept when layouts are saved.
 - Saved layouts (`0network.hnl`..`4network.hnl`) persist static and locked hosts only.
+- When a new build first opens an older incompatible `0network.hnl`, Hosts3D now skips that file, continues running, and writes a fresh compatible layout on exit.
 - `[dynamic_hosts]` keys:
   - `dynamic_hosts_enabled=1`
   - `dynamic_host_ttl_seconds=300`
@@ -595,12 +598,13 @@ This is an advanced layout feature. Use it when you want known networks to appea
 
 Format:
 ```text
-pos net x-position y-position z-position colour
+pos net x-position y-position z-position colour [hold]
 ```
 
 Example:
 ```text
 pos 123.123.123.123/32 10 0 -10 green
+pos 123.123.123.123/32 10 0 -10 green hold
 ```
 
 Important behavior:
@@ -608,6 +612,10 @@ Important behavior:
 - Exact `/32` entries now also materialize those hosts immediately at startup if they are not already present in the current layout.
 - These exact `/32` hosts are treated as known/static hosts, inherit their `netpos.txt` position/color, and show an IP or resolved name immediately.
 - If an exact `/32` host already exists in the layout, `netpos.txt` still wins for its startup position/color.
+- Exact `/32` rules now also win over broader matching nets even if the broader net appears earlier in the file.
+- For broader nets, the first matching rule from top to bottom still wins.
+- Normal colour rules use the given position as an anchor and move colliding hosts to the nearest free position around it.
+- Adding `hold` disables that automatic offset, so the host stays exactly on the configured position even when it collides.
 
 Host positioning axes:
 - Grey/Red: positive x
@@ -620,7 +628,11 @@ Host positioning axes:
 Allowed color tokens:
 - `default`, `orange`, `yellow`, `fluro`, `green`, `mint`, `aqua`, `blue`, `purple`, `violet`, `hold`
 
-`hold` keeps hosts in place (no color reassignment).
+`hold` can be used by itself or after a colour token.
+
+- `green` means: set colour and allow collision-avoidance offsetting
+- `hold` means: keep the current colour and do not offset
+- `green hold` means: set colour and also keep the host fixed exactly at that position
 
 ## Visual Mapping (Current Code)
 This section helps you map what you see on-screen back to the current implementation (`src/misc.h`, `src/objects.cpp`, `src/hosts3d.cpp`).
@@ -700,7 +712,8 @@ Press `H` to toggle the help overlay (`controls.txt`, generated from code).
 - Dynamic hosts are automatically removed again after the configured inactivity timeout in `[dynamic_hosts]`, unless they are currently selected, locked, or have already been promoted to static
 - Large menu operations on thousands of hosts can take minutes
 - `settings.ini` is plain text and portable across 32-bit/64-bit builds
-- Legacy binary layout/traffic files such as `.hnl` and `.hpt` remain architecture-specific
+- Newly written `.hnl` layouts now use the versioned `HN2` format and are validated before loading
+- Legacy raw layout/traffic files such as `HN1`/`HNL` and older `.hpt` recordings remain more sensitive to binary compatibility
 - On Windows, running configured system commands can stall Hosts3D until command completion
 
 ## Troubleshooting Tip
