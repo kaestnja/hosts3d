@@ -1,6 +1,7 @@
 # Build artifacts
 src/*.o
 src/*-res.o
+build/
 .vs/
 
 # Machine-local runtime/helper config

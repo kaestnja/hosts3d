@@ -53,6 +53,12 @@ The build scripts now accept:
 - `compile-hosts3d.bat [Release|Debug] [x86|x64|arm64] [--no-pause]`
 - `compile-hsen.bat [Release|Debug] [x86|x64|arm64] [--no-pause]`
 
+Build safety note:
+
+- Windows build scripts now use separate object directories under `build/windows/<target>/<arch>/<config>/`
+- `x86`/`x64` and `Hosts3D`/`hsen` builds can therefore run in parallel without mixing object files
+- if old mixed `src/*.o` or `src/*-res.o` artifacts are still around from earlier builds, they can be deleted safely
+
 The current working machine/repo state is:
 
 - `C:\msys64\mingw32\bin\g++.exe`

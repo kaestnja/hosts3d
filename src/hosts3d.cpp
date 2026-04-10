@@ -4702,7 +4702,7 @@ void mnuProcess(int m)
         addMenuItem("Layout", 12, 1, 108, 'L');
         addMenuItem("Other", 12, 1, 109, 'T');
         addMenuItem("Local hsen", 12, 0, 94, 'H');
-        if (fullscn) addMenuItem("Exit", 12, 0, 99, 'X');
+        addMenuItem("Exit", 12, 0, 99, 'X');
         break;
       case 101:
         addMenuItem("SELECTED", 8, 2, 100, GLFW_KEY_BACKSPACE);
@@ -4974,6 +4974,8 @@ static inline host_type * hostTypeFromName (GLuint name)
 //glfwSetMouseButtonCallback
 void GLFWCALL clickGL(int button, int action)
 {
+  glfwGetMousePos(&mPsx, &mPsy);
+  GLWin.MousePos(mPsx, hWin - mPsy);
   if (button == GLFW_MOUSE_BUTTON_LEFT)
   {
     if (GLWin.On())  //if 2D GUI displayed
