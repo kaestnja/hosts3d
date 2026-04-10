@@ -1,53 +1,55 @@
 @echo off
+rem Build the Windows Hosts3D runtime into Release\windows\<arch> or Debug\windows\<arch>.
+rem Also refresh the local runtime README in the output directory.
 setlocal EnableExtensions
 cd /d "%~dp0"
 
 set "CONFIG=Release"
+set "ARCH=x86"
 set "PAUSE_ON_EXIT=1"
 
-if /I "%~1"=="Release" set "CONFIG=Release"
-if /I "%~1"=="Debug" set "CONFIG=Debug"
-if /I "%~1"=="--no-pause" set "PAUSE_ON_EXIT=0"
-if /I "%~2"=="--no-pause" set "PAUSE_ON_EXIT=0"
+:parse_args
+if "%~1"=="" goto :args_done
+if /I "%~1"=="Release" set "CONFIG=Release" & shift & goto :parse_args
+if /I "%~1"=="Debug" set "CONFIG=Debug" & shift & goto :parse_args
+if /I "%~1"=="x86" set "ARCH=x86" & shift & goto :parse_args
+if /I "%~1"=="x64" set "ARCH=x64" & shift & goto :parse_args
+if /I "%~1"=="arm64" set "ARCH=arm64" & shift & goto :parse_args
+if /I "%~1"=="--no-pause" set "PAUSE_ON_EXIT=0" & shift & goto :parse_args
+call :usage
+goto :fail
 
-if not "%~1"=="" if /I not "%~1"=="Release" if /I not "%~1"=="Debug" if /I not "%~1"=="--no-pause" (
-  echo Usage: %~nx0 [Release^|Debug]
-  echo Default: Release
-  echo Optional: --no-pause
-  goto :fail
-)
-if not "%~2"=="" if /I not "%~2"=="--no-pause" (
-  echo Usage: %~nx0 [Release^|Debug]
-  echo Default: Release
-  echo Optional: --no-pause
-  goto :fail
-)
+:args_done
 
 set "GPP_EXE="
-for /f "delims=" %%i in ('where g++.exe 2^>NUL') do (
-  set "GPP_EXE=%%i"
-  goto :found_gpp_hosts3d
-)
-for %%i in (
-  "C:\msys64\mingw32\bin\g++.exe"
-  "C:\msys64\mingw64\bin\g++.exe"
-  "C:\msys64\ucrt64\bin\g++.exe"
-) do (
-  if not defined GPP_EXE if exist "%%~i" set "GPP_EXE=%%~fi"
-)
-:found_gpp_hosts3d
-for %%i in ("%GPP_EXE%") do if defined GPP_EXE if /I not "%%~xi"==".exe" set "GPP_EXE="
+set "MACHINE="
+if /I "%ARCH%"=="x86" call :probe_compiler "C:\msys64\mingw32\bin\g++.exe" "%ARCH%"
+if /I "%ARCH%"=="x64" call :probe_compiler "C:\msys64\mingw64\bin\g++.exe" "%ARCH%"
+if not defined GPP_EXE if /I "%ARCH%"=="x64" call :probe_compiler "C:\msys64\ucrt64\bin\g++.exe" "%ARCH%"
 if not defined GPP_EXE (
-  echo Missing g++ in PATH.
-  echo Install MSYS2/MinGW or place g++.exe in one of these locations:
-  echo   C:\msys64\mingw32\bin
-  echo   C:\msys64\mingw64\bin
-  echo   C:\msys64\ucrt64\bin
+  for /f "delims=" %%i in ('where g++.exe 2^>NUL') do (
+    if not defined GPP_EXE call :probe_compiler "%%i" "%ARCH%"
+  )
+)
+if not defined GPP_EXE (
+  if /I "%ARCH%"=="x64" (
+    echo Missing an x64 MinGW g++ toolchain.
+    echo Install one of these and try again:
+    echo   C:\msys64\mingw64\bin\g++.exe
+    echo   C:\msys64\ucrt64\bin\g++.exe
+  ) else if /I "%ARCH%"=="x86" (
+    echo Missing an x86 MinGW g++ toolchain.
+    echo Install:
+    echo   C:\msys64\mingw32\bin\g++.exe
+  ) else (
+    echo Missing a supported %ARCH% MinGW g++ toolchain.
+  )
   goto :fail
 )
 for %%i in ("%GPP_EXE%") do set "MINGW_BIN=%%~dpi"
 set "PATH=%MINGW_BIN%;%PATH%"
 echo Using "%GPP_EXE%"
+echo Compiler target "%MACHINE%"
 set "WINDRES_EXE="
 if exist "%MINGW_BIN%windres.exe" set "WINDRES_EXE=%MINGW_BIN%windres.exe"
 if not defined WINDRES_EXE (
@@ -62,14 +64,6 @@ if not defined WINDRES_EXE (
   goto :fail
 )
 echo Using "%WINDRES_EXE%"
-for /f "delims=" %%i in ('"%GPP_EXE%" -dumpmachine 2^>NUL') do set "MACHINE=%%i"
-if not defined MACHINE (
-  echo Unable to detect compiler target with g++ -dumpmachine.
-  goto :fail
-)
-set "ARCH=x86"
-echo %MACHINE% | findstr /I "x86_64 amd64" >NUL && set "ARCH=x64"
-echo %MACHINE% | findstr /I "aarch64 arm64" >NUL && set "ARCH=arm64"
 
 set "OUTDIR=%CONFIG%\windows\%ARCH%"
 if not exist "%OUTDIR%" mkdir "%OUTDIR%"
@@ -90,25 +84,30 @@ if not defined GLFW_LIB_OPT if exist "%GLFW_LIBDIR%\libglfwdll.a" set "GLFW_LIB_
 if not defined GLFW_LIB_OPT (
   echo Missing GLFW import/static library in "%GLFW_LIBDIR%"
   echo Expected libglfw.a or libglfwdll.a
+  if /I "%ARCH%"=="x64" (
+    echo Current repo state only includes GLFW2 runtime files for x86.
+    echo Add GLFW 2.x x64 library files under third_party\glfw2\lib\windows\x64\
+  )
   goto :fail
 )
 
-g++ -Wall -O2 -I"%GLFW_INCLUDE%" -c -o src/llist.o src/llist.cpp
+"%GPP_EXE%" -Wall -O2 -I"%GLFW_INCLUDE%" -c -o src/llist.o src/llist.cpp
 if errorlevel 1 goto :fail
-g++ -Wall -O2 -I"%GLFW_INCLUDE%" -c -o src/misc.o src/misc.cpp
+"%GPP_EXE%" -Wall -O2 -I"%GLFW_INCLUDE%" -c -o src/misc.o src/misc.cpp
 if errorlevel 1 goto :fail
-g++ -Wall -O2 -I"%GLFW_INCLUDE%" -c -o src/glwin.o src/glwin.cpp
+"%GPP_EXE%" -Wall -O2 -I"%GLFW_INCLUDE%" -c -o src/glwin.o src/glwin.cpp
 if errorlevel 1 goto :fail
-g++ -Wall -O2 -I"%GLFW_INCLUDE%" -c -o src/objects.o src/objects.cpp
+"%GPP_EXE%" -Wall -O2 -I"%GLFW_INCLUDE%" -c -o src/objects.o src/objects.cpp
 if errorlevel 1 goto :fail
-g++ -Wall -O2 -I"%GLFW_INCLUDE%" -c -o src/hosts3d.o src/hosts3d.cpp
+"%GPP_EXE%" -Wall -O2 -I"%GLFW_INCLUDE%" -c -o src/hosts3d.o src/hosts3d.cpp
 if errorlevel 1 goto :fail
 "%WINDRES_EXE%" -I"src" -O coff -i src/hosts3d.rc -o src/hosts3d-res.o
 if errorlevel 1 goto :fail
-g++ -Wall -O2 -static-libgcc -static-libstdc++ -o "%OUTDIR%\Hosts3D.exe" src/llist.o src/misc.o src/glwin.o src/objects.o src/hosts3d.o src/hosts3d-res.o -L"%GLFW_LIBDIR%" %GLFW_LIB_OPT% -lopengl32 -lglu32 -lws2_32
+"%GPP_EXE%" -Wall -O2 -static-libgcc -static-libstdc++ -o "%OUTDIR%\Hosts3D.exe" src/llist.o src/misc.o src/glwin.o src/objects.o src/hosts3d.o src/hosts3d-res.o -L"%GLFW_LIBDIR%" %GLFW_LIB_OPT% -lopengl32 -lglu32 -lws2_32
 if errorlevel 1 goto :fail
 if exist "%GLFW_BINDIR%\glfw.dll" copy /Y "%GLFW_BINDIR%\glfw.dll" "%OUTDIR%\glfw.dll" >NUL
 if exist "%MINGW_BIN%libwinpthread-1.dll" copy /Y "%MINGW_BIN%libwinpthread-1.dll" "%OUTDIR%\libwinpthread-1.dll" >NUL
+if exist "README-runtime-windows.md" copy /Y "README-runtime-windows.md" "%OUTDIR%\README-runtime-windows.md" >NUL
 echo Built "%OUTDIR%\Hosts3D.exe"
 goto :success
 
@@ -119,3 +118,35 @@ exit /b 1
 :success
 if "%PAUSE_ON_EXIT%"=="1" pause
 exit /b 0
+
+:usage
+echo Usage: %~nx0 [Release^|Debug] [x86^|x64^|arm64] [--no-pause]
+echo Defaults: Release x86
+exit /b 0
+
+:probe_compiler
+if "%~1"=="" exit /b 1
+if not exist "%~1" exit /b 1
+set "CAND_MACHINE="
+for /f "delims=" %%i in ('"%~1" -dumpmachine 2^>NUL') do set "CAND_MACHINE=%%i"
+if not defined CAND_MACHINE exit /b 1
+call :machine_matches "%CAND_MACHINE%" "%~2"
+if errorlevel 1 exit /b 1
+set "GPP_EXE=%~1"
+set "MACHINE=%CAND_MACHINE%"
+exit /b 0
+
+:machine_matches
+if /I "%~2"=="x86" (
+  echo %~1 | findstr /I "i686 i586 i486 i386" >NUL && exit /b 0
+  exit /b 1
+)
+if /I "%~2"=="x64" (
+  echo %~1 | findstr /I "x86_64 amd64" >NUL && exit /b 0
+  exit /b 1
+)
+if /I "%~2"=="arm64" (
+  echo %~1 | findstr /I "aarch64 arm64" >NUL && exit /b 0
+  exit /b 1
+)
+exit /b 1

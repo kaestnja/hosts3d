@@ -15,6 +15,8 @@
    GNU General Public License for more details. */
 
 //doubly-linked list
+#include <stdint.h>
+
 class MyLL
 {
   private:
@@ -43,8 +45,9 @@ class MyLL
 
 #define HT_BUCKETS 65536 // => 16-bit key
 typedef unsigned short HtKeyType;
-typedef bool (*HtFirstThatCallback)(void *, long, long, long, long);
-typedef void (*HtForEachCallback)(void **, long, long, long, long);
+typedef intptr_t HtArgType;
+typedef bool (*HtFirstThatCallback)(void *, HtArgType, HtArgType, HtArgType, HtArgType);
+typedef void (*HtForEachCallback)(void **, HtArgType, HtArgType, HtArgType, HtArgType);
 
 class MyHT
 {
@@ -63,14 +66,14 @@ class MyHT
 
   bool deleteEntryAtBucket(unsigned char pc, HtKeyType key, void *data);
 
-  void forEach(unsigned char pc, HtForEachCallback cb, long arg1, long arg2,
-	       long arg3, long arg4);
+  void forEach(unsigned char pc, HtForEachCallback cb, HtArgType arg1, HtArgType arg2,
+	       HtArgType arg3, HtArgType arg4);
 
   void *firstThat(HtKeyType key, unsigned char pc,
-		  HtFirstThatCallback cb, long arg1,
-		  long arg2, long arg3, long arg4);
+		  HtFirstThatCallback cb, HtArgType arg1,
+		  HtArgType arg2, HtArgType arg3, HtArgType arg4);
   
   // Version that walks over all buckets, i.e. doesn't need a key
-  void *firstThat(unsigned char pc, HtFirstThatCallback cb, long arg1,
-		  long arg2, long arg3, long arg4);
+  void *firstThat(unsigned char pc, HtFirstThatCallback cb, HtArgType arg1,
+		  HtArgType arg2, HtArgType arg3, HtArgType arg4);
 };

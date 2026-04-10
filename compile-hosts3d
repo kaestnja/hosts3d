@@ -1,4 +1,6 @@
 #!/bin/sh
+# Build the Linux Hosts3D binary into Release/linux/<arch> or Debug/linux/<arch>.
+# This is a quick local helper script, not the autotools install path.
 set -eu
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)

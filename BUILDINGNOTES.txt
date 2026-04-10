@@ -1,3 +1,7 @@
+Purpose
+    Quick human-readable build notes for local Hosts3D development.
+    This file summarizes the expected dependencies, helper scripts, and output layout.
+
 To compile you need the following libraries installed
     libglfw-dev 
     libpcap-dev
@@ -15,8 +19,8 @@ Quick script builds:
     ./compile-hosts3d [Release|Debug]
     ./compile-hsen [Release|Debug]
     ./compile-mac-hosts3d [Release|Debug]
-    compile-hosts3d.bat [Release|Debug]
-    compile-hsen.bat [Release|Debug]
+    compile-hosts3d.bat [Release|Debug] [x86|x64] [--no-pause]
+    compile-hsen.bat [Release|Debug] [x86|x64] [--no-pause]
 
 Script output layout:
     Release/<os>/<arch>/
@@ -24,3 +28,15 @@ Script output layout:
 
 Windows local third-party layout:
     See third_party/README.md
+
+Windows x64 note:
+    x64 builds need an x64 MinGW compiler.
+    The repository now contains GLFW 2.x files for both x86 and x64 under third_party\glfw2.
+    On the current machine, the verified x64 compiler path is:
+        C:\msys64\mingw64\bin\g++.exe
+
+Windows packaging note:
+    package-release-windows.bat defaults to a public ZIP without Packet.dll and wpcap.dll.
+    Use:
+        package-release-windows.bat Release x64 with-npcap
+    when you want a private/local test ZIP that carries the Npcap runtime DLLs.

@@ -440,8 +440,10 @@ static void addMenuItem(const char *title, int items, int sub, int value, int mn
 static keyact_type keyActionFromInput(int encoded);
 static void triggerKeyAction(keyact_type action);
 static keyact_type menuActionForValue(int value);
+static inline HtArgType htArgFromPtr(const void *ptr) { return (HtArgType) (intptr_t) ptr; }
+static inline void *ptrFromHtArg(HtArgType arg) { return (void *) (intptr_t) arg; }
 static unsigned char hostZone(host_type *ht);
-static void menuSelectionStateCb(void **data, long arg1, long arg2, long arg3, long arg4);
+static void menuSelectionStateCb(void **data, HtArgType arg1, HtArgType arg2, HtArgType arg3, HtArgType arg4);
 static menu_selection_state_type menuSelectionState();
 static bool hostIsDynamic(host_type *ht);
 static void hostSetDynamic(host_type *ht, bool dynamic);
@@ -549,7 +551,7 @@ HtKeyType keyFromIpAddress(in_addr ip) {
 }
 
 // HtFirstThatCallback callback for hostIp()
-bool isHostIpAddress(void *data, long arg1, long arg2, long arg3, long arg4) {
+bool isHostIpAddress(void *data, HtArgType arg1, HtArgType arg2, HtArgType arg3, HtArgType arg4) {
   host_type *ht = (host_type *) data;
   unsigned long saddress = (unsigned long) arg1;
   if (ht->hip.s_addr == saddress) {
@@ -559,9 +561,9 @@ bool isHostIpAddress(void *data, long arg1, long arg2, long arg3, long arg4) {
 }
 
 // HtFirstThatCallback callback for hostAtPos()
-bool isHostHere(void * data, long pht_, long px_, long py_, long pz_) {
+bool isHostHere(void * data, HtArgType pht_, HtArgType px_, HtArgType py_, HtArgType pz_) {
   host_type *ht = (host_type *) data;
-  host_type *pht = (host_type *) pht_;
+  host_type *pht = (host_type *) ptrFromHtArg(pht_);
   int px = (int) px_;
   int py = (int) py_;
   int pz = (int) pz_;
@@ -577,8 +579,8 @@ host_type *hostAtpos(int px, int py, int pz, host_type *pht)
 {
   HtKeyType key = keyFromCoOrdinates(px, py, pz);
   return (host_type *) hstsByPos.firstThat(key, 2, &isHostHere,
-					   (long) (void *)pht,
-					   (long) px, (long) py, (long) pz);
+					   htArgFromPtr(pht),
+					   (HtArgType) px, (HtArgType) py, (HtArgType) pz);
 }
 
 //add an entry to the hstsByIp hashtable
@@ -1552,7 +1554,7 @@ void pcktCreate(pkex_type *pkex, host_type *sht, host_type *dht, bool lk)
   }
 }
 
-void hostDestroyCb(void **data, long arg1, long arg2, long arg3, long arg4) {
+void hostDestroyCb(void **data, HtArgType arg1, HtArgType arg2, HtArgType arg3, HtArgType arg4) {
   host_type *ht = *((host_type **) data);
   hostDynamicStateByIp.erase(hostDynamicStateKey(ht->hip));
   hostRuntimeMetaByIp.erase(hostDynamicStateKey(ht->hip));
@@ -2113,7 +2115,8 @@ static void drawPacketTrafficStatus()
 
   if (ptrc == rpy)
   {
-    strftime(replayTime, sizeof(replayTime), "Packet Time: %d-%m-%y %H:%M:%S", localtime(&pkrp.ptime.tv_sec));
+    time_t replayPacketTime = (time_t) pkrp.ptime.tv_sec;
+    strftime(replayTime, sizeof(replayTime), "Packet Time: %d-%m-%y %H:%M:%S", localtime(&replayPacketTime));
     glRasterPos2i(left + PACKET_STATUS_PAD_X, y);
     GLWin.DrawString((const unsigned char *)replayTime);
     y -= PACKET_STATUS_LINE_H;
@@ -2324,14 +2327,18 @@ void allDestroy()
 
 static inline GLuint nameFromHostType (host_type *ht)
 {
+#if defined(_WIN64) || defined(__x86_64__) || defined(__aarch64__)
+  return ht->hip.s_addr;
+#else
   if (useIpAddrForGlName) {
     return ht->hip.s_addr;
   } else {
-    return (GLuint) ht;
+    return (GLuint) (uintptr_t) ht;
   }
+#endif
 }
 
-void hostDrawCb(void **data, long arg1, long arg2, long arg3, long arg4)
+void hostDrawCb(void **data, HtArgType arg1, HtArgType arg2, HtArgType arg3, HtArgType arg4)
 {
   host_type *ht = *((host_type **) data);
   bool dips = (arg2 == 1l) ? true : false;
@@ -2679,7 +2686,7 @@ void messageBox(const char *ttl, const char *msg)
   displayGL();
 }
 
-void hostSetCb(void **data, long arg1, long arg2, long arg3, long arg4)
+void hostSetCb(void **data, HtArgType arg1, HtArgType arg2, HtArgType arg3, HtArgType arg4)
 {
   host_type *ht = *((host_type **) data);
   unsigned char mbr = (unsigned char) arg1;
@@ -2716,7 +2723,7 @@ void hostSetCb(void **data, long arg1, long arg2, long arg3, long arg4)
 //set value for all hosts
 void hostsSet(unsigned char mbr, unsigned char val)
 {
-  hstsByIp.forEach(1, hostSetCb, (long) mbr, (long) val, 0, 0);
+  hstsByIp.forEach(1, hostSetCb, (HtArgType) mbr, (HtArgType) val, 0, 0);
 }
 
 //return pointer to host from IP address
@@ -2724,7 +2731,7 @@ host_type *hostIP(in_addr ip, bool crt)
 {
   HtKeyType key = keyFromIpAddress(ip);
   host_type *ht = (host_type *) hstsByIp.firstThat(key, 2, &isHostIpAddress,
-						   (long) ip.s_addr, 0, 0, 0);
+						   (HtArgType) ip.s_addr, 0, 0, 0);
   if (ht)
     return ht;
 
@@ -2870,16 +2877,16 @@ void netLoad(const char *fl)
   }
 }
 
-void netSaveCountCb(void **data, long arg1, long arg2, long arg3, long arg4)
+void netSaveCountCb(void **data, HtArgType arg1, HtArgType arg2, HtArgType arg3, HtArgType arg4)
 {
   host_type *ht = *((host_type **) data);
-  unsigned int *count = (unsigned int *)(void *) arg1;
+  unsigned int *count = (unsigned int *) ptrFromHtArg(arg1);
   if (hostShouldPersist(ht)) (*count)++;
 }
 
-bool netSaveCb(void *data, long arg1, long arg2, long arg3, long arg4)
+bool netSaveCb(void *data, HtArgType arg1, HtArgType arg2, HtArgType arg3, HtArgType arg4)
 {
-  FILE *fp = (FILE *)(void *) arg1;
+  FILE *fp = (FILE *) ptrFromHtArg(arg1);
   host_type *ht = (host_type *) data;
   host_layout_v2_type disk;
   if (!hostShouldPersist(ht)) return false;
@@ -2917,7 +2924,7 @@ void netSave(const char* fl)
   {
     uint32_t hsts = 0, lnks = 0, version = LAYOUT_FILE_VERSION, hostRecordSize = sizeof(host_layout_v2_type), linkRecordSize = sizeof(link_layout_v2_type);
     link_type *lk;
-    hstsByIp.forEach(1, netSaveCountCb, (long)(void *) &hsts, 0, 0, 0);
+    hstsByIp.forEach(1, netSaveCountCb, htArgFromPtr(&hsts), 0, 0, 0);
     lnksLL.Start(2);
     while ((lk = (link_type *)lnksLL.Read(2)))
     {
@@ -2929,7 +2936,7 @@ void netSave(const char* fl)
       && (fwrite(&linkRecordSize, sizeof(linkRecordSize), 1, net) == 1) && (fwrite(&hsts, sizeof(hsts), 1, net) == 1)
       && (fwrite(&lnks, sizeof(lnks), 1, net) == 1))
     {
-      if (hstsByIp.firstThat(1, &netSaveCb, (long) net, 0, 0, 0)) {
+      if (hstsByIp.firstThat(1, &netSaveCb, htArgFromPtr(net), 0, 0, 0)) {
 	// fwrite() failed in netSaveCb
 	fclose(net);
 	remove(fl);
@@ -2957,10 +2964,10 @@ void netSave(const char* fl)
   }
 }
 
-void btnProcessExportCsvCb(void **data, long arg1, long arg2,
-			   long arg3, long arg4) {
+void btnProcessExportCsvCb(void **data, HtArgType arg1, HtArgType arg2,
+			   HtArgType arg3, HtArgType arg4) {
   host_type *ht = *((host_type **) data);
-  FILE *cf = (FILE *)(void *) arg1;
+  FILE *cf = (FILE *) ptrFromHtArg(arg1);
   unsigned char cnt;
   char buf[5], svc[12], row[1097];
 
@@ -2998,10 +3005,10 @@ typedef struct FindHostsCbData_ {
   unsigned short sprt;
 } FindHostsCbData;
 
-void btnProcessFindHostsCb(void **data, long arg1, long arg2,
-			   long arg3, long arg4) {
+void btnProcessFindHostsCb(void **data, HtArgType arg1, HtArgType arg2,
+			   HtArgType arg3, HtArgType arg4) {
   host_type *ht = *((host_type **) data);
-  FindHostsCbData *findhostscbdata = (FindHostsCbData *)(void *) arg1;
+  FindHostsCbData *findhostscbdata = (FindHostsCbData *) ptrFromHtArg(arg1);
   bool ipok = true;
 
   if (*(findhostscbdata->gi1)) {
@@ -3036,13 +3043,13 @@ void btnProcessFindHostsCb(void **data, long arg1, long arg2,
   }
 }
 
-void btnProcessSlInActCb(void **data, long arg1, long arg2, long arg3,
-			 long arg4) {
+void btnProcessSlInActCb(void **data, HtArgType arg1, HtArgType arg2, HtArgType arg3,
+			 HtArgType arg4) {
   host_type *ht = *((host_type **) data);
   time_t itime = (time_t) arg1;
-  char *gi1 = (char *)(void *) arg2;
-  char *gi2 = (char *)(void *) arg3;
-  char *gi3 = (char *)(void *) arg4;
+  char *gi1 = (char *) ptrFromHtArg(arg2);
+  char *gi2 = (char *) ptrFromHtArg(arg3);
+  char *gi3 = (char *) ptrFromHtArg(arg4);
 
   ht->sld = ((itime - ht->lpk) > ((atoi(gi1) * 86400) + (atoi(gi2) * 360) + (atoi(gi3) * 60)));
 }
@@ -3055,11 +3062,11 @@ typedef struct ResolveHostnamesCbData_
   unsigned int failed;
 } ResolveHostnamesCbData;
 
-static void resolveSelectedHostnamesCb(void **data, long arg1, long arg2,
-                                       long arg3, long arg4)
+static void resolveSelectedHostnamesCb(void **data, HtArgType arg1, HtArgType arg2,
+                                       HtArgType arg3, HtArgType arg4)
 {
   host_type *ht = *((host_type **) data);
-  ResolveHostnamesCbData *rd = (ResolveHostnamesCbData *)(void *) arg1;
+  ResolveHostnamesCbData *rd = (ResolveHostnamesCbData *) ptrFromHtArg(arg1);
 
   if (!ht || !ht->sld) return;
   rd->selected++;
@@ -3099,7 +3106,7 @@ void btnProcess(int gs)
         if ((cf = fopen(gi1, "w")))
         {
           fputs("\"IP\",\"MAC\",\"Name\",\"Remarks\",\"Services\"\n", cf);
-	  hstsByIp.forEach(1, btnProcessExportCsvCb, (long) cf, 0, 0, 0);
+	  hstsByIp.forEach(1, btnProcessExportCsvCb, htArgFromPtr(cf), 0, 0, 0);
           fclose(cf);
         }
         GLWin.Close();  //close all 2D GUI windows
@@ -3160,7 +3167,7 @@ void btnProcess(int gs)
 	  findhostscbdata.sprt = sprt;
 
 	  hstsByIp.forEach(1, btnProcessFindHostsCb,
-			   (long)(void *) &findhostscbdata,
+			   htArgFromPtr(&findhostscbdata),
 			   0, 0, 0);
 
           sprintf(ttmp, "Found: %u", findhostscbdata.found);
@@ -3363,10 +3370,10 @@ void btnProcess(int gs)
       {
         seltd = 0;
         time_t itime = time(0);
-	hstsByIp.forEach(1, btnProcessSlInActCb, (long) itime,
-			 (long)(void *) gi1,
-			 (long)(void *) gi2,
-			 (long)(void *) gi3);
+	hstsByIp.forEach(1, btnProcessSlInActCb, (HtArgType) itime,
+			 htArgFromPtr(gi1),
+			 htArgFromPtr(gi2),
+			 htArgFromPtr(gi3));
         GLWin.Close();  //close all 2D GUI windows
       }
       else messageBox("ERROR", "Enter Days, Hours or Minutes!");
@@ -3396,10 +3403,10 @@ void btnProcess(int gs)
   }
 }
 
-bool hostTabFirstThatCb(void *data, long arg1, long arg2, long arg3, long arg4)
+bool hostTabFirstThatCb(void *data, HtArgType arg1, HtArgType arg2, HtArgType arg3, HtArgType arg4)
 {
   host_type *ht = (host_type *) data;
-  host_type **identified_hd = (host_type **)(void *) arg1;
+  host_type **identified_hd = (host_type **) ptrFromHtArg(arg1);
 
   if (*identified_hd != 0) {
     if (ht->sld) {
@@ -3424,7 +3431,7 @@ void hostTab(bool nx)
   host_type *identified_hd = 0;
 
   ht = (host_type *) hstsByPos.firstThat(1, &hostTabFirstThatCb,
-					 (long)(void *) &identified_hd,
+					 htArgFromPtr(&identified_hd),
 					 0, 0, 0);
   if (ht) {
     seltd = ht;
@@ -3475,10 +3482,10 @@ void offsetReset()
   rpoff = milliTime(0) - milliTime(&pkrp.ptime);
 }
 
-void infoSelectionForEachCb(void **data, long arg1, long arg2, long arg3,
-			    long arg4) {
+void infoSelectionForEachCb(void **data, HtArgType arg1, HtArgType arg2, HtArgType arg3,
+			    HtArgType arg4) {
   host_type *ht = *((host_type **) data);
-  FILE *fp = (FILE *)(void *) arg1;
+  FILE *fp = (FILE *) ptrFromHtArg(arg1);
   if (ht->sld)
     fprintf(fp, "\n%s\t%s", ht->htip, ht->htnm);
 }
@@ -3490,12 +3497,12 @@ void infoSelection()
   if ((info = fopen(hsddata("tmp-hinfo-hsd"), "w")))
   {
     fprintf(info, "CURRENT SELECTION\n");
-    hstsByPos.forEach(1, &infoSelectionForEachCb, (long)(void *) info, 0, 0, 0);
+    hstsByPos.forEach(1, &infoSelectionForEachCb, htArgFromPtr(info), 0, 0, 0);
     fclose(info);
   }
 }
 
-void keyboardForEachCb(void **data, long arg1, long arg2, long arg3, long arg4)
+void keyboardForEachCb(void **data, HtArgType arg1, HtArgType arg2, HtArgType arg3, HtArgType arg4)
 {
   host_type *ht = *((host_type **) data);
   keyact_type key = (keyact_type) arg1;
@@ -3702,7 +3709,7 @@ void GLFWCALL keyboardGL(int key, int action)
 	// Since the keyboardForEachCb callback changes the hosts' positions,
 	// we cannot iterate (forEach) over the hstsByPos hash-table; instead
 	// we walk over the hstsByIp hash-table.
-	hstsByIp.forEach(1, &keyboardForEachCb, (long) keyact, 0, 0, 0);
+	hstsByIp.forEach(1, &keyboardForEachCb, (HtArgType) keyact, 0, 0, 0);
         goHosts = 0;
         break;
       case kaFindHosts:  //2D GUI find hosts
@@ -4044,10 +4051,10 @@ static unsigned char hostZone(host_type *ht)
   return (ht->pz < 0 ? 4 : 1);
 }
 
-static void menuSelectionStateCb(void **data, long arg1, long arg2, long arg3, long arg4)
+static void menuSelectionStateCb(void **data, HtArgType arg1, HtArgType arg2, HtArgType arg3, HtArgType arg4)
 {
   host_type *ht = *((host_type **) data);
-  menu_selection_state_type *state = (menu_selection_state_type *)(void *) arg1;
+  menu_selection_state_type *state = (menu_selection_state_type *) ptrFromHtArg(arg1);
   unsigned char zone;
   (void) arg2;
   (void) arg3;
@@ -4070,7 +4077,7 @@ static void menuSelectionStateCb(void **data, long arg1, long arg2, long arg3, l
 static menu_selection_state_type menuSelectionState()
 {
   menu_selection_state_type state = {0};
-  hstsByIp.forEach(1, &menuSelectionStateCb, (long)(void *)&state, 0, 0, 0);
+  hstsByIp.forEach(1, &menuSelectionStateCb, htArgFromPtr(&state), 0, 0, 0);
   return state;
 }
 
@@ -4116,10 +4123,10 @@ typedef struct DynamicHostCleanupCbData_
   bool deleted;
 } DynamicHostCleanupCbData;
 
-static void dynamicHostsCleanupCb(void **data, long arg1, long arg2, long arg3, long arg4)
+static void dynamicHostsCleanupCb(void **data, HtArgType arg1, HtArgType arg2, HtArgType arg3, HtArgType arg4)
 {
   host_type *ht = *((host_type **) data);
-  DynamicHostCleanupCbData *cleanup = (DynamicHostCleanupCbData *)(void *) arg1;
+  DynamicHostCleanupCbData *cleanup = (DynamicHostCleanupCbData *) ptrFromHtArg(arg1);
 
   if (!hostIsDynamic(ht) || ht->lck || ht->sld || !ht->lpk) return;
   if ((cleanup->now - ht->lpk) < (time_t) dynamicHostTtlSeconds) return;
@@ -4147,17 +4154,17 @@ static void dynamicHostsCleanupMaybe()
 
   cleanup.now = now;
   cleanup.deleted = false;
-  hstsByIp.forEach(1, dynamicHostsCleanupCb, (long)(void *) &cleanup, 0, 0, 0);
+  hstsByIp.forEach(1, dynamicHostsCleanupCb, htArgFromPtr(&cleanup), 0, 0, 0);
   goHosts = 0;
 
   if (cleanup.deleted) osdUpdate();
 }
 
-void mnuKeyProcessLe9Cb(void **data, long arg1, long arg2, long arg3, long arg4)
+void mnuKeyProcessLe9Cb(void **data, HtArgType arg1, HtArgType arg2, HtArgType arg3, HtArgType arg4)
 {
   host_type *ht = *((host_type **) data);
   int m = (int) arg1;
-  bool *ptr_init = (bool *)(void *) arg2;
+  bool *ptr_init = (bool *) ptrFromHtArg(arg2);
   int spx = 0, spy = 0, spz = 0;
 
   if (ht->sld && !ht->lck)
@@ -4244,7 +4251,7 @@ void mnuKeyProcessLe9Cb(void **data, long arg1, long arg2, long arg3, long arg4)
   }
 }
 
-void mnuKeyProcessLe36Cb(void **data, long arg1, long arg2, long arg3, long arg4)
+void mnuKeyProcessLe36Cb(void **data, HtArgType arg1, HtArgType arg2, HtArgType arg3, HtArgType arg4)
 {
   host_type *ht = *((host_type **) data);
   int m = (int) arg1;
@@ -4357,7 +4364,7 @@ void mnuProcess(int m)
       pcktsDestroy();
       alrtsDestroy();
     }
-    hstsByIp.forEach(1, &mnuKeyProcessLe9Cb, (long) m, (long)(void *)&init, 0, 0);
+    hstsByIp.forEach(1, &mnuKeyProcessLe9Cb, (HtArgType) m, htArgFromPtr(&init), 0, 0);
     goHosts = 0;
     GLWin.Close();  //close all 2D GUI windows
   }
@@ -4365,7 +4372,7 @@ void mnuProcess(int m)
   {
     if (m >= 31) seltd = 0;
     time_t itime = time(0);
-    hstsByIp.forEach(1, &mnuKeyProcessLe36Cb, (long) m, (long) itime, 0, 0);
+    hstsByIp.forEach(1, &mnuKeyProcessLe36Cb, (HtArgType) m, (HtArgType) itime, 0, 0);
   }
   else
   {
@@ -4619,7 +4626,7 @@ void mnuProcess(int m)
         ResolveHostnamesCbData rd = {0, 0, 0, 0};
         char mbuf[160];
         waitShow();
-        hstsByIp.forEach(1, &resolveSelectedHostnamesCb, (long)(void *)&rd, 0, 0, 0);
+        hstsByIp.forEach(1, &resolveSelectedHostnamesCb, htArgFromPtr(&rd), 0, 0, 0);
         GLWin.Close();
         if (!rd.selected) messageBox("HOSTNAMES", "No hosts are selected.");
         else
@@ -4921,12 +4928,12 @@ void mnuProcess(int m)
   }
 }
 
-void infoGeneralCb(void **data, long arg1, long arg2, long arg3, long arg4)
+void infoGeneralCb(void **data, HtArgType arg1, HtArgType arg2, HtArgType arg3, HtArgType arg4)
 {
   host_type *ht = *((host_type **) data);
-  unsigned int *ptrcnt = (unsigned int *)(void *) arg1;
-  unsigned long long *ptrsdld = (unsigned long long *) arg2;
-  unsigned long long *ptrsuld = (unsigned long long *) arg3;
+  unsigned int *ptrcnt = (unsigned int *) ptrFromHtArg(arg1);
+  unsigned long long *ptrsdld = (unsigned long long *) ptrFromHtArg(arg2);
+  unsigned long long *ptrsuld = (unsigned long long *) ptrFromHtArg(arg3);
 
   if (ht->sld)
   {
@@ -4945,8 +4952,8 @@ void infoGeneral()
     unsigned int cnt = 0;
     unsigned long long sdld = 0, suld = 0;
     char buf[11];
-    hstsByIp.forEach(1, &infoGeneralCb, (long)(void *) &cnt,
-		     (long)(void *) &sdld, (long)(void *) &suld, 0);
+    hstsByIp.forEach(1, &infoGeneralCb, htArgFromPtr(&cnt),
+		     htArgFromPtr(&sdld), htArgFromPtr(&suld), 0);
     fprintf(info, "GENERAL\n\nHosts: %u\nDownloads: %s", cnt, formatBytes(sdld, buf));
     fprintf(info, "\nUploads: %s", formatBytes(suld, buf));  //reuse buf
     fclose(info);
@@ -4960,7 +4967,7 @@ static inline host_type * hostTypeFromName (GLuint name)
     ip.s_addr = name;
     return hostIP(ip, false);
   } else {
-    return (host_type *) name;
+    return (host_type *) (uintptr_t) name;
   }
 }
 
@@ -6748,13 +6755,13 @@ void initObjsGL()
   glEndList();
 }
 
-void pktProcessCb(void **data, long arg1, long arg2, long arg3, long arg4)
+void pktProcessCb(void **data, HtArgType arg1, HtArgType arg2, HtArgType arg3, HtArgType arg4)
 {
   host_type *dh = *((host_type **) data);
-  host_type *sh = (host_type *)(void *) arg1;
+  host_type *sh = (host_type *) ptrFromHtArg(arg1);
   in_addr_t mask = (in_addr_t) arg2;
   in_addr_t dstip = (in_addr_t) arg3;
-  pkex_type *pkex = (pkex_type *)(void *) arg4;
+  pkex_type *pkex = (pkex_type *) ptrFromHtArg(arg4);
 
   if ((dh != sh) && ((dh->hip.s_addr & mask) == dstip))
     pcktCreate(pkex, sh, dh, false);
@@ -6899,8 +6906,8 @@ void GLFWCALL pktProcess(void *arg)
         else if (setts.bct && (mask = isBroadcast(pkif->dstip)))
         {
           dstip = pkif->dstip.s_addr & mask;
-	  hstsByIp.forEach(2, &pktProcessCb, (long)(void *) sh, (long) mask,
-			   (long) dstip, (long)(void *) pkex);
+	  hstsByIp.forEach(2, &pktProcessCb, htArgFromPtr(sh), (HtArgType) mask,
+			   (HtArgType) dstip, htArgFromPtr(pkex));
         }
         if (pksc == pkfl)
         {
