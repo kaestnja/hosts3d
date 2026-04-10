@@ -204,7 +204,7 @@ struct sett_type
 struct netp_type
 {
   int px, py, pz;
-  char clr, nt[19];  //colour, CIDR net
+  char clr, hld, nt[19];  //colour, hold/fixed flag, CIDR net
 };
 
 //draw cross object

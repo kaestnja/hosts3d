@@ -39,6 +39,81 @@ const char HSDDATA[] = ".hosts3d/";  //hosts3d data directory (linux)
 char fullpath[256];
 MyLL ntpsLL;  //dynamic data struct for net positions file entries
 
+static char netpsColorToken(const char *tok)
+{
+  if (!tok || !*tok) return '\0';
+  if (!strcmp(tok, "default")) return 'd';
+  if (!strcmp(tok, "orange")) return 'o';
+  if (!strcmp(tok, "yellow")) return 'y';
+  if (!strcmp(tok, "fluro")) return 'f';
+  if (!strcmp(tok, "green")) return 'g';
+  if (!strcmp(tok, "mint")) return 'm';
+  if (!strcmp(tok, "aqua")) return 'a';
+  if (!strcmp(tok, "blue")) return 'b';
+  if (!strcmp(tok, "purple")) return 'p';
+  if (!strcmp(tok, "violet")) return 'v';
+  return '\0';
+}
+
+static bool netpsIsHoldToken(const char *tok)
+{
+  return (tok && !strcmp(tok, "hold"));
+}
+
+static bool netpsParseLine(const char *line, netp_type *out)
+{
+  char kw[8], net[19], tok1[16] = "", tok2[16] = "";
+  int got;
+  if (!line || !out) return false;
+  memset(out, 0, sizeof(*out));
+  got = sscanf(line, " %7s %18s %d %d %d %15s %15s", kw, net, &out->px, &out->py, &out->pz, tok1, tok2);
+  if ((got < 6) || strcmp(kw, "pos")) return false;
+  strcpy(out->nt, net);
+  if (netpsIsHoldToken(tok1)) out->hld = 1;
+  else if ((out->clr = netpsColorToken(tok1)) == '\0') return false;
+  if (got >= 7)
+  {
+    if (netpsIsHoldToken(tok2)) out->hld = 1;
+    else if (!out->clr && (out->clr = netpsColorToken(tok2))) {}
+    else return false;
+  }
+  return (out->clr || out->hld);
+}
+
+static bool netpExactIp(const netp_type *ne, in_addr_t *ip)
+{
+  char ntmp[19], *cd;
+  if (!ne) return false;
+  strcpy(ntmp, ne->nt);
+  cd = strchr(ntmp, '/');
+  if (!cd || strcmp(cd, "/32")) return false;
+  *cd = '\0';
+  if (!*ntmp) return false;
+  if (ip) *ip = inet_addr(ntmp);
+  return true;
+}
+
+static void netpApplyVisual(host_type *ht, const netp_type *ne)
+{
+  if (!ht || !ne) return;
+  switch (ne->clr)
+  {
+    case 'd': ht->clr = 0; break;
+    case 'o': ht->clr = 1; break;
+    case 'y': ht->clr = 2; break;
+    case 'f': ht->clr = 3; break;
+    case 'g': ht->clr = 4; break;
+    case 'm': ht->clr = 5; break;
+    case 'a': ht->clr = 6; break;
+    case 'b': ht->clr = 7; break;
+    case 'p': ht->clr = 8; break;
+    case 'v': ht->clr = 9; break;
+  }
+  ht->px = ne->px * SPC;
+  ht->py = ne->py * SPC;
+  ht->pz = ne->pz * SPC;
+}
+
 //cross object vertexs, squares
 cobj_type cobj =
 {
@@ -479,19 +554,14 @@ void netpsLoad()
   {
     netpsDestroy();
     netp_type ne;
-    char ch;
-    do {
-      if ((ch = getc(npos)) == 'p')
-      {
-        if (fscanf(npos, "%*s%18s%d%d%d%*c%c", (char *)&ne.nt, &ne.px, &ne.py, &ne.pz, &ne.clr) == 5) ntpsLL.Write(new netp_type(ne));  //pos 123.123.123.123/32 10 0 -10 green
-      }
-      else while ((ch != '\n') && (ch != EOF)) ch = getc(npos);
-    } while (ch != EOF);
+    char line[256];
+    while (fgets(line, sizeof(line), npos))
+      if (netpsParseLine(line, &ne)) ntpsLL.Write(new netp_type(ne));
     fclose(npos);
   }
   else if ((npos = fopen(hsddata("netpos.txt"), "w")))
   {
-    fputs("#pos net x-position y-position z-position colour\n", npos);
+    fputs("#pos net x-position y-position z-position colour [hold]\n", npos);
     fclose(npos);
   }
 }
@@ -534,32 +604,26 @@ in_addr_t isBroadcast(in_addr ip)
 //check if a host is to be positioned into a net
 int hostNet(host_type *ht)
 {
-  netp_type *ne;
+  netp_type *ne, *match = 0;
   ntpsLL.Start(1);
   while ((ne = (netp_type *)ntpsLL.Read(1)))
   {
     if (inNet(ne->nt, ht->htip))
     {
-      switch (ne->clr)
+      in_addr_t nip = 0;
+      if (netpExactIp(ne, &nip) && (nip == ht->hip.s_addr))
       {
-        case 'd': ht->clr = 0; break;  //grey (default) host object
-        case 'o': ht->clr = 1; break;  //orange host object
-        case 'y': ht->clr = 2; break;  //yellow host object
-        case 'f': ht->clr = 3; break;  //fluro host object
-        case 'g': ht->clr = 4; break;  //green host object
-        case 'm': ht->clr = 5; break;  //mint host object
-        case 'a': ht->clr = 6; break;  //aqua host object
-        case 'b': ht->clr = 7; break;  //blue host object
-        case 'p': ht->clr = 8; break;  //purple host object
-        case 'v': ht->clr = 9; break;  //violet host object
+        netpApplyVisual(ht, ne);
+        return (ne->hld ? 2 : 1);
       }
-      ht->px = ne->px * SPC;
-      ht->py = ne->py * SPC;
-      ht->pz = ne->pz * SPC;
-      if (ne->clr == 'h') return 2;  //hold host object
-      return 1;
+      if (!match) match = ne;
     }
     ntpsLL.Next(1);
+  }
+  if (match)
+  {
+    netpApplyVisual(ht, match);
+    return (match->hld ? 2 : 1);
   }
   return 0;
 }

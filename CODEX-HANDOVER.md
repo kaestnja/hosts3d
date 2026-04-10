@@ -79,6 +79,9 @@ These are important because future changes should not silently undo them.
 - old `settings-hsd` binary settings are migrated/imported
 - keybindings are stored in `settings.ini`
 - `controls.txt` is generated from the current keybindings
+- newly written `.hnl` layouts now use a versioned `HN2` format with explicit record sizes instead of raw `host_type` dumps
+- older `HN1`/`HNL` layouts are still read when they pass size checks
+- obviously incompatible layout files should now be skipped cleanly with a visible warning instead of wedging startup
 
 ### Dynamic vs static hosts
 
@@ -88,6 +91,8 @@ These are important because future changes should not silently undo them.
 - hosts become effectively persistent when manually created, edited, named, loaded from layouts, or otherwise promoted to static
 - exact `/32` entries in `hsd-data/netpos.txt` are also materialized as known static hosts at startup
 - those known `/32` hosts should stay visible and labelled even when `On-Active Action` is `Show Host`
+- exact `/32` `netpos.txt` rules now have priority over broader matching nets
+- `netpos.txt` now accepts `colour [hold]`, so fixed hosts can be both coloured and non-offset
 - saved layouts keep static and locked hosts only
 
 ### Local `hsen`
@@ -191,6 +196,11 @@ The following are machine-local/runtime artifacts and should stay out of version
 - `hsd-data/traffic*.hpt`
 - temp files in `hsd-data`
 - local `hsen` state files
+
+Keep in mind:
+
+- after upgrading an older installation, the first startup may skip an incompatible old `0network.hnl`
+- the next normal exit should then rewrite `0network.hnl` in the newer `HN2` format
 
 Do not accidentally reintroduce tracked runtime artifacts.
 

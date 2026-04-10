@@ -16,6 +16,7 @@
 
 #include <ctype.h>  //tolower()
 #include <algorithm>
+#include <stdint.h>
 #include <map>
 #include <math.h>  //cos(), sin(), sqrt()
 #include <signal.h>  //signal()
@@ -93,6 +94,9 @@ static const int OSD_BOX_W = (OSD_BOX_PAD_X * 2) + ((OSD_LABEL_COL_CHARS + OSD_V
 static const int OSD_VALUE_X = OSD_BOX_PAD_X + (OSD_LABEL_COL_CHARS * OSD_CHAR_W);
 static const unsigned int OSD_MAX_ROWS = 24;
 static const unsigned int PACKET_TRIPLE_SIZE_THRESHOLD = 512;
+static const uint32_t LAYOUT_FILE_VERSION = 2;
+static const uint32_t LAYOUT_MAX_HOST_RECORD_SIZE = 4096;
+static const uint32_t LAYOUT_MAX_LINK_RECORD_SIZE = 64;
 static const double PACKET_CENTER_Y = 5.0;
 static const double PACKET_LABEL_Y = 7.0;
 static const double RAD2DEG = 57.29577951308232;
@@ -126,8 +130,11 @@ bool dynamicHostsEnabled = true;
 unsigned int dynamicHostTtlSeconds = DEFAULT_DYNAMIC_HOST_TTL_SECONDS;
 unsigned int dynamicHostCleanupIntervalSeconds = DEFAULT_DYNAMIC_HOST_CLEANUP_INTERVAL_SECONDS;
 time_t dynamicHostLastCleanup = 0;
+bool guiReadyForDialogs = false;
 bool helpOverlayVisible = false;
 unsigned int helpOverlayLineCount = 0, helpOverlayScroll = 0;
+char layoutCompatWarningFile[128] = "";
+bool layoutCompatWarningPending = false;
 
 struct help_overlay_line_type
 {
@@ -215,6 +222,32 @@ struct host_runtime_meta_type
   unsigned short port;
   char dnm[256];
   bool knownNetpos;
+};
+
+enum host_layout_flag_type
+{
+  hlfPip = 0x01,
+  hlfAnm = 0x02,
+  hlfShp = 0x04,
+  hlfLck = 0x08,
+  hlfAlk = 0x10
+};
+
+struct host_layout_v2_type
+{
+  uint8_t lsn, clr, flags, reserved;
+  int32_t px, py, pz;
+  uint64_t dld, uld;
+  int64_t lpk;
+  uint32_t hip;
+  char htmc[18], htnm[256], htrm[256];
+  int32_t svc[SVCS];
+};
+
+struct link_layout_v2_type
+{
+  uint32_t shtip, dhtip;
+  uint8_t spr, reserved1, reserved2, reserved3;
 };
 
 struct osd_pkt_hit_type
@@ -463,6 +496,11 @@ host_type *hostIP(in_addr ip, bool crt);
 host_type *hostCreate(in_addr ip, bool dynamic);
 void hostDetails();
 void mnuProcess(int m);
+static void layoutWarnIncompatible(const char *fl);
+static void layoutWarnShowPending(void);
+static long layoutRemainingBytes(FILE *net);
+static bool layoutLoadHostV2(FILE *net, uint32_t hostRecordSize, host_type **out);
+static bool layoutLoadLinkV2(FILE *net, uint32_t linkRecordSize, link_layout_v2_type *out);
 static void hostDeleteManaged(host_type *ht);
 void pcktsDestroy(bool gh = false);
 void offsetReset();
@@ -474,6 +512,7 @@ static bool localHsenSaveUiState();
 static bool localHsenStartSelected(bool showmsg = false);
 static bool localHsenDiscoverInterfaces(bool keepSelections = true);
 static void localHsenAutostartMaybe();
+void displayGL();
 
 static const int MENU_LEVEL_INDENT = 18;
 static int menuBuildDepth = 0;
@@ -856,6 +895,102 @@ host_type *hostCreate(in_addr ip, bool dynamic = true)
 
   refresh = true;
   return ht;
+}
+
+static void layoutWarnIncompatible(const char *fl)
+{
+  const char *name = (fl && *fl ? fl : "(unknown)");
+  const char *base;
+  fprintf(stderr, "hosts3d warning: skipped incompatible layout file \"%s\"\n", name);
+  base = strrchr(name, '\\');
+  if (!base) base = strrchr(name, '/');
+  if (base) name = base + 1;
+  if (!layoutCompatWarningPending)
+  {
+    setStringValue(layoutCompatWarningFile, sizeof(layoutCompatWarningFile), name);
+    layoutCompatWarningPending = true;
+  }
+  if (guiReadyForDialogs) layoutWarnShowPending();
+}
+
+static long layoutRemainingBytes(FILE *net)
+{
+  long cur, end;
+  if (!net) return -1;
+  cur = ftell(net);
+  if (cur < 0) return -1;
+  if (fseek(net, 0, SEEK_END)) return -1;
+  end = ftell(net);
+  if (end < 0)
+  {
+    fseek(net, cur, SEEK_SET);
+    return -1;
+  }
+  fseek(net, cur, SEEK_SET);
+  return (end - cur);
+}
+
+static bool layoutLoadHostV2(FILE *net, uint32_t hostRecordSize, host_type **out)
+{
+  std::vector<unsigned char> raw;
+  host_layout_v2_type disk;
+  host_type host = {0};
+  char *ipstr;
+
+  if (!net || !out || !hostRecordSize || (hostRecordSize > LAYOUT_MAX_HOST_RECORD_SIZE)) return false;
+  raw.resize(hostRecordSize, 0);
+  if (fread(&raw[0], hostRecordSize, 1, net) != 1) return false;
+  memset(&disk, 0, sizeof(disk));
+  memcpy(&disk, &raw[0], (hostRecordSize < sizeof(disk) ? hostRecordSize : sizeof(disk)));
+
+  host.lsn = disk.lsn;
+  host.clr = disk.clr;
+  host.pip = ((disk.flags & hlfPip) ? 1 : 0);
+  host.anm = ((disk.flags & hlfAnm) ? 1 : 0);
+  host.shp = ((disk.flags & hlfShp) ? 1 : 0);
+  host.lck = ((disk.flags & hlfLck) ? 1 : 0);
+  host.alk = ((disk.flags & hlfAlk) ? 1 : 0);
+  host.px = disk.px;
+  host.py = disk.py;
+  host.pz = disk.pz;
+  host.dld = disk.dld;
+  host.uld = disk.uld;
+  host.lpk = (time_t)disk.lpk;
+  host.col = 0;
+  host.hip.s_addr = (in_addr_t)disk.hip;
+  ipstr = inet_ntoa(host.hip);
+  if (ipstr) setStringValue(host.htip, sizeof(host.htip), ipstr);
+  setStringValue(host.htmc, sizeof(host.htmc), disk.htmc);
+  setStringValue(host.htnm, sizeof(host.htnm), disk.htnm);
+  setStringValue(host.htrm, sizeof(host.htrm), disk.htrm);
+  for (unsigned char cnt = 0; cnt < SVCS; cnt++) host.svc[cnt] = -1;
+  for (unsigned char cnt = 0; cnt < SVCS; cnt++) host.svc[cnt] = disk.svc[cnt];
+
+  *out = new host_type(host);
+  return true;
+}
+
+static void layoutWarnShowPending(void)
+{
+  if (!layoutCompatWarningPending) return;
+  GLWin.CreateWin(-1, -1, 364, 112, "LAYOUT WARNING");
+  GLWin.AddLabel(10, 10, "Skipped incompatible layout file:");
+  GLWin.AddLabel(10, 28, layoutCompatWarningFile);
+  GLWin.AddLabel(10, 50, "Hosts3D will continue and save a new");
+  GLWin.AddLabel(10, 66, "compatible layout on exit.");
+  displayGL();
+  layoutCompatWarningPending = false;
+}
+
+static bool layoutLoadLinkV2(FILE *net, uint32_t linkRecordSize, link_layout_v2_type *out)
+{
+  std::vector<unsigned char> raw;
+  if (!net || !out || !linkRecordSize || (linkRecordSize > LAYOUT_MAX_LINK_RECORD_SIZE)) return false;
+  raw.resize(linkRecordSize, 0);
+  if (fread(&raw[0], linkRecordSize, 1, net) != 1) return false;
+  memset(out, 0, sizeof(link_layout_v2_type));
+  memcpy(out, &raw[0], (linkRecordSize < sizeof(link_layout_v2_type) ? linkRecordSize : sizeof(link_layout_v2_type)));
+  return true;
 }
 
 //create/delete link
@@ -2601,48 +2736,119 @@ void netLoad(const char *fl)
   FILE *net;
   if ((net = fopen(fl, "rb")))
   {
-    char hnl[4];
-    if (fgets(hnl, 4, net))
+    char hnl[4] = {0, 0, 0, 0};
+    if (fread(hnl, 1, 3, net) == 3)
     {
       host_type host, *ht, *dht;
       size_t htsz = sizeof(host);
-      if (!strcmp(hnl, "HN1"))
+      if (!strcmp(hnl, "HN2"))
       {
-        allDestroy();
-        unsigned char spr;
-        unsigned int hsts;
-        in_addr hip;
-        size_t ipsz = sizeof(hip);
-        if (fread(&hsts, sizeof(hsts), 1, net) == 1)
+        uint32_t version = 0, hostRecordSize = 0, linkRecordSize = 0, hsts = 0, lnks = 0;
+        long remaining;
+        if ((fread(&version, sizeof(version), 1, net) != 1) || (fread(&hostRecordSize, sizeof(hostRecordSize), 1, net) != 1)
+          || (fread(&linkRecordSize, sizeof(linkRecordSize), 1, net) != 1) || (fread(&hsts, sizeof(hsts), 1, net) != 1)
+          || (fread(&lnks, sizeof(lnks), 1, net) != 1))
         {
-          for (; hsts; hsts--)
+          layoutWarnIncompatible(fl);
+          fclose(net);
+          return;
+        }
+        if ((version != LAYOUT_FILE_VERSION) || !hostRecordSize || !linkRecordSize
+          || (hostRecordSize > LAYOUT_MAX_HOST_RECORD_SIZE) || (linkRecordSize > LAYOUT_MAX_LINK_RECORD_SIZE))
+        {
+          layoutWarnIncompatible(fl);
+          fclose(net);
+          return;
+        }
+        remaining = layoutRemainingBytes(net);
+        if ((remaining < 0) || ((unsigned long)remaining < ((unsigned long)hsts * hostRecordSize) + ((unsigned long)lnks * linkRecordSize)))
+        {
+          layoutWarnIncompatible(fl);
+          fclose(net);
+          return;
+        }
+        allDestroy();
+        for (; hsts; hsts--)
+        {
+          if (!layoutLoadHostV2(net, hostRecordSize, &ht))
           {
-            if (fread(&host, htsz, 1, net) != 1)
-            {
-              goHosts = 0;
-              fclose(net);
-              return;
-            }
-            host.col = 0;
-	    ht = new host_type(host);
-	    newHostByIp(ht);
-            hostSetDynamic(ht, false);
-	    hostByPositionPostMove(ht);
-            moveCollision(ht);
+            goHosts = 0;
+            fclose(net);
+            return;
           }
-          while (fread(&hip, ipsz, 1, net) == 1)
+          newHostByIp(ht);
+          hostSetDynamic(ht, false);
+          hostByPositionPostMove(ht);
+          moveCollision(ht);
+        }
+        for (; lnks; lnks--)
+        {
+          link_layout_v2_type lk;
+          in_addr hip;
+          if (!layoutLoadLinkV2(net, linkRecordSize, &lk)) break;
+          hip.s_addr = (in_addr_t)lk.shtip;
+          ht = hostIP(hip, false);
+          hip.s_addr = (in_addr_t)lk.dhtip;
+          dht = hostIP(hip, false);
+          if (ht && dht) linkCreDel(ht, dht, lk.spr);
+        }
+        goHosts = 0;
+      }
+      else if (!strcmp(hnl, "HN1"))
+      {
+        long remaining;
+        unsigned int hsts = 0;
+        size_t ipsz = sizeof(in_addr);
+        unsigned char spr;
+        in_addr hip;
+        if (fread(&hsts, sizeof(hsts), 1, net) != 1)
+        {
+          layoutWarnIncompatible(fl);
+          fclose(net);
+          return;
+        }
+        remaining = layoutRemainingBytes(net);
+        if ((remaining < 0) || ((unsigned long)remaining < ((unsigned long)hsts * htsz)))
+        {
+          layoutWarnIncompatible(fl);
+          fclose(net);
+          return;
+        }
+        allDestroy();
+        for (; hsts; hsts--)
+        {
+          if (fread(&host, htsz, 1, net) != 1)
           {
-            ht = hostIP(hip, false);
-            if (fread(&hip, ipsz, 1, net) != 1) break;
-            dht = hostIP(hip, false);
-            if (fread(&spr, 1, 1, net) != 1) break;
-            if (ht && dht) linkCreDel(ht, dht, spr);
+            goHosts = 0;
+            fclose(net);
+            return;
           }
+          host.col = 0;
+	  ht = new host_type(host);
+	  newHostByIp(ht);
+          hostSetDynamic(ht, false);
+	  hostByPositionPostMove(ht);
+          moveCollision(ht);
+        }
+        while (fread(&hip, ipsz, 1, net) == 1)
+        {
+          ht = hostIP(hip, false);
+          if (fread(&hip, ipsz, 1, net) != 1) break;
+          dht = hostIP(hip, false);
+          if (fread(&spr, 1, 1, net) != 1) break;
+          if (ht && dht) linkCreDel(ht, dht, spr);
         }
         goHosts = 0;
       }
       else if (!strcmp(hnl, "HNL"))
       {
+        long remaining = layoutRemainingBytes(net);
+        if ((remaining < 0) || (remaining % (long)htsz))
+        {
+          layoutWarnIncompatible(fl);
+          fclose(net);
+          return;
+        }
         allDestroy();
         while (fread(&host, htsz, 1, net) == 1)
         {
@@ -2671,9 +2877,29 @@ bool netSaveCb(void *data, long arg1, long arg2, long arg3, long arg4)
 {
   FILE *fp = (FILE *)(void *) arg1;
   host_type *ht = (host_type *) data;
+  host_layout_v2_type disk;
   if (!hostShouldPersist(ht)) return false;
+  memset(&disk, 0, sizeof(disk));
+  disk.lsn = ht->lsn;
+  disk.clr = ht->clr;
+  if (ht->pip) disk.flags |= hlfPip;
+  if (ht->anm) disk.flags |= hlfAnm;
+  if (ht->shp) disk.flags |= hlfShp;
+  if (ht->lck) disk.flags |= hlfLck;
+  if (ht->alk) disk.flags |= hlfAlk;
+  disk.px = ht->px;
+  disk.py = ht->py;
+  disk.pz = ht->pz;
+  disk.dld = ht->dld;
+  disk.uld = ht->uld;
+  disk.lpk = (int64_t)ht->lpk;
+  disk.hip = (uint32_t)ht->hip.s_addr;
+  setStringValue(disk.htmc, sizeof(disk.htmc), ht->htmc);
+  setStringValue(disk.htnm, sizeof(disk.htnm), ht->htnm);
+  setStringValue(disk.htrm, sizeof(disk.htrm), ht->htrm);
+  for (unsigned char cnt = 0; cnt < SVCS; cnt++) disk.svc[cnt] = ht->svc[cnt];
 
-  if (fwrite(ht, sizeof(host_type), 1, fp) != 1) {
+  if (fwrite(&disk, sizeof(disk), 1, fp) != 1) {
     return true; // Will halt the iteration
   }
   return false;
@@ -2685,10 +2911,19 @@ void netSave(const char* fl)
   FILE *net;
   if ((net = fopen(fl, "wb")))
   {
-    unsigned int hsts = 0;
+    uint32_t hsts = 0, lnks = 0, version = LAYOUT_FILE_VERSION, hostRecordSize = sizeof(host_layout_v2_type), linkRecordSize = sizeof(link_layout_v2_type);
+    link_type *lk;
     hstsByIp.forEach(1, netSaveCountCb, (long)(void *) &hsts, 0, 0, 0);
-    fputs("HN1", net);
-    if (fwrite(&hsts, sizeof(hsts), 1, net) == 1)
+    lnksLL.Start(2);
+    while ((lk = (link_type *)lnksLL.Read(2)))
+    {
+      if (hostShouldPersist(lk->sht) && hostShouldPersist(lk->dht)) lnks++;
+      lnksLL.Next(2);
+    }
+    fputs("HN2", net);
+    if ((fwrite(&version, sizeof(version), 1, net) == 1) && (fwrite(&hostRecordSize, sizeof(hostRecordSize), 1, net) == 1)
+      && (fwrite(&linkRecordSize, sizeof(linkRecordSize), 1, net) == 1) && (fwrite(&hsts, sizeof(hsts), 1, net) == 1)
+      && (fwrite(&lnks, sizeof(lnks), 1, net) == 1))
     {
       if (hstsByIp.firstThat(1, &netSaveCb, (long) net, 0, 0, 0)) {
 	// fwrite() failed in netSaveCb
@@ -2699,17 +2934,18 @@ void netSave(const char* fl)
 
       link_type *lk;
       lnksLL.Start(1);
-      size_t ipsz = sizeof(in_addr);
       while ((lk = (link_type *)lnksLL.Read(1)))
       {
+        link_layout_v2_type disk = {0, 0, 0, 0, 0, 0};
         if (!hostShouldPersist(lk->sht) || !hostShouldPersist(lk->dht))
         {
           lnksLL.Next(1);
           continue;
         }
-        if (fwrite(&lk->sht->hip, ipsz, 1, net) != 1) break;
-        if (fwrite(&lk->dht->hip, ipsz, 1, net) != 1) break;
-        if (fwrite(&lk->spr, 1, 1, net) != 1) break;  //spare (future use)
+        disk.shtip = (uint32_t)lk->sht->hip.s_addr;
+        disk.dhtip = (uint32_t)lk->dht->hip.s_addr;
+        disk.spr = lk->spr;
+        if (fwrite(&disk, sizeof(disk), 1, net) != 1) break;
         lnksLL.Next(1);
       }
     }
@@ -5006,8 +5242,17 @@ static bool parsePosValue(const char *value, pos_type *out)
 
 static void setStringValue(char *dst, size_t dstsz, const char *src)
 {
-  strncpy(dst, src, dstsz - 1);
-  dst[dstsz - 1] = '\0';
+  size_t len;
+  if (!dst || !dstsz) return;
+  if (!src)
+  {
+    dst[0] = '\0';
+    return;
+  }
+  len = strlen(src);
+  if (len >= dstsz) len = dstsz - 1;
+  if (len) memcpy(dst, src, len);
+  dst[len] = '\0';
 }
 
 static const char *sipnToString(sipn_type mode)
@@ -6762,6 +7007,8 @@ int main(int argc, char *argv[])
   glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
   initObjsGL();
   GLWin.InitFont();
+  guiReadyForDialogs = true;
+  layoutWarnShowPending();
   GLFWthread gthrd = glfwCreateThread(pktProcess, 0);  //packet gatherer
   localHsenAutostartMaybe();
   signal(SIGINT, hsdStop);  //capture ctrl+c

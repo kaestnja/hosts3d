@@ -27,6 +27,8 @@ This package contains the Windows x86 runtime files for `Hosts3D` and `hsen`.
 - `settings.ini` is plain text and can be edited with Hosts3D closed.
 - `controls.txt` is generated from the active keybindings.
 - `0network.hnl` is the auto-saved layout from the last session.
+- Newly written `.hnl` files now use the versioned `HN2` layout format.
+- If an older incompatible `0network.hnl` is found after replacing the EXE, Hosts3D now skips it with a warning and writes a new compatible layout on exit.
 - `traffic.hpt` is Hosts3D's own record/replay format, not a Wireshark capture file.
 
 ## License
