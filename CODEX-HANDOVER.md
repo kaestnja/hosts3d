@@ -201,6 +201,8 @@ Keep in mind:
 
 - after upgrading an older installation, the first startup may skip an incompatible old `0network.hnl`
 - the next normal exit should then rewrite `0network.hnl` in the newer `HN2` format
+- `netposExactHostsSync()` must not wait on `goHosts` before the packet thread exists; this caused a real startup hang when `0network.hnl` had already set `goHosts = 0`
+- the current guard for that is `packetThreadStarted`, set only after `glfwCreateThread(pktProcess, ...)` succeeds
 
 Do not accidentally reintroduce tracked runtime artifacts.
 
