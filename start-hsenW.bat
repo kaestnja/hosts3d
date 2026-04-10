@@ -1,4 +1,6 @@
 @echo off
+rem Start the already-built Windows hsen runtime from Release\windows\<arch>.
+rem This helper can also generate an interface list and a local config template.
 setlocal EnableExtensions
 cd /d "%~dp0"
 

@@ -38,6 +38,14 @@ Copy to:
 
 For your current MinGW32 build, use `x86`.
 
+Current repository state:
+- `third_party/glfw2/lib/windows/x86/` is populated
+- `third_party/glfw2/bin/windows/x86/` is populated
+- `third_party/glfw2/lib/windows/x64/` is populated
+- `third_party/glfw2/bin/windows/x64/` is populated
+
+Windows x64 builds still additionally require an installed x64 MinGW toolchain.
+
 ### WinPcap/Npcap SDK files (for `hsen.exe`)
 
 Search for:
@@ -61,6 +69,14 @@ Windows scripts place binaries in:
 `compile-hsen.bat` also copies `wpcap.dll` and `Packet.dll` from `third_party` into the output dir when found.
 
 Both Windows build scripts also copy `libwinpthread-1.dll` from the active MinGW `g++` toolchain directory into the output dir when found.
+
+`compile-hosts3d.bat` and `compile-hsen.bat` now accept an explicit arch:
+- `compile-hosts3d.bat Release x86`
+- `compile-hosts3d.bat Release x64`
+- `compile-hsen.bat Release x86`
+- `compile-hsen.bat Release x64`
+
+If the requested toolchain or third-party files are missing, the scripts now stop with a targeted error instead of silently selecting the wrong compiler.
 
 For `hsen.exe`, if `third_party/wpcap/bin/windows/<arch>/` does not contain these DLLs, `compile-hsen.bat` falls back to installed Npcap system paths:
 - x86: `%SystemRoot%\SysWOW64\Npcap` and `%SystemRoot%\SysWOW64`

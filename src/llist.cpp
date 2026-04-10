@@ -19,8 +19,6 @@
 #endif
 #include "llist.h"
 
-#define UINT32_MAX  (4294967295U)  //max unsigned int
-
 MyLL::Item::Item(void *dat, Item *nxt, Item *prv)
 {
   Data = dat;
@@ -182,8 +180,8 @@ bool MyHT::deleteEntryAtBucket(unsigned char pc, HtKeyType key, void *data) {
   }
 }
 
-void MyHT::forEach(unsigned char pc, HtForEachCallback cb, long arg1, long arg2,
-		   long arg3, long arg4) {
+void MyHT::forEach(unsigned char pc, HtForEachCallback cb, HtArgType arg1, HtArgType arg2,
+		   HtArgType arg3, HtArgType arg4) {
   for (unsigned i = 0; i < HT_BUCKETS; i++) {
     MyLL *bucket = buckets[i];
     if (!bucket) {
@@ -212,8 +210,8 @@ void MyHT::forEach(unsigned char pc, HtForEachCallback cb, long arg1, long arg2,
 }
 
 void *MyHT::firstThat(HtKeyType key, unsigned char pc,
-		      HtFirstThatCallback cb, long arg1,
-		      long arg2, long arg3, long arg4) {
+		      HtFirstThatCallback cb, HtArgType arg1,
+		      HtArgType arg2, HtArgType arg3, HtArgType arg4) {
   void *data;
   MyLL *bucket = buckets[key];
   if (!bucket) {
@@ -234,8 +232,8 @@ void *MyHT::firstThat(HtKeyType key, unsigned char pc,
 }
 
 // Version that walks over all buckets, i.e. doesn't need a key
-void *MyHT::firstThat(unsigned char pc, HtFirstThatCallback cb, long arg1,
-		      long arg2, long arg3, long arg4) {
+void *MyHT::firstThat(unsigned char pc, HtFirstThatCallback cb, HtArgType arg1,
+		      HtArgType arg2, HtArgType arg3, HtArgType arg4) {
   for (unsigned key = 0; key < HT_BUCKETS; key++) {
     void *data = firstThat((HtKeyType) key, pc, cb, arg1, arg2, arg3, arg4);
     if (data) {

@@ -17,7 +17,7 @@ Use this file to recover:
 - Current working version: `1.17`
 - Version source of truth: `src/version.h`
 - Current Windows target in daily use: `Release/windows/x86`
-- Build toolchain in use on Windows: `MSYS2/MinGW32`
+- Build toolchains now available on Windows: `MSYS2/MinGW32` and `MSYS2/MinGW64`
 - The project is already in productive use; changes should stay pragmatic and low-risk
 
 ## Existing Reference Files
@@ -48,7 +48,12 @@ There was no existing Codex-specific handover file before this one.
 - `compile-hosts3d.bat`
 - `compile-hsen.bat`
 
-The build scripts currently assume:
+The build scripts now accept:
+
+- `compile-hosts3d.bat [Release|Debug] [x86|x64|arm64] [--no-pause]`
+- `compile-hsen.bat [Release|Debug] [x86|x64|arm64] [--no-pause]`
+
+The current working machine/repo state is:
 
 - `C:\msys64\mingw32\bin\g++.exe`
 - `third_party\glfw2\include`
@@ -56,10 +61,30 @@ The build scripts currently assume:
 - `third_party\wpcap\include`
 - `third_party\wpcap\lib\windows\x86`
 
+Important x64 note:
+
+- the current machine now has both the MinGW32 and MinGW64 compilers installed
+- the verified x64 compiler path is `C:\msys64\mingw64\bin\g++.exe`
+- `third_party\glfw2\lib\windows\x64` and `third_party\glfw2\bin\windows\x64` are now populated from the official `glfw-2.7.9.bin.WIN64.zip` SourceForge package
+- `third_party\wpcap\lib\windows\x64` is already populated
+- `Release/windows/x64/Hosts3D.exe` and `Release/windows/x64/hsen.exe` now build successfully
+- the required code fix was changing the legacy hashtable callback arg type from `long` to pointer-safe `HtArgType` (`intptr_t`) for Windows x64
+- `Release/windows/x64/Hosts3D.exe` has been smoke-tested: it starts and creates `hsd-data` in the x64 runtime dir
+- `Release/windows/x64/hsen.exe -l` works and lists interfaces
+- `package-release-windows.bat Release x64` now produces `Release/dist/hosts3d-1.17-windows-x64.zip`
+
 ### Main runtime output
 
 - `Release/windows/x86/Hosts3D.exe`
 - `Release/windows/x86/hsen.exe`
+- `Release/windows/x86/README-runtime-windows.md`
+
+The Windows build/package flow now keeps the runtime README visible automatically:
+
+- `compile-hosts3d.bat` and `compile-hsen.bat` copy `README-runtime-windows.md` into the runtime output directory
+- `package-release-windows.bat` includes both `README-runtime-windows.md` and `README.md` in the staged Windows release ZIP
+- `package-release-windows.bat` now defaults to a public ZIP without `wpcap.dll` and `Packet.dll`
+- use `with-npcap` only for private/local test packages when you explicitly want those DLLs carried in the ZIP
 
 ### VS Code support
 

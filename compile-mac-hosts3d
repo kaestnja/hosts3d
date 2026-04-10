@@ -1,4 +1,6 @@
 #!/bin/sh
+# Build the macOS Hosts3D binary into Release/macos/<arch> or Debug/macos/<arch>.
+# This is a quick local helper script for macOS development builds.
 set -eu
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)

@@ -1,4 +1,6 @@
 @echo off
+rem Start the already-built Windows Hosts3D runtime from Release\windows\<arch>.
+rem This helper is for local testing and quick restarts, not for packaging.
 setlocal EnableExtensions
 cd /d "%~dp0"
 

@@ -33,8 +33,8 @@ If your main goal is to get the project running again, use this order:
 Recommended paths:
 - Windows 11:
   - install the MinGW/MSYS2 toolchain once
-  - run `.\compile-hosts3d.bat`
-  - run `.\compile-hsen.bat`
+  - run `.\compile-hosts3d.bat Release x86`
+  - run `.\compile-hsen.bat Release x86`
   - start `.\start-Hosts3DW.bat`
   - in Hosts3D, right-click in the 3D view, then choose `Local hsen`
 - Linux/macOS:
@@ -112,9 +112,23 @@ Build:
 ```powershell
 $repo = Join-Path $env:USERPROFILE "source\\repos\\github.com\\<your-github-user>\\hosts3d"
 Set-Location $repo
-.\compile-hosts3d.bat
-.\compile-hsen.bat
+.\compile-hosts3d.bat Release x86
+.\compile-hsen.bat Release x86
 ```
+
+For a 64-bit build, request `x64` explicitly:
+```powershell
+.\compile-hosts3d.bat Release x64
+.\compile-hsen.bat Release x64
+```
+
+Windows x64 currently also requires:
+- an installed x64 MinGW toolchain (`mingw64` or `ucrt64`)
+
+The repository now already contains the required GLFW 2.x x64 import/static libraries and `glfw.dll` under `third_party/glfw2/.../x64`.
+
+Verified current compiler path:
+- `C:\msys64\mingw64\bin\g++.exe`
 
 ## Build Output Layout
 Build scripts place binaries into config/os/arch folders:
@@ -124,11 +138,27 @@ Build scripts place binaries into config/os/arch folders:
 | Hosts3D | `Release/windows/x86/Hosts3D.exe` | `Debug/windows/x86/Hosts3D.exe` |
 | hsen | `Release/windows/x86/hsen.exe` | `Debug/windows/x86/hsen.exe` |
 
+With explicit arch selection, the same scripts also produce:
+- `Release/windows/x64/Hosts3D.exe`
+- `Release/windows/x64/hsen.exe`
+
 Notes:
 - Scripts overwrite known targets but do not wipe the whole `Release`/`Debug` tree.
+- The Windows scripts now accept an explicit arch such as `x86` or `x64`.
 - Local dependency layout for build scripts: see `third_party/README.md`.
 - Archived old binaries for comparison: `Original/windows/x86/`.
 - Portable Wireshark helper location: `Tools/Wireshark/`.
+
+### Windows Packaging
+Create a public release ZIP without bundled Npcap DLLs:
+```powershell
+.\package-release-windows.bat Release x64
+```
+
+Create a private/local test ZIP that also carries `wpcap.dll` and `Packet.dll`:
+```powershell
+.\package-release-windows.bat Release x64 with-npcap
+```
 
 ## Manual Start Helpers (Windows, Optional)
 ```powershell
@@ -162,6 +192,7 @@ set "HSEN_IFACE=\Device\NPF_{E4ED794E-A66F-451C-851E-91226CD96BA4}"
 ### `hsen.exe` packet-capture DLLs
 - `wpcap.dll` and `Packet.dll` are copied from local `third_party` first.
 - If missing there, scripts can copy from installed Npcap system paths.
+- Public release ZIPs can be packaged without these DLLs; use a private/local `with-npcap` package only when you explicitly want to carry them for testing.
 
 ### Firewall
 `hsen` communicates with `Hosts3D` over UDP port `10111`.

@@ -24,6 +24,7 @@
 - Most mode/toggle rows in the top-right OSD can now be clicked directly to cycle them, in addition to the existing keyboard shortcuts and menu entries.
 - Newly written `.hnl` layout files now use a versioned `HN2` format; older incompatible `0network.hnl` files are skipped cleanly with a warning instead of blocking startup, and a new compatible layout is written on exit.
 - `netpos.txt` exact `/32` rules now override broader matching nets, and `hold` can now be combined with a colour token such as `green hold`.
+- Windows packaging now supports a public ZIP without bundled Npcap DLLs, plus an optional `with-npcap` package for local/private testing.
 
 ## Notes
 - Packet colours still indicate protocol family.
