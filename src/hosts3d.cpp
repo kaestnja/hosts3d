@@ -69,8 +69,10 @@ static const int OSD_MIN_W = 420;
 static const int OSD_MIN_H = 380;
 static const int OSD_LINE_H = 13;
 static const int OSD_ROW_TEXT_Y = 0;
-static const int OSD_ROW_HIT_TOP_Y = 2;
-static const int OSD_ROW_HIT_BOTTOM_Y = -11;
+// Keep each settings row clickable across its own line band instead of
+// skewing most of the hit area into the row underneath.
+static const int OSD_ROW_HIT_TOP_Y = OSD_LINE_H / 2;
+static const int OSD_ROW_HIT_BOTTOM_Y = -(OSD_LINE_H / 2);
 static const int OSD_PKT_GAP_H = 18;
 static const int OSD_PKT_ICON_SCALE = 6;
 static const int OSD_PKT_ICON_COL_W = 34;
@@ -118,7 +120,10 @@ unsigned short frame = 0;
 unsigned long long fps = 0, rpoff;  //packet traffic replay time offset
 char goHosts = 2, htdtls[960];
 unsigned int osdTextLineCount = 0;
-view_type vwdef[2] = {{0.0, 0.0, {0.0, 75.0, -360.0}, {0.0, 75.0, MOV - 360.0}}, {90.0, 0.0, {-360.0, 75.0, 0.0}, {MOV - 360.0, 75.0, 0.0}}};  //default views
+view_type vwdef[2] = {
+  {0.0, 0.0, {0.0, 75.0, -360.0}, {0.0, 75.0, MOV - 360.0}},
+  {25.4, -26.4, {-335.524766, 274.083214, -666.900992}, {-334.237961, 272.749309, -664.473608}}
+};  //default views
 sett_type setts = {false, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 5000, "", "<sudo command> hsen", "1", "eth0", "", "<sudo command> killall hsen"
   , {"", "", "", ""}, ins, off, alt, {vwdef[0], vwdef[0], vwdef[0], vwdef[0], vwdef[0]}};  //settings
 host_type *seltd = 0, *lnkht = 0;  //selected host, link line host
@@ -4760,9 +4765,19 @@ void mnuProcess(int m)
         addMenuItem("Do Nothing", 6, 0, 58, 'D', kaCount, msChoice, (setts.sona == don));
         break;
       case 107:
-        addMenuItem("VIEW", 3, 2, 100, GLFW_KEY_BACKSPACE);
-        addMenuItem("Recall", 3, 1, 120, 'R');
-        addMenuItem("Save", 3, 1, 121, 'S');
+        addMenuItem("VIEW", 13, 2, 100, GLFW_KEY_BACKSPACE);
+        addMenuItem("RECALL", 13, 0, 0);
+        addMenuItem("Home", 13, 0, 70, 0, kaViewHome);
+        addMenuItem("Alternate Home", 13, 0, 79, 0, kaViewHomeAlt);
+        addMenuItem("Pos 1", 13, 0, 71, 0, kaViewPos1);
+        addMenuItem("Pos 2", 13, 0, 72, 0, kaViewPos2);
+        addMenuItem("Pos 3", 13, 0, 73, 0, kaViewPos3);
+        addMenuItem("Pos 4", 13, 0, 74, 0, kaViewPos4);
+        addMenuItem("SAVE", 13, 0, 0);
+        addMenuItem("Pos 1", 13, 0, 75, 0, kaViewSave1);
+        addMenuItem("Pos 2", 13, 0, 76, 0, kaViewSave2);
+        addMenuItem("Pos 3", 13, 0, 77, 0, kaViewSave3);
+        addMenuItem("Pos 4", 13, 0, 78, 0, kaViewSave4);
         break;
       case 108:
         addMenuItem("LAYOUT", 5, 2, 100, GLFW_KEY_BACKSPACE);
@@ -6434,6 +6449,7 @@ static bool settsLoadLegacy(const char *path)
 static bool settsSaveIni(const char *path)
 {
   FILE *sts;
+  bool anyLocalHsenExample = false;
   if (!(sts = fopen(path, "w"))) return false;
   fputs("# Hosts3D settings\n", sts);
   fputs("# Generated automatically. Edit with Hosts3D closed.\n\n", sts);
@@ -6457,6 +6473,10 @@ static bool settsSaveIni(const char *path)
   fprintf(sts, "port_filter=%u\n\n", setts.prt);
 
   fputs("[hsen]\n", sts);
+#ifdef __MINGW32__
+  fputs("# Linux/macOS launcher settings. Windows local hsen starts hsen.exe directly.\n", sts);
+  fputs("# Keep these for Linux/macOS or sudo-based setups such as Debian.\n", sts);
+#endif
   fprintf(sts, "start_hsen_promiscuous=%d\n", (setts.hspm ? 1 : 0));
   fprintf(sts, "hsen_start_command=%s\n", setts.hsst);
   fprintf(sts, "hsen_sensor_id=%s\n", setts.hsid);
@@ -6487,6 +6507,18 @@ static bool settsSaveIni(const char *path)
     fprintf(sts, "local_hsen_interface%u_selected=%d\n", cnt, (localHsenIfs[cnt].selected ? 1 : 0));
     fprintf(sts, "local_hsen_interface%u_sensor_id=%u\n", cnt, localHsenIfs[cnt].sensorId);
   }
+#ifdef __MINGW32__
+  fputs("# Manual Windows sensor examples based on the current local_hsen selection:\n", sts);
+  fputs("# Replace 127.0.0.1 with the remote Hosts3D receiver host when using this machine as a sensor.\n", sts);
+  for (unsigned char cnt = 0; cnt < localHsenIfCount; cnt++)
+  {
+    if (!localHsenIfs[cnt].selected) continue;
+    fprintf(sts, "# \"hsen.exe\" %u \"%s\" 127.0.0.1%s\n",
+            localHsenIfs[cnt].sensorId, localHsenIfs[cnt].id, (localHsenWindowsPromisc ? " -p" : ""));
+    anyLocalHsenExample = true;
+  }
+  if (!anyLocalHsenExample) fputs("# No local_hsen interfaces are currently selected.\n", sts);
+#endif
   fputc('\n', sts);
 
   fputs("[keybindings]\n", sts);
