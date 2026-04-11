@@ -336,7 +336,7 @@ Runtime behavior not explicitly listed in `controls.txt`:
 - The `Packets` menu mirrors the same active filter state for sensor, filter tree, and port using the same visible choice markers.
 - Active packet recording and replay now show a dedicated bottom-left status panel with the current mode, elapsed time, replay packet time, and the active `traffic.hpt` label.
 - Replay now opens a list of available `.hpt` recordings from `hsd-data`, instead of always replaying a single fixed file.
-- Selected host details now include the last observed protocol, packet form, important port, and discovery name when available.
+- Selected host details now include the last observed protocol, packet form, likely relevant port, and discovery name when available.
 - Legacy short forms such as `Sen`, `Pro`, `Prt`, `Act`, and `Pkts` are no longer used in the OSD.
 - `Esc` closes the open menu or dialog.
 
@@ -463,6 +463,7 @@ The running UI is authoritative: menu items now show direct shortcuts in parenth
 | Item |
 |---|
 | `Information (G)` |
+| `Add Multiple Hosts To NetPos` |
 | `Resolve Hostnames` |
 | `Colour` |
 | `Lock` |
