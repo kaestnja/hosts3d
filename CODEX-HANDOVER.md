@@ -237,6 +237,19 @@ Keep in mind:
 
 Do not accidentally reintroduce tracked runtime artifacts.
 
+### Line endings
+
+Repo line ending policy:
+
+- tracked text files use `LF`
+- only Windows command scripts `*.bat` and `*.cmd` use `CRLF`
+- this is enforced in `.gitattributes`
+
+When editing:
+
+- do not introduce mixed line endings
+- if unsure, check with `git ls-files --eol`
+
 ### Markdown / editor hygiene
 
 Markdown linting has intentionally been relaxed for this repo.
@@ -254,6 +267,21 @@ VS Code IntelliSense support for this project is partially handled by:
 - `.vscode/c_cpp_properties.json`
 
 If VS Code shows missing include errors while the project still builds, check editor configuration before touching the code.
+
+### Current UI / runtime rules
+
+Recent behavior decisions that future sessions should preserve unless intentionally changed:
+
+- normal OSD settings rows use a click hitbox aligned to the font baseline band; do not reintroduce the old downward-shifted hit area
+- hostname resolving now runs asynchronously in the background and shows a permanent OSD status row
+- newly seen hosts and `netpos` exact hosts should each get one automatic hostname resolve attempt
+- `probe-only` hosts stay grey and flat until they have been seen both as packet source and destination; DNS resolution alone does not confirm them
+- rectangle selection should use the visible projected host bounds, including the flat `probe-only` shape
+- if any host inside a collision is selected, the shared collision object should render selected
+- DNS collision labels are valid only for collisions created by `Combine by DNS Suffix ...`; do not guess labels for arbitrary collisions
+- `Last Packet Form` should use the same semantic labels as the packet filter tree, and `Last Likely Relevant Port` is intentionally heuristic wording
+- `HOST INFORMATION` and `SELECTION INFORMATION` should stay as smaller left-aligned windows, not near-fullscreen overlays
+- `Selection -> Add Multiple Hosts To NetPos` writes one `/32` line per selected host using the host's current coordinates and colour
 
 ## Things To Verify Before Bigger Changes
 

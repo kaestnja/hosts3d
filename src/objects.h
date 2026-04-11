@@ -215,6 +215,7 @@ void hobjDraw(int r, int g, int b);
 
 //draw multiple-hosts object
 void mobjDraw(bool sel);
+void mobjDrawMono(int r, int g, int b);
 
 //draw packet object
 void pobjDraw(int c);

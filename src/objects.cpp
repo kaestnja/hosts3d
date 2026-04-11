@@ -325,6 +325,21 @@ void mobjDraw(bool sel)
   glEnd();
 }
 
+void mobjDrawMono(int r, int g, int b)
+{
+  glBegin(GL_TRIANGLES);
+  for (unsigned char obj = 0; obj < 16; obj++)
+  {
+    glColor3ub(r, g, b);
+    glVertex3f(mobj.vtx[mobj.tri[obj].a].x, mobj.vtx[mobj.tri[obj].a].y, mobj.vtx[mobj.tri[obj].a].z);
+    glColor3ub((r < 50 ? r : r - 50), (g < 50 ? g : g - 50), (b < 50 ? b : b - 50));
+    glVertex3f(mobj.vtx[mobj.tri[obj].b].x, mobj.vtx[mobj.tri[obj].b].y, mobj.vtx[mobj.tri[obj].b].z);
+    glColor3ub((r < 100 ? 0 : r - 100), (g < 100 ? 0 : g - 100), (b < 100 ? 0 : b - 100));
+    glVertex3f(mobj.vtx[mobj.tri[obj].c].x, mobj.vtx[mobj.tri[obj].c].y, mobj.vtx[mobj.tri[obj].c].z);
+  }
+  glEnd();
+}
+
 static unsigned char packetColorClamp(int value)
 {
   if (value < 0) return 0;

@@ -72,10 +72,11 @@ static const int OSD_MIN_W = 420;
 static const int OSD_MIN_H = 380;
 static const int OSD_LINE_H = 13;
 static const int OSD_ROW_TEXT_Y = 0;
-// Keep each settings row clickable across its own line band instead of
-// skewing most of the hit area into the row underneath.
-static const int OSD_ROW_HIT_TOP_Y = OSD_LINE_H / 2;
-static const int OSD_ROW_HIT_BOTTOM_Y = -(OSD_LINE_H / 2);
+// The OSD font is drawn from the raster baseline upward (5x10 bitmap font).
+// Keep each settings row clickable across the line band above that baseline
+// instead of centering the hit area around it, which shifts clicks downward.
+static const int OSD_ROW_HIT_TOP_Y = OSD_LINE_H - 1;
+static const int OSD_ROW_HIT_BOTTOM_Y = 0;
 static const int OSD_PKT_GAP_H = 18;
 static const int OSD_PKT_ICON_SCALE = 6;
 static const int OSD_PKT_ICON_COL_W = 34;
@@ -105,6 +106,10 @@ static const unsigned int PACKET_TRIPLE_SIZE_THRESHOLD = 512;
 static const uint32_t LAYOUT_FILE_VERSION = 2;
 static const uint32_t LAYOUT_MAX_HOST_RECORD_SIZE = 4096;
 static const uint32_t LAYOUT_MAX_LINK_RECORD_SIZE = 64;
+static const int INFO_VIEW_WIN_LEFT = 6;
+static const int INFO_VIEW_WIN_TOP = 6;
+static const int INFO_VIEW_WIN_W = 430;
+static const int INFO_VIEW_WIN_H = 300;
 static const double PACKET_CENTER_Y = 5.0;
 static const double PACKET_LABEL_Y = 7.0;
 static const double RAD2DEG = 57.29577951308232;
@@ -112,7 +117,12 @@ static const unsigned char PACKET_COLOR_COUNT = 6;
 static const unsigned char PACKET_SHAPE_COUNT = 5;
 static const int PACKET_LIST_BASE = 15;
 static const int ALERT_LIST_BASE = PACKET_LIST_BASE + (PACKET_COLOR_COUNT * PACKET_SHAPE_COUNT);
-static const int OBJ_LIST_COUNT = ALERT_LIST_BASE + 2;
+static const int PROBE_HOST_LIST = ALERT_LIST_BASE + 2;
+static const int PROBE_HOST_SELECTED_LIST = ALERT_LIST_BASE + 3;
+static const int PROBE_MULTI_LIST = ALERT_LIST_BASE + 4;
+static const int PROBE_MULTI_SELECTED_LIST = ALERT_LIST_BASE + 5;
+static const int OBJ_LIST_COUNT = ALERT_LIST_BASE + 6;
+static const double PROBE_HOST_SCALE_Y = (1.0 / 3.0);
 int wWin = DEFAULT_WIN_W, hWin = DEFAULT_WIN_H, mBxx, mBxy, mPsx = 0, mPsy = 0, mWhl = 0, GLResult[6] = {0, 0, 0, 0, 0, 0};  //2D GUI result identification
 time_t atime = 0, distm;  //packet traffic display time offset
 time_t packetTrafficStarted = 0;
@@ -230,10 +240,14 @@ struct packet_tree_row_type
 
 struct host_runtime_meta_type
 {
-  unsigned char pr, shp, clr;
+  unsigned char pr, shp, clr, flt;
   unsigned short port;
   char dnm[256];
+  char cds[256];
   bool knownNetpos;
+  bool netposResolveTried;
+  bool seenSrc;
+  bool seenDst;
 };
 
 enum host_layout_flag_type
@@ -269,7 +283,7 @@ struct osd_pkt_hit_type
   bool active;
 };
 
-host_runtime_meta_type hostRuntimeMetaDefault = {0, 0, 0, 0, "", false};
+host_runtime_meta_type hostRuntimeMetaDefault = {0, 0, 0, 0, 0, "", "", false, false, false, false};
 std::map<unsigned long, host_runtime_meta_type> hostRuntimeMetaByIp;
 osd_pkt_hit_type osdPacketHits[OSD_PKT_HIT_MAX];
 unsigned int osdPacketHitCount = 0;
@@ -485,6 +499,13 @@ static void hostPromoteStatic(host_type *ht);
 static bool hostShouldPersist(host_type *ht);
 static host_runtime_meta_type *hostRuntimeMeta(host_type *ht, bool create = true);
 static bool hostIsKnownNetpos(host_type *ht);
+static void hostRuntimeMarkSeen(host_type *ht, bool source);
+static bool hostTrafficConfirmed(host_type *ht);
+static bool hostCollisionHasSelected(host_type *ht);
+static bool hostShouldDrawProbeOnly(host_type *ht);
+static int hostDisplayListForDraw(host_type *ht, bool selected);
+static bool hostCollisionLabelLead(host_type *ht);
+static bool hostCollisionDnsLabel(host_type *ht, char *buf, size_t bufsz);
 static bool hostShouldDrawInShowHostMode(host_type *ht);
 static bool hostShouldDrawLabel(host_type *ht);
 static const char *hostLabelText(host_type *ht);
@@ -498,6 +519,8 @@ static void hostnameResolveStatusReset();
 static bool hostnameResolveQueueHost(in_addr ip);
 static void hostnameResolvePumpResults();
 static bool hostnameResolveStatusValue(char *buf, size_t bufsz, osd_color_type *color);
+static bool hostDnsSuffixKey(const char *hostname, unsigned int commonLayers, bool deeperThan, char *buf, size_t bufsz);
+static unsigned int combineSelectedDnsHosts(unsigned int commonLayers, bool deeperThan);
 static bool parseNetposExactIpToken(const char *token, in_addr *ip);
 static bool hostApplyNetposLayout(host_type *ht);
 static void netposExactHostsSync();
@@ -507,6 +530,7 @@ static bool parsePacketTcpFilterValue(const char *value, unsigned char *out);
 static unsigned char packetArpSubtype(const pkex_type *pkex);
 static unsigned short packetImportantPort(const pkif_type *pkt);
 static bool packetIsNameDiscovery(const pkif_type *pkt);
+static unsigned char packetTreeFilterForPacket(const pkex_type *pkex);
 static unsigned char packetColorIndex(const pkex_type *pkex);
 static unsigned char packetShape(const pkex_type *pkex);
 static const packet_tree_row_type *packetTreeRows(unsigned int *count = 0);
@@ -528,6 +552,9 @@ static void osdPacketHitsClear();
 static void osdPacketHitAdd(int left, int top, int right, int bottom, unsigned char filter);
 static bool osdPacketHitProcess(int x, int y);
 static void setStringValue(char *dst, size_t dstsz, const char *src);
+static char *trimWs(char *txt);
+static void hostNetposLine(host_type *ht, char *buf, size_t bufsz);
+static int addSelectedHostsToNetpos();
 static void packetTrafficLabelSet(const char *path);
 static const char *packetTrafficPathGet();
 static void packetTrafficPathSet(const char *path);
@@ -647,20 +674,29 @@ void hostByPositionPostMove(host_type *ht) {
 void hostPos(host_type *ht, unsigned char hr, unsigned char sp)
 {
   unsigned char hsp = sp * SPC;
-  unsigned short hdm = hr * hsp;  //dimensions
-  int tpx = ht->px, tpy = ht->py, tpz = ht->pz, spx = tpx, spz = tpz
-    , addx = (tpx >= 0 ? hsp : -hsp), addy = (tpy >= 0 ? hsp : -hsp), addz = (tpz >= 0 ? hsp : -hsp);
-  while (hostAtpos(tpx, tpy, tpz, ht))
+  int spx = ht->px, spy = ht->py, spz = ht->pz;
+  int addx = (spx >= 0 ? hsp : -hsp), addy = (spy >= 0 ? hsp : -hsp), addz = (spz >= 0 ? hsp : -hsp);
+  int tpx = spx, tpy = spy, tpz = spz;
+  bool found = false;
+
+  for (unsigned short ylayer = 0; !found; ylayer++)
   {
-    tpx += addx;
-    if (abs(tpx - spx) == hdm)
+    tpy = spy + (ylayer * addy);
+    for (unsigned short ring = 0; (ring < hr) && !found; ring++)
     {
-      tpx = spx;
-      tpz += addz;
-      if (abs(tpz - spz) == hdm)
+      for (unsigned short dz = 0; (dz <= ring) && !found; dz++)
       {
-        tpz = spz;
-        tpy += addy;
+        for (unsigned short dx = 0; dx <= ring; dx++)
+        {
+          if (ring && (dx != ring) && (dz != ring)) continue;
+          tpx = spx + (dx * addx);
+          tpz = spz + (dz * addz);
+          if (!hostAtpos(tpx, tpy, tpz, ht))
+          {
+            found = true;
+            break;
+          }
+        }
       }
     }
   }
@@ -727,6 +763,87 @@ static bool hostIsKnownNetpos(host_type *ht)
   return (meta && meta->knownNetpos);
 }
 
+static void hostRuntimeMarkSeen(host_type *ht, bool source)
+{
+  host_runtime_meta_type *meta = hostRuntimeMeta(ht);
+  if (!meta) return;
+  if (source) meta->seenSrc = true;
+  else meta->seenDst = true;
+}
+
+static bool hostTrafficConfirmed(host_type *ht)
+{
+  host_runtime_meta_type *meta = hostRuntimeMeta(ht, false);
+  return (meta && meta->seenSrc && meta->seenDst);
+}
+
+static bool hostCollisionHasSelected(host_type *ht)
+{
+  host_type *cur;
+  if (!ht || !ht->col) return false;
+  cur = ht;
+  do
+  {
+    if (cur->sld) return true;
+    cur = cur->col;
+  }
+  while (cur && (cur != ht));
+  return false;
+}
+
+static bool hostShouldDrawProbeOnly(host_type *ht)
+{
+  host_runtime_meta_type *meta = hostRuntimeMeta(ht, false);
+  if (!meta) return false;
+  if (!(meta->seenSrc || meta->seenDst)) return false;
+  return !hostTrafficConfirmed(ht);
+}
+
+static int hostDisplayListForDraw(host_type *ht, bool selected)
+{
+  bool clusterSelected = (selected || hostCollisionHasSelected(ht));
+  if (hostShouldDrawProbeOnly(ht))
+  {
+    if (ht->col) return (clusterSelected ? PROBE_MULTI_SELECTED_LIST : PROBE_MULTI_LIST);
+    return (selected ? PROBE_HOST_SELECTED_LIST : PROBE_HOST_LIST);
+  }
+  if (ht->col) return (clusterSelected ? 13 : 12);
+  if (selected) return 11;
+  return ht->clr;
+}
+
+static bool hostCollisionLabelLead(host_type *ht)
+{
+  host_type *cur;
+  if (!ht || !ht->col) return true;
+  cur = ht->col;
+  while (cur && (cur != ht))
+  {
+    if (cur->hip.s_addr < ht->hip.s_addr) return false;
+    cur = cur->col;
+  }
+  return true;
+}
+
+static bool hostCollisionDnsLabel(host_type *ht, char *buf, size_t bufsz)
+{
+  host_type *cur;
+  const char *label = 0;
+  if (!ht || !ht->col || !buf || !bufsz || (setts.sipn == ips)) return false;
+  cur = ht;
+  do
+  {
+    host_runtime_meta_type *meta = hostRuntimeMeta(cur, false);
+    if (!meta || !*meta->cds) return false;
+    if (!label) label = meta->cds;
+    else if (strcmp(label, meta->cds)) return false;
+    cur = cur->col;
+  }
+  while (cur && (cur != ht));
+  setStringValue(buf, bufsz, label);
+  return (*buf != '\0');
+}
+
 static bool hostShouldDrawInShowHostMode(host_type *ht)
 {
   return (ht && (hostIsKnownNetpos(ht) || ht->vis || ht->sld || ht->anm));
@@ -734,15 +851,19 @@ static bool hostShouldDrawInShowHostMode(host_type *ht)
 
 static bool hostShouldDrawLabel(host_type *ht)
 {
+  char clusterLabel[256];
   if (!ht) return false;
   if (!(hostIsKnownNetpos(ht) || ht->pip || (setts.sips == all) || ((setts.sips == sel) && ht->sld))) return false;
+  if (ht->col) return hostCollisionDnsLabel(ht, clusterLabel, sizeof(clusterLabel));
   if ((setts.sipn == nms) && !hostIsKnownNetpos(ht) && !*ht->htnm) return false;
   return true;
 }
 
 static const char *hostLabelText(host_type *ht)
 {
+  static char clusterLabel[256];
   if (!ht) return "";
+  if (hostCollisionDnsLabel(ht, clusterLabel, sizeof(clusterLabel))) return clusterLabel;
   if (*ht->htnm && (setts.sipn != ips)) return ht->htnm;
   return ht->htip;
 }
@@ -764,6 +885,7 @@ static void hostRuntimeNotePacket(host_type *ht, const pkex_type *pkex, unsigned
   meta->pr = pkex->pk.pr;
   meta->shp = packetShape(pkex) + 1;
   meta->clr = packetColorIndex(pkex) + 1;
+  meta->flt = packetTreeFilterForPacket(pkex);
   meta->port = port;
 }
 
@@ -848,6 +970,8 @@ static void netposExactHostsSync()
   for (mit = exactHosts.begin(); mit != exactHosts.end(); ++mit)
   {
     host_type *ht;
+    host_runtime_meta_type *meta;
+    bool queuedResolve = false;
     in_addr ip;
     ip.s_addr = (in_addr_t)mit->first;
     ht = hostIP(ip, false);
@@ -865,7 +989,24 @@ static void netposExactHostsSync()
       }
       if (hostApplyNetposLayout(ht)) changed = true;
     }
-    hostRuntimeMeta(ht)->knownNetpos = true;
+    meta = hostRuntimeMeta(ht);
+    meta->knownNetpos = true;
+    if (!*ht->htnm && !meta->netposResolveTried && hostnameResolveInit())
+    {
+      queuedResolve = hostnameResolveQueueHost(ht->hip);
+      if (!queuedResolve && hostnameResolveMutex)
+      {
+        unsigned long key = hostDynamicStateKey(ht->hip);
+        glfwLockMutex(hostnameResolveMutex);
+        queuedResolve = (hostnameResolvePendingByIp.find(key) != hostnameResolvePendingByIp.end());
+        glfwUnlockMutex(hostnameResolveMutex);
+      }
+      if (queuedResolve)
+      {
+        meta->netposResolveTried = true;
+        changed = true;
+      }
+    }
     if (seltd == ht) hostDetails();
     exactCount++;
   }
@@ -1768,6 +1909,46 @@ static bool packetIsNameDiscovery(const pkif_type *pkt)
     || (pkt->srcpt == 5353) || (pkt->dstpt == 5353) || (pkt->srcpt == 5355) || (pkt->dstpt == 5355);
 }
 
+static unsigned char packetTreeFilterForPacket(const pkex_type *pkex)
+{
+  const pkif_type *pkt;
+  if (!pkex) return pfAll;
+  pkt = &pkex->pk;
+  if (packetIsNameDiscovery(pkt))
+  {
+    if (pkt->pr == IPPROTO_TCP) return pfTcpDiscovery;
+    if (pkt->pr == IPPROTO_UDP) return pfUdpDiscovery;
+  }
+  switch (pkt->pr)
+  {
+    case IPPROTO_TCP:
+      if (!pkex->pld)
+      {
+        if (pkex->rst) return pfTcpReset;
+        if (pkex->syn || pkex->fin) return pfTcpSetupFinish;
+        return pfTcpControl;
+      }
+      return (pkex->sz >= PACKET_TRIPLE_SIZE_THRESHOLD ? pfTcpLargePayload : pfTcpPayload);
+    case IPPROTO_UDP:
+      if (!pkex->pld) return pfUdpAll;
+      return (pkex->sz >= PACKET_TRIPLE_SIZE_THRESHOLD ? pfUdpLargePayload : pfUdpPayload);
+    case IPPROTO_ICMP:
+      return pfIcmpAll;
+    case IPPROTO_ARP:
+      switch (packetArpSubtype(pkex))
+      {
+        case 1: return pfArpRequest;
+        case 2: return pfArpReply;
+        case 3: return pfArpGratuitous;
+        default: return pfArpAll;
+      }
+    case IPPROTO_FRAG:
+      return pfOtherFragmented;
+    default:
+      return pfOtherAll;
+  }
+}
+
 static unsigned char packetShape(const pkex_type *pkex)
 {
   const pkif_type *pkt = &pkex->pk;
@@ -2622,17 +2803,11 @@ void hostDrawCb(void **data, HtArgType arg1, HtArgType arg2, HtArgType arg3, HtA
 
       glLoadName(nameFromHostType(ht));
       glTranslated(ht->px, ht->py, ht->pz);
-
-      if (ht->col)
-	glCallList(objsDraw + 12);
-      else if
-	(ht->sld) glCallList(objsDraw + 10);
-      else
-	glCallList(objsDraw + ht->clr);
+      glCallList(objsDraw + hostDisplayListForDraw(ht, (ht->sld && !ht->col)));
 
       glPopMatrix();
 
-      if (dips && !ht->col && hostShouldDrawLabel(ht))  //draw host IP/name
+      if (dips && hostShouldDrawLabel(ht) && (!ht->col || hostCollisionLabelLead(ht)))  //draw host IP/name
       {
 	glColor3ub(white[0], white[1], white[2]);
 	glRasterPos3i(ht->px, ht->py + 11, ht->pz);
@@ -2660,7 +2835,7 @@ void hostsDraw(GLenum mode)
     glPushMatrix();
     glLoadName(0);
     glTranslated(seltd->px, seltd->py, seltd->pz);
-    glCallList(objsDraw + (seltd->col ? 13 : 11));
+    glCallList(objsDraw + hostDisplayListForDraw(seltd, true));
     glPopMatrix();
     if (dips && hostShouldDrawLabel(seltd))  //draw host IP/name
     {
@@ -2923,12 +3098,12 @@ void hostDetails()
     if (meta->shp)
     {
       strcat(htdtls, "\nLast Packet Form: ");
-      strcat(htdtls, packetShapeFilterLabel(meta->shp));
+      strcat(htdtls, (meta->flt ? packetTreeFilterLabel(meta->flt) : packetShapeFilterLabel(meta->shp)));
     }
     if (meta->port)
     {
       sprintf(pbuf, "%u", meta->port);
-      strcat(htdtls, "\nLast Important Port: ");
+      strcat(htdtls, "\nLast Likely Relevant Port: ");
       strcat(htdtls, pbuf);
     }
   }
@@ -3368,6 +3543,128 @@ static void queueSelectedHostnamesCb(void **data, HtArgType arg1, HtArgType arg2
   else rd->pending++;
 }
 
+struct CombineDnsHostsCbData
+{
+  std::map<std::string, std::vector<host_type *> > groups;
+};
+
+static bool hostDnsSuffixKey(const char *hostname, unsigned int commonLayers, bool deeperThan, char *buf, size_t bufsz)
+{
+  std::vector<std::string> labels;
+  std::string normalized, label;
+  char namebuf[sizeof(((host_type *)0)->htnm)];
+  char *trimmed;
+  unsigned int start = 0;
+
+  if (!hostname || !*hostname || !buf || !bufsz || !commonLayers) return false;
+  setStringValue(namebuf, sizeof(namebuf), hostname);
+  trimmed = trimWs(namebuf);
+  if (!*trimmed) return false;
+
+  normalized.reserve(strlen(trimmed));
+  for (const char *cursor = trimmed; *cursor; cursor++)
+  {
+    if (!isspace((unsigned char)*cursor)) normalized.push_back((char)tolower((unsigned char)*cursor));
+  }
+  while (!normalized.empty() && (normalized[normalized.size() - 1] == '.')) normalized.erase(normalized.size() - 1);
+  if (normalized.empty()) return false;
+
+  for (size_t cnt = 0; cnt < normalized.size(); cnt++)
+  {
+    if (normalized[cnt] == '.')
+    {
+      if (!label.empty())
+      {
+        labels.push_back(label);
+        label.clear();
+      }
+    }
+    else label.push_back(normalized[cnt]);
+  }
+  if (!label.empty()) labels.push_back(label);
+
+  if (labels.size() <= commonLayers) return false;
+  if (deeperThan)
+  {
+    if ((labels.size() - 1) <= commonLayers) return false;
+    start = 1;
+  }
+  else start = (unsigned int)labels.size() - commonLayers;
+
+  buf[0] = '\0';
+  for (unsigned int cnt = start; cnt < labels.size(); cnt++)
+  {
+    if (labels[cnt].empty()) return false;
+    if (*buf) strncat(buf, ".", bufsz - strlen(buf) - 1);
+    strncat(buf, labels[cnt].c_str(), bufsz - strlen(buf) - 1);
+  }
+  return (*buf != '\0');
+}
+
+static void collectSelectedDnsHostsCb(void **data, HtArgType arg1, HtArgType arg2,
+                                      HtArgType arg3, HtArgType arg4)
+{
+  host_type *ht = *((host_type **) data);
+  CombineDnsHostsCbData *cd = (CombineDnsHostsCbData *) ptrFromHtArg(arg1);
+  unsigned int commonLayers = (unsigned int) arg2;
+  bool deeperThan = (arg3 == 1);
+  char key[256];
+
+  (void) arg4;
+  if (!ht || !ht->sld || !*ht->htnm || !cd) return;
+  if (!hostDnsSuffixKey(ht->htnm, commonLayers, deeperThan, key, sizeof(key))) return;
+  cd->groups[key].push_back(ht);
+}
+
+static unsigned int combineSelectedDnsHosts(unsigned int commonLayers, bool deeperThan)
+{
+  std::map<std::string, std::vector<host_type *> >::iterator it;
+  unsigned int moved = 0;
+  CombineDnsHostsCbData cd;
+
+  hstsByIp.forEach(1, &collectSelectedDnsHostsCb, htArgFromPtr(&cd), (HtArgType) commonLayers, (deeperThan ? 1 : 0), 0);
+  if (cd.groups.empty()) return 0;
+
+  goHosts = 1;
+  while (goHosts == 1) usleep(1000);
+  for (it = cd.groups.begin(); it != cd.groups.end(); ++it)
+  {
+    std::vector<host_type *> *group = &it->second;
+    host_type *anchor;
+    if (group->size() < 2) continue;
+    anchor = (*group)[0];
+    if (!anchor) continue;
+    for (unsigned int cnt = 0; cnt < group->size(); cnt++)
+    {
+      host_runtime_meta_type *meta = hostRuntimeMeta((*group)[cnt]);
+      if (meta) setStringValue(meta->cds, sizeof(meta->cds), it->first.c_str());
+    }
+    for (unsigned int cnt = 1; cnt < group->size(); cnt++)
+    {
+      host_type *ht = (*group)[cnt];
+      if (!ht || ht->lck) continue;
+      if ((ht->px != anchor->px) || (ht->py != anchor->py) || (ht->pz != anchor->pz))
+      {
+        hostByPositionPreMove(ht);
+        ht->px = anchor->px;
+        ht->py = anchor->py;
+        ht->pz = anchor->pz;
+        hostByPositionPostMove(ht);
+      }
+      moveCollision(ht);
+      moved++;
+    }
+  }
+  goHosts = 0;
+
+  if (moved)
+  {
+    refresh = true;
+    if (seltd) hostDetails();
+  }
+  return moved;
+}
+
 struct screen_select_box_type
 {
   GLdouble mdl[16];
@@ -3379,19 +3676,57 @@ struct screen_select_box_type
   int top;
 };
 
+static bool hostProjectScreenBounds(host_type *ht, screen_select_box_type *box,
+                                    GLdouble *left, GLdouble *right,
+                                    GLdouble *bottom, GLdouble *top)
+{
+  const GLdouble xs[2] = {(GLdouble)ht->px - 3.0, (GLdouble)ht->px + 3.0};
+  const GLdouble ys[2] = {(GLdouble)ht->py,
+                          (GLdouble)ht->py + (10.0 * (hostShouldDrawProbeOnly(ht) ? PROBE_HOST_SCALE_Y : 1.0))};
+  const GLdouble zs[2] = {(GLdouble)ht->pz - 3.0, (GLdouble)ht->pz + 3.0};
+  bool projected = false;
+
+  if (!ht || !box || !left || !right || !bottom || !top) return false;
+
+  for (int xi = 0; xi < 2; xi++)
+    for (int yi = 0; yi < 2; yi++)
+      for (int zi = 0; zi < 2; zi++)
+      {
+        GLdouble sx, sy, sz;
+        if (gluProject(xs[xi], ys[yi], zs[zi],
+                       box->mdl, box->prj, box->vpt, &sx, &sy, &sz) != GL_TRUE) continue;
+        if ((sz < 0.0) || (sz > 1.0)) continue;
+        if (!projected)
+        {
+          *left = *right = sx;
+          *bottom = *top = sy;
+          projected = true;
+        }
+        else
+        {
+          if (sx < *left) *left = sx;
+          if (sx > *right) *right = sx;
+          if (sy < *bottom) *bottom = sy;
+          if (sy > *top) *top = sy;
+        }
+      }
+  return projected;
+}
+
 static void screenSelectHostsCb(void **data, HtArgType arg1, HtArgType arg2,
                                 HtArgType arg3, HtArgType arg4)
 {
   host_type *ht = *((host_type **) data);
   screen_select_box_type *box = (screen_select_box_type *) ptrFromHtArg(arg1);
-  GLdouble sx, sy, sz;
+  GLdouble sx, sy, sz, hleft, hright, hbottom, htop;
 
   if (!ht || !box) return;
   if ((ht != seltd) && (setts.sona == hst) && !hostShouldDrawInShowHostMode(ht)) return;
   if (gluProject((GLdouble)ht->px, (GLdouble)ht->py, (GLdouble)ht->pz,
                  box->mdl, box->prj, box->vpt, &sx, &sy, &sz) != GL_TRUE) return;
   if ((sz < 0.0) || (sz > 1.0)) return;
-  if ((sx < box->left) || (sx > box->right) || (sy < box->bottom) || (sy > box->top)) return;
+  if (!hostProjectScreenBounds(ht, box, &hleft, &hright, &hbottom, &htop)) return;
+  if ((hright < box->left) || (hleft > box->right) || (htop < box->bottom) || (hbottom > box->top)) return;
   ht->sld = 1;
 }
 
@@ -3773,8 +4108,8 @@ void infoHost()
     if (meta && meta->pr)
     {
       fprintf(info, "\nLast Protocol: %s", (meta->pr == IPPROTO_OTHER ? "Other" : protoDecode(meta->pr, pbuf)));
-      if (meta->shp) fprintf(info, "\nLast Packet Form: %s", packetShapeFilterLabel(meta->shp));
-      if (meta->port) fprintf(info, "\nLast Important Port: %u", meta->port);
+      if (meta->shp) fprintf(info, "\nLast Packet Form: %s", (meta->flt ? packetTreeFilterLabel(meta->flt) : packetShapeFilterLabel(meta->shp)));
+      if (meta->port) fprintf(info, "\nLast Likely Relevant Port: %u", meta->port);
     }
     if (meta && *meta->dnm) fprintf(info, "\nLast Discovery Name: %s", meta->dnm);
     if (seltd->svc[0] == -1) fprintf(info, "\n\nNO SERVICES");
@@ -4300,13 +4635,13 @@ void GLFWCALL keyboardGL(int key, int action)
       case kaShowHostInformation:  //2D GUI selected host info
         if (!seltd) break;
         infoHost();
-        GLWin.CreateWin(-2, -2, 352, 277, "HOST INFORMATION", true, true);
+        GLWin.CreateWin(INFO_VIEW_WIN_LEFT, INFO_VIEW_WIN_TOP, INFO_VIEW_WIN_W, INFO_VIEW_WIN_H, "HOST INFORMATION", true, true);
         GLWin.AddView(10, 10, 10, 10, 10, hsddata("tmp-hinfo-hsd"));
         GLResult[0] = HSD_HSTINFO;
         break;
       case kaShowSelectionInformation:  //2D GUI selection info
         infoSelection();
-        GLWin.CreateWin(-2, -2, 352, 270, "SELECTION INFORMATION", true, true);
+        GLWin.CreateWin(INFO_VIEW_WIN_LEFT, INFO_VIEW_WIN_TOP, INFO_VIEW_WIN_W, INFO_VIEW_WIN_H, "SELECTION INFORMATION", true, true);
         GLWin.AddButton(10, 6, GLWIN_MISC1, "Selection");
         GLWin.AddButton(104, 6, GLWIN_MISC2, "General");
         GLWin.AddView(10, 42, 10, 10, 17, hsddata("tmp-hinfo-hsd"));
@@ -4910,13 +5245,7 @@ void mnuProcess(int m)
       case 88: netSave(hsddata("3network.hnl")); break;  //save current network layout as network layout 3
       case 89: netSave(hsddata("4network.hnl")); break;  //save current network layout as network layout 4
       case 90: case 91:  //2D GUI netpos editor
-        if ((m == 91) && seltd)
-	  sprintf(sbuf, "pos %s/32 %d %d %d %s",
-		  seltd->htip,
-		  seltd->px / SPC,
-		  seltd->py / SPC,
-		  seltd->pz / SPC,
-		  tclr[seltd->clr]);  //add selected host net pos
+        if ((m == 91) && seltd) hostNetposLine(seltd, sbuf, sizeof(sbuf));  //add selected host net pos
         GLWin.CreateWin(-1, -1, 332, 234, "NET POSITIONS", true, true);
         GLWin.AddLabel(10, 10, "Line:");
         GLResult[0] = (GLWin.AddInput(10, 26, 50, 255, sbuf) * 100) + HSD_NETPOS;
@@ -4976,6 +5305,30 @@ void mnuProcess(int m)
         }
         break;
       }
+      case 172:  //add selected hosts to netpos
+      {
+        int added = addSelectedHostsToNetpos();
+        if (!added)
+        {
+          messageBox("NET POSITIONS", "No hosts are selected.");
+          break;
+        }
+        if (added < 0)
+        {
+          messageBox("ERROR", "Unable to update netpos.txt.");
+          break;
+        }
+        goHosts = 1;
+        while (goHosts == 1) usleep(1000);
+        netpsLoad();
+        netposExactHostsSync();
+        goHosts = 0;
+        break;
+      }
+      case 168: combineSelectedDnsHosts(4, true); break;   //combine selected hosts by DNS suffix with 5+ layers
+      case 169: combineSelectedDnsHosts(4, false); break;  //combine selected hosts by DNS suffix with 4 layers
+      case 170: combineSelectedDnsHosts(3, false); break;  //combine selected hosts by DNS suffix with 3 layers
+      case 171: combineSelectedDnsHosts(2, false); break;  //combine selected hosts by DNS suffix with 2 layers
       case 97:
         GLWin.Close();
         helpOverlayToggle();
@@ -5054,16 +5407,21 @@ void mnuProcess(int m)
         addMenuItem("Add Net Position", 8, 0, 91, 'A');
         break;
       case 102:
-        addMenuItem("SELECTION", 10, 2, 100, GLFW_KEY_BACKSPACE);
-        addMenuItem("Information", 10, 0, 46, 0, kaShowSelectionInformation);
-        addMenuItem("Resolve Hostnames", 10, 0, 96, 'H');
-        addMenuItem("Colour", 10, 1, 110, 'C');
-        addMenuItem("Lock", 10, 1, 111, 'L');
-        addMenuItem("Move To Zone", 10, 1, 112, 'M');
-        addMenuItem("Arrange", 10, 1, 113, 'A');
-        addMenuItem("Commands", 10, 1, 114, 'O');
-        addMenuItem("Reset", 10, 1, 115, 'R');
-        addMenuItem("Delete", 10, 1, 116, 'X');
+        addMenuItem("SELECTION", 14, 2, 100, GLFW_KEY_BACKSPACE);
+        addMenuItem("Information", 14, 0, 46, 0, kaShowSelectionInformation);
+        addMenuItem("Add Multiple Hosts To NetPos", 14, 0, 172);
+        addMenuItem("Resolve Hostnames", 14, 0, 96, 'H');
+        addMenuItem("Combine by DNS Suffix (5+ Layers)", 14, 0, 168);
+        addMenuItem("Combine by DNS Suffix (4 Layers)", 14, 0, 169);
+        addMenuItem("Combine by DNS Suffix (3 Layers)", 14, 0, 170);
+        addMenuItem("Combine by DNS Suffix (2 Layers)", 14, 0, 171);
+        addMenuItem("Colour", 14, 1, 110, 'C');
+        addMenuItem("Lock", 14, 1, 111, 'L');
+        addMenuItem("Move To Zone", 14, 1, 112, 'M');
+        addMenuItem("Arrange", 14, 1, 113, 'A');
+        addMenuItem("Commands", 14, 1, 114, 'O');
+        addMenuItem("Reset", 14, 1, 115, 'R');
+        addMenuItem("Delete", 14, 1, 116, 'X');
         break;
       case 103:
         addMenuItem("ANOMALIES", 4, 2, 100, GLFW_KEY_BACKSPACE);
@@ -5541,6 +5899,97 @@ static char *trimWs(char *txt)
     end--;
   }
   return txt;
+}
+
+static void hostNetposLine(host_type *ht, char *buf, size_t bufsz)
+{
+  if (!buf || !bufsz)
+    return;
+  *buf = '\0';
+  if (!ht)
+    return;
+  snprintf(buf, bufsz, "pos %s/32 %d %d %d %s",
+           ht->htip,
+           ht->px / SPC,
+           ht->py / SPC,
+           ht->pz / SPC,
+           tclr[ht->clr]);
+}
+
+typedef struct
+{
+  std::vector<std::string> *lines;
+} netpos_selection_lines_type;
+
+static void collectSelectedNetposLinesCb(void **data, HtArgType arg1, HtArgType arg2, HtArgType arg3, HtArgType arg4)
+{
+  host_type *ht = *((host_type **) data);
+  netpos_selection_lines_type *ctx = (netpos_selection_lines_type *) ptrFromHtArg(arg1);
+  char line[128];
+  (void) arg2;
+  (void) arg3;
+  (void) arg4;
+  if (!ht->sld || !ctx || !ctx->lines) return;
+  hostNetposLine(ht, line, sizeof(line));
+  if (!*line) return;
+  for (size_t cnt = 0; cnt < ctx->lines->size(); cnt++)
+    if ((*ctx->lines)[cnt] == line) return;
+  ctx->lines->push_back(std::string(line));
+}
+
+static bool netposLineListContains(const std::vector<std::string> &lines, const char *line)
+{
+  if (!line) return false;
+  for (size_t cnt = 0; cnt < lines.size(); cnt++)
+    if (lines[cnt] == line) return true;
+  return false;
+}
+
+static int addSelectedHostsToNetpos()
+{
+  std::vector<std::string> lines;
+  netpos_selection_lines_type ctx = {&lines};
+  FILE *nf = 0, *tf = 0;
+  char fbuf[256], tmpPath[512];
+
+  hstsByIp.forEach(1, &collectSelectedNetposLinesCb, htArgFromPtr(&ctx), 0, 0, 0);
+  if (lines.empty()) return 0;
+
+  nf = fopen(hsddata("netpos.txt"), "r");
+  tf = fopen(hsddata("tmp-netpos-hsd"), "w");
+  if (!tf)
+  {
+    if (nf) fclose(nf);
+    return -1;
+  }
+
+  for (size_t cnt = 0; cnt < lines.size(); cnt++)
+  {
+    fputs(lines[cnt].c_str(), tf);
+    fputc('\n', tf);
+  }
+
+  while (nf && fgets(fbuf, sizeof(fbuf), nf))
+  {
+    char *end = strchr(fbuf, '\n');
+    if (end) *end = '\0';
+    if (!netposLineListContains(lines, fbuf))
+    {
+      fputs(fbuf, tf);
+      fputc('\n', tf);
+    }
+  }
+
+  if (nf) fclose(nf);
+  fclose(tf);
+  remove(hsddata("netpos.txt"));
+  strcpy(tmpPath, hsddata("tmp-netpos-hsd"));
+  if (rename(tmpPath, hsddata("netpos.txt")))
+  {
+    remove(hsddata("tmp-netpos-hsd"));
+    return -1;
+  }
+  return (int) lines.size();
 }
 
 static bool parseBoolValue(const char *value, bool *out)
@@ -7131,6 +7580,30 @@ void initObjsGL()
   glNewList(objsDraw + ALERT_LIST_BASE + 1, GL_COMPILE);  //anomaly alert object
     aobjDraw(true);
   glEndList();
+  glNewList(objsDraw + PROBE_HOST_LIST, GL_COMPILE);  //probe-only host object
+    glPushMatrix();
+    glScalef(1.0f, (GLfloat)PROBE_HOST_SCALE_Y, 1.0f);
+    hobjDraw(grey[0], grey[1], grey[2]);
+    glPopMatrix();
+  glEndList();
+  glNewList(objsDraw + PROBE_HOST_SELECTED_LIST, GL_COMPILE);  //selected probe-only host object
+    glPushMatrix();
+    glScalef(1.0f, (GLfloat)PROBE_HOST_SCALE_Y, 1.0f);
+    hobjDraw(brred[0], brred[1], brred[2]);
+    glPopMatrix();
+  glEndList();
+  glNewList(objsDraw + PROBE_MULTI_LIST, GL_COMPILE);  //probe-only multiple-hosts object
+    glPushMatrix();
+    glScalef(1.0f, (GLfloat)PROBE_HOST_SCALE_Y, 1.0f);
+    mobjDrawMono(grey[0], grey[1], grey[2]);
+    glPopMatrix();
+  glEndList();
+  glNewList(objsDraw + PROBE_MULTI_SELECTED_LIST, GL_COMPILE);  //selected probe-only multiple-hosts object
+    glPushMatrix();
+    glScalef(1.0f, (GLfloat)PROBE_HOST_SCALE_Y, 1.0f);
+    mobjDrawMono(brred[0], brred[1], brred[2]);
+    glPopMatrix();
+  glEndList();
 }
 
 void pktProcessCb(void **data, HtArgType arg1, HtArgType arg2, HtArgType arg3, HtArgType arg4)
@@ -7255,6 +7728,7 @@ void GLFWCALL pktProcess(void *arg)
       {
         unsigned short importantPort = packetImportantPort(pkif);
         sh = hostIP(pkif->srcip, true);
+        hostRuntimeMarkSeen(sh, true);
         hostRuntimeNotePacket(sh, pkex, importantPort);
         if (seltd == sh) hostDetails();
         if (pksc == sckt)
@@ -7271,6 +7745,7 @@ void GLFWCALL pktProcess(void *arg)
         }
         if ((dh = hostIP(pkif->dstip, setts.adh)))
         {
+          hostRuntimeMarkSeen(dh, false);
           hostRuntimeNotePacket(dh, pkex, importantPort);
           if (seltd == dh) hostDetails();
           if (pksc == sckt)
