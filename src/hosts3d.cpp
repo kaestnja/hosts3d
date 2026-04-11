@@ -30,6 +30,7 @@
 #ifdef __MINGW32__
 #include <getopt.h>  //getopt()
 #include <winsock2.h>
+#include <ws2tcpip.h>
 #else
 #include <arpa/inet.h>  //inet_addr(), inet_ntoa()
 #include <dirent.h>
@@ -58,6 +59,8 @@ static const int DEFAULT_WIN_W = 1024;
 static const int DEFAULT_WIN_H = 600;
 static const unsigned int DEFAULT_DYNAMIC_HOST_TTL_SECONDS = 300;
 static const unsigned int DEFAULT_DYNAMIC_HOST_CLEANUP_INTERVAL_SECONDS = 30;
+static const unsigned char HOSTNAME_RESOLVE_THREAD_COUNT = 2;
+static const time_t HOSTNAME_RESOLVE_STATUS_SECONDS = 5;
 static const unsigned char LOCAL_HSEN_MAX_INTERFACES = 16;
 static const unsigned int HELP_OVERLAY_MAX_LINES = 128;
 static const int HELP_OVERLAY_W = 480;
@@ -290,6 +293,18 @@ struct localhsen_pid_type
   unsigned long long created;
 };
 
+struct hostname_resolve_request_type
+{
+  in_addr ip;
+};
+
+struct hostname_resolve_result_type
+{
+  in_addr ip;
+  bool success;
+  char name[256];
+};
+
 localhsen_if_type localHsenIfs[LOCAL_HSEN_MAX_INTERFACES];
 unsigned char localHsenIfCount = 0;
 bool localHsenWindowsAutostart = false;
@@ -297,6 +312,20 @@ bool localHsenWindowsPromisc = false;
 int localHsenUiAutostart = -1, localHsenUiPromisc = -1;
 int localHsenUiIfaceChecks[LOCAL_HSEN_MAX_INTERFACES];
 int localHsenUiIfaceSensors[LOCAL_HSEN_MAX_INTERFACES];
+std::vector<hostname_resolve_request_type> hostnameResolveQueue;
+std::vector<hostname_resolve_result_type> hostnameResolveResults;
+std::map<unsigned long, bool> hostnameResolvePendingByIp;
+GLFWthread hostnameResolveThreads[HOSTNAME_RESOLVE_THREAD_COUNT] = {0};
+GLFWmutex hostnameResolveMutex = 0;
+GLFWcond hostnameResolveCond = 0;
+unsigned int hostnameResolveInFlight = 0;
+bool hostnameResolveShutdown = false;
+bool hostnameResolveStatusActive = false;
+unsigned int hostnameResolveStatusSelected = 0;
+unsigned int hostnameResolveStatusExisting = 0;
+unsigned int hostnameResolveStatusResolved = 0;
+unsigned int hostnameResolveStatusFailed = 0;
+time_t hostnameResolveStatusFinishedAt = 0;
 
 #ifdef __MINGW32__
 #define usleep(usec) (Sleep((usec) / 1000))
@@ -459,8 +488,16 @@ static bool hostIsKnownNetpos(host_type *ht);
 static bool hostShouldDrawInShowHostMode(host_type *ht);
 static bool hostShouldDrawLabel(host_type *ht);
 static const char *hostLabelText(host_type *ht);
+static bool hostResolveNameText(in_addr ip, char *buf, size_t bufsz);
 static void hostRuntimeNotePacket(host_type *ht, const pkex_type *pkex, unsigned short port);
 static void hostRuntimeNoteDiscoveryName(host_type *ht, const char *name);
+static void GLFWCALL hostnameResolveWorker(void *arg);
+static bool hostnameResolveInit();
+static void hostnameResolveShutdownAll();
+static void hostnameResolveStatusReset();
+static bool hostnameResolveQueueHost(in_addr ip);
+static void hostnameResolvePumpResults();
+static bool hostnameResolveStatusValue(char *buf, size_t bufsz, osd_color_type *color);
 static bool parseNetposExactIpToken(const char *token, in_addr *ip);
 static bool hostApplyNetposLayout(host_type *ht);
 static void netposExactHostsSync();
@@ -504,7 +541,7 @@ void alrtsDestroy();
 void hostsSet(unsigned char mbr, unsigned char val);
 void osdUpdate();
 host_type *hostIP(in_addr ip, bool crt);
-host_type *hostCreate(in_addr ip, bool dynamic);
+host_type *hostCreate(in_addr ip, bool dynamic = true, bool queueResolve = false);
 void hostDetails();
 void mnuProcess(int m);
 static void layoutWarnIncompatible(const char *fl);
@@ -872,6 +909,229 @@ static bool hostResolveName(host_type *ht)
   return true;
 }
 
+static bool hostResolveNameText(in_addr ip, char *buf, size_t bufsz)
+{
+  sockaddr_in addr;
+  char host[NI_MAXHOST];
+  memset(&addr, 0, sizeof(addr));
+  memset(host, 0, sizeof(host));
+  addr.sin_family = AF_INET;
+  addr.sin_addr = ip;
+  if (getnameinfo((sockaddr *)&addr, sizeof(addr), host, sizeof(host), 0, 0, NI_NAMEREQD)) return false;
+  setStringValue(buf, bufsz, host);
+  return true;
+}
+
+static bool hostnameResolveIdleLocked()
+{
+  return (hostnameResolveQueue.empty() && hostnameResolveResults.empty() && !hostnameResolveInFlight);
+}
+
+static void GLFWCALL hostnameResolveWorker(void *arg)
+{
+  (void)arg;
+  while (true)
+  {
+    hostname_resolve_request_type req;
+    hostname_resolve_result_type result;
+    memset(&req, 0, sizeof(req));
+    memset(&result, 0, sizeof(result));
+
+    glfwLockMutex(hostnameResolveMutex);
+    while (!hostnameResolveShutdown && hostnameResolveQueue.empty())
+      glfwWaitCond(hostnameResolveCond, hostnameResolveMutex, GLFW_INFINITY);
+    if (hostnameResolveShutdown)
+    {
+      glfwUnlockMutex(hostnameResolveMutex);
+      break;
+    }
+    req = hostnameResolveQueue.back();
+    hostnameResolveQueue.pop_back();
+    hostnameResolveInFlight++;
+    glfwUnlockMutex(hostnameResolveMutex);
+
+    result.ip = req.ip;
+    result.success = hostResolveNameText(req.ip, result.name, sizeof(result.name));
+
+    glfwLockMutex(hostnameResolveMutex);
+    hostnameResolveResults.push_back(result);
+    hostnameResolvePendingByIp.erase(hostDynamicStateKey(req.ip));
+    if (hostnameResolveInFlight) hostnameResolveInFlight--;
+    glfwUnlockMutex(hostnameResolveMutex);
+  }
+}
+
+static bool hostnameResolveInit()
+{
+  unsigned char started = 0;
+  if (hostnameResolveMutex && hostnameResolveCond) return true;
+  hostnameResolveMutex = glfwCreateMutex();
+  if (!hostnameResolveMutex) return false;
+  hostnameResolveCond = glfwCreateCond();
+  if (!hostnameResolveCond)
+  {
+    glfwDestroyMutex(hostnameResolveMutex);
+    hostnameResolveMutex = 0;
+    return false;
+  }
+  hostnameResolveShutdown = false;
+  hostnameResolveInFlight = 0;
+  for (unsigned char cnt = 0; cnt < HOSTNAME_RESOLVE_THREAD_COUNT; cnt++)
+  {
+    hostnameResolveThreads[cnt] = glfwCreateThread(hostnameResolveWorker, 0);
+    if (hostnameResolveThreads[cnt]) started++;
+  }
+  if (started) return true;
+  glfwDestroyCond(hostnameResolveCond);
+  glfwDestroyMutex(hostnameResolveMutex);
+  hostnameResolveCond = 0;
+  hostnameResolveMutex = 0;
+  return false;
+}
+
+static void hostnameResolveShutdownAll()
+{
+  if (!hostnameResolveMutex) return;
+  glfwLockMutex(hostnameResolveMutex);
+  hostnameResolveShutdown = true;
+  if (hostnameResolveCond) glfwBroadcastCond(hostnameResolveCond);
+  glfwUnlockMutex(hostnameResolveMutex);
+  for (unsigned char cnt = 0; cnt < HOSTNAME_RESOLVE_THREAD_COUNT; cnt++)
+  {
+    if (hostnameResolveThreads[cnt]) glfwWaitThread(hostnameResolveThreads[cnt], GLFW_WAIT);
+    hostnameResolveThreads[cnt] = 0;
+  }
+  if (hostnameResolveCond) glfwDestroyCond(hostnameResolveCond);
+  if (hostnameResolveMutex) glfwDestroyMutex(hostnameResolveMutex);
+  hostnameResolveCond = 0;
+  hostnameResolveMutex = 0;
+  hostnameResolveQueue.clear();
+  hostnameResolveResults.clear();
+  hostnameResolvePendingByIp.clear();
+  hostnameResolveInFlight = 0;
+}
+
+static void hostnameResolveStatusReset()
+{
+  hostnameResolveStatusActive = false;
+  hostnameResolveStatusSelected = 0;
+  hostnameResolveStatusExisting = 0;
+  hostnameResolveStatusResolved = 0;
+  hostnameResolveStatusFailed = 0;
+  hostnameResolveStatusFinishedAt = 0;
+}
+
+static bool hostnameResolveQueueHost(in_addr ip)
+{
+  unsigned long key;
+  hostname_resolve_request_type req;
+  if (!hostnameResolveMutex) return false;
+  key = hostDynamicStateKey(ip);
+  glfwLockMutex(hostnameResolveMutex);
+  if (hostnameResolvePendingByIp.find(key) != hostnameResolvePendingByIp.end())
+  {
+    glfwUnlockMutex(hostnameResolveMutex);
+    return false;
+  }
+  req.ip = ip;
+  hostnameResolvePendingByIp[key] = true;
+  hostnameResolveQueue.push_back(req);
+  if (hostnameResolveCond) glfwSignalCond(hostnameResolveCond);
+  glfwUnlockMutex(hostnameResolveMutex);
+  return true;
+}
+
+static void hostnameResolvePumpResults()
+{
+  bool changed = false, statusChanged = false, pausedHosts = false, idle = false;
+  std::vector<hostname_resolve_result_type> results;
+  if (!hostnameResolveMutex) return;
+
+  if (!hostnameResolveStatusActive && hostnameResolveStatusFinishedAt && (time(0) > hostnameResolveStatusFinishedAt))
+  {
+    hostnameResolveStatusFinishedAt = 0;
+    statusChanged = true;
+  }
+
+  glfwLockMutex(hostnameResolveMutex);
+  if (!hostnameResolveResults.empty()) results.swap(hostnameResolveResults);
+  idle = hostnameResolveIdleLocked();
+  glfwUnlockMutex(hostnameResolveMutex);
+
+  if (!results.empty())
+  {
+    if (packetThreadStarted && !goHosts)
+    {
+      goHosts = 1;
+      while (goHosts == 1) usleep(1000);
+      pausedHosts = true;
+    }
+    for (unsigned int cnt = 0; cnt < results.size(); cnt++)
+    {
+      hostname_resolve_result_type *result = &results[cnt];
+      if (result->success) hostnameResolveStatusResolved++;
+      else hostnameResolveStatusFailed++;
+      if (result->success)
+      {
+        host_type *ht = hostIP(result->ip, false);
+        if (ht && !*ht->htnm)
+        {
+          setStringValue(ht->htnm, sizeof(ht->htnm), result->name);
+          hostPromoteStatic(ht);
+          if (seltd == ht) hostDetails();
+          changed = true;
+        }
+      }
+      statusChanged = true;
+    }
+    if (pausedHosts) goHosts = 0;
+  }
+
+  if (hostnameResolveStatusActive && idle)
+  {
+    hostnameResolveStatusActive = false;
+    hostnameResolveStatusFinishedAt = time(0) + HOSTNAME_RESOLVE_STATUS_SECONDS;
+    statusChanged = true;
+  }
+
+  if (changed || statusChanged)
+  {
+    refresh = true;
+    osdUpdate();
+  }
+}
+
+static bool hostnameResolveStatusValue(char *buf, size_t bufsz, osd_color_type *color)
+{
+  unsigned int done, pending = 0, total;
+  if (!buf || !bufsz) return false;
+  buf[0] = '\0';
+  if (hostnameResolveMutex)
+  {
+    glfwLockMutex(hostnameResolveMutex);
+    pending = (unsigned int)hostnameResolvePendingByIp.size();
+    glfwUnlockMutex(hostnameResolveMutex);
+  }
+  done = hostnameResolveStatusExisting + hostnameResolveStatusResolved + hostnameResolveStatusFailed;
+  total = done + pending;
+  if (pending)
+  {
+    snprintf(buf, bufsz, "Working %u/%u", done, total);
+    *color = osdAccent;
+  }
+  else if (total)
+  {
+    snprintf(buf, bufsz, "Done %u/%u", done, total);
+    *color = (hostnameResolveStatusFailed ? osdAlert : osdNormal);
+  }
+  else
+  {
+    setStringValue(buf, bufsz, "Idle");
+    *color = osdNormal;
+  }
+  return true;
+}
+
 static void hostCollisionDetach(host_type *cht)
 {
   host_type *ht;
@@ -886,7 +1146,7 @@ static void hostCollisionDetach(host_type *cht)
 }
 
 //create host
-host_type *hostCreate(in_addr ip, bool dynamic = true)
+host_type *hostCreate(in_addr ip, bool dynamic, bool queueResolve)
 {
   host_type host = {0, 0, 0, 0, 0, setts.anm, setts.nhp, 0, setts.nhl, 0, SPC, 0, SPC, 0, 0, 0, 0, ip, "", "", "", ""}, *ht;
   strcpy(host.htip, inet_ntoa(ip));
@@ -903,6 +1163,8 @@ host_type *hostCreate(in_addr ip, bool dynamic = true)
   if (hnet == 2) moveCollision(ht);
 
   hostByPositionPostMove(ht);
+
+  if (queueResolve) hostnameResolveQueueHost(ip);
 
   refresh = true;
   return ht;
@@ -1915,7 +2177,8 @@ static void drawOsdPanel()
 void osdUpdate()
 {
   char sensorLabel[16], packetFilterLabel[32], portLabel[16], knownLabel[24];
-  char packetLimitLabel[16], visiblePacketsLabel[16];
+  char packetLimitLabel[16], visiblePacketsLabel[16], hostnameResolveLabel[24];
+  osd_color_type hostnameResolveColor = osdNormal;
   if (setts.sen) snprintf(sensorLabel, sizeof(sensorLabel), "%u", setts.sen);
   else strcpy(sensorLabel, "All");
   strcpy(packetFilterLabel, packetTreeFilterLabel(packetTreeFilter));
@@ -1947,6 +2210,8 @@ void osdUpdate()
   osdAddSection("RUNTIME");
   osdAddRow("Packet Animation", (goAnim ? "Running" : "Paused"), (goAnim ? osdNormal : osdAccent), osaPacketAnimation);
   osdAddRow("Visible Packets", visiblePacketsLabel);
+  hostnameResolveStatusValue(hostnameResolveLabel, sizeof(hostnameResolveLabel), &hostnameResolveColor);
+  osdAddRow("Hostname Resolve", hostnameResolveLabel, hostnameResolveColor);
   osdAddRow("Unacked Anomalies", (dAnom ? "Y" : ""), (dAnom ? osdAlert : osdNormal), osaAcknowledgeAnomalies);
   if (lnkht) osdAddRow("Link Line", "Pending", osdAccent);
 }
@@ -2741,7 +3006,7 @@ host_type *hostIP(in_addr ip, bool crt)
     return ht;
 
   if (crt)
-    return hostCreate(ip);
+    return hostCreate(ip, true, true);
 
   return 0;
 }
@@ -3065,6 +3330,8 @@ typedef struct ResolveHostnamesCbData_
   unsigned int resolved;
   unsigned int existing;
   unsigned int failed;
+  unsigned int queued;
+  unsigned int pending;
 } ResolveHostnamesCbData;
 
 static void resolveSelectedHostnamesCb(void **data, HtArgType arg1, HtArgType arg2,
@@ -3082,6 +3349,50 @@ static void resolveSelectedHostnamesCb(void **data, HtArgType arg1, HtArgType ar
   }
   if (hostResolveName(ht)) rd->resolved++;
   else rd->failed++;
+}
+
+static void queueSelectedHostnamesCb(void **data, HtArgType arg1, HtArgType arg2,
+                                     HtArgType arg3, HtArgType arg4)
+{
+  host_type *ht = *((host_type **) data);
+  ResolveHostnamesCbData *rd = (ResolveHostnamesCbData *) ptrFromHtArg(arg1);
+
+  if (!ht || !ht->sld) return;
+  rd->selected++;
+  if (*ht->htnm)
+  {
+    rd->existing++;
+    return;
+  }
+  if (hostnameResolveQueueHost(ht->hip)) rd->queued++;
+  else rd->pending++;
+}
+
+struct screen_select_box_type
+{
+  GLdouble mdl[16];
+  GLdouble prj[16];
+  GLint vpt[4];
+  int left;
+  int right;
+  int bottom;
+  int top;
+};
+
+static void screenSelectHostsCb(void **data, HtArgType arg1, HtArgType arg2,
+                                HtArgType arg3, HtArgType arg4)
+{
+  host_type *ht = *((host_type **) data);
+  screen_select_box_type *box = (screen_select_box_type *) ptrFromHtArg(arg1);
+  GLdouble sx, sy, sz;
+
+  if (!ht || !box) return;
+  if ((ht != seltd) && (setts.sona == hst) && !hostShouldDrawInShowHostMode(ht)) return;
+  if (gluProject((GLdouble)ht->px, (GLdouble)ht->py, (GLdouble)ht->pz,
+                 box->mdl, box->prj, box->vpt, &sx, &sy, &sz) != GL_TRUE) return;
+  if ((sz < 0.0) || (sz > 1.0)) return;
+  if ((sx < box->left) || (sx > box->right) || (sy < box->bottom) || (sy > box->top)) return;
+  ht->sld = 1;
 }
 
 //process 2D GUI button selected
@@ -4629,16 +4940,39 @@ void mnuProcess(int m)
       case 96:  //resolve hostnames for selection
       {
         ResolveHostnamesCbData rd = {0, 0, 0, 0};
-        char mbuf[160];
-        waitShow();
-        hstsByIp.forEach(1, &resolveSelectedHostnamesCb, htArgFromPtr(&rd), 0, 0, 0);
-        GLWin.Close();
+        if (!hostnameResolveInit())
+        {
+          char mbuf[160];
+          waitShow();
+          hstsByIp.forEach(1, &resolveSelectedHostnamesCb, htArgFromPtr(&rd), 0, 0, 0);
+          GLWin.Close();
+          if (!rd.selected) messageBox("HOSTNAMES", "No hosts are selected.");
+          else
+          {
+            snprintf(mbuf, sizeof(mbuf), "Selected: %u  Resolved: %u  Already named: %u  Unresolved: %u",
+                     rd.selected, rd.resolved, rd.existing, rd.failed);
+            messageBox("HOSTNAMES", mbuf);
+          }
+          break;
+        }
+        if (hostnameResolveStatusActive || hostnameResolveStatusFinishedAt)
+        {
+          glfwLockMutex(hostnameResolveMutex);
+          if (hostnameResolveIdleLocked()) hostnameResolveStatusReset();
+          glfwUnlockMutex(hostnameResolveMutex);
+        }
+        else hostnameResolveStatusReset();
+        hstsByIp.forEach(1, &queueSelectedHostnamesCb, htArgFromPtr(&rd), 0, 0, 0);
         if (!rd.selected) messageBox("HOSTNAMES", "No hosts are selected.");
         else
         {
-          snprintf(mbuf, sizeof(mbuf), "Selected: %u  Resolved: %u  Already named: %u  Unresolved: %u",
-                   rd.selected, rd.resolved, rd.existing, rd.failed);
-          messageBox("HOSTNAMES", mbuf);
+          hostnameResolveStatusSelected += rd.selected;
+          hostnameResolveStatusExisting += rd.existing;
+          hostnameResolveStatusFinishedAt = 0;
+          if (rd.queued || rd.pending) hostnameResolveStatusActive = true;
+          else hostnameResolveStatusFinishedAt = time(0) + HOSTNAME_RESOLVE_STATUS_SECONDS;
+          osdUpdate();
+          refresh = true;
         }
         break;
       }
@@ -5033,54 +5367,64 @@ void GLFWCALL clickGL(int button, int action)
       mMove = false;
       if (hstsByIp.Num())
       {
+        int left, right, bottom, top;
         if (!glfwGetKey(GLFW_KEY_LCTRL) && !glfwGetKey(GLFW_KEY_RCTRL)) hostsSet(0, 0);  //ht->sld
-        int sx = mBxx - mPsx, sy = mBxy - mPsy, asx = abs(sx), asy = abs(sy);
-        GLint hits, vpt[4];
-        GLuint selbuf[SELBUF];
-        glGetIntegerv(GL_VIEWPORT, vpt);
-        glSelectBuffer(SELBUF, selbuf);
-        glRenderMode(GL_SELECT);
-        glInitNames();
-        glPushName(0);
-        glMatrixMode(GL_PROJECTION);
-        glPushMatrix();
-        glLoadIdentity();
-        gluPickMatrix((GLdouble)mBxx - ((GLdouble)sx / 2.0), (GLdouble)mBxy - ((GLdouble)sy / 2.0), (asx < 3 ? 3 : asx), (asy < 3 ? 3 : asy), vpt);
-        gluPerspective(45.0, (GLdouble)wWin / (GLdouble)hWin, 1.0, DEPTH);
-        glMatrixMode(GL_MODELVIEW);
-        hostsDraw(GL_SELECT);
-        glMatrixMode(GL_PROJECTION);
-        glPopMatrix();
-        if ((hits = glRenderMode(GL_RENDER)))
+        mPsy = hWin - mPsy;
+        left = (mBxx < mPsx ? mBxx : mPsx);
+        right = (mBxx > mPsx ? mBxx : mPsx);
+        bottom = (mBxy < mPsy ? mBxy : mPsy);
+        top = (mBxy > mPsy ? mBxy : mPsy);
+        int asx = right - left, asy = top - bottom;
+        if ((asx >= 3) || (asy >= 3))
         {
-          host_type *ht;
-          GLuint names, minZ = 0xffffffff, *ptr = (GLuint *)selbuf, *closest = 0, *ptrnames;
-          for (; hits; hits--)
+          screen_select_box_type box;
+          glGetDoublev(GL_MODELVIEW_MATRIX, box.mdl);
+          glGetDoublev(GL_PROJECTION_MATRIX, box.prj);
+          glGetIntegerv(GL_VIEWPORT, box.vpt);
+          box.left = left;
+          box.right = right;
+          box.bottom = bottom;
+          box.top = top;
+          hstsByIp.forEach(1, &screenSelectHostsCb, htArgFromPtr(&box), 0, 0, 0);
+          seltd = 0;
+        }
+        else
+        {
+          GLint hits, vpt[4];
+          GLuint selbuf[SELBUF];
+          glGetIntegerv(GL_VIEWPORT, vpt);
+          glSelectBuffer(SELBUF, selbuf);
+          glRenderMode(GL_SELECT);
+          glInitNames();
+          glPushName(0);
+          glMatrixMode(GL_PROJECTION);
+          glPushMatrix();
+          glLoadIdentity();
+          gluPickMatrix((GLdouble)left + ((GLdouble)asx / 2.0), (GLdouble)bottom + ((GLdouble)asy / 2.0),
+                        (asx < 3 ? 3 : asx), (asy < 3 ? 3 : asy), vpt);
+          gluPerspective(45.0, (GLdouble)wWin / (GLdouble)hWin, 1.0, DEPTH);
+          glMatrixMode(GL_MODELVIEW);
+          hostsDraw(GL_SELECT);
+          glMatrixMode(GL_PROJECTION);
+          glPopMatrix();
+          if ((hits = glRenderMode(GL_RENDER)))
           {
-            names = *ptr;
-            ptr++;
-            if (*ptr < minZ)
+            host_type *ht;
+            GLuint names, minZ = 0xffffffff, *ptr = (GLuint *)selbuf, *closest = 0;
+            for (; hits; hits--)
             {
-              minZ = *ptr;
-              closest = ptr + 2;
-            }
-            if ((asx >= 3) || (asy >= 3))  //multi-select
-            {
-              ptrnames = ptr + 2;
-              if (*ptrnames)
+              names = *ptr;
+              ptr++;
+              if (*ptr < minZ)
               {
-		ht = hostTypeFromName(*ptrnames);
-                ht->sld = 1;
+                minZ = *ptr;
+                closest = ptr + 2;
               }
-              else seltd->sld = 1;
+              ptr += names + 2;
             }
-            ptr += names + 2;
-          }
-          if ((asx < 3) && (asy < 3))  //single-select
-          {
             if (*closest)
             {
-	      ht = hostTypeFromName(*closest);
+              ht = hostTypeFromName(*closest);
               if (ht->sld)
               {
                 ht->sld = 0;
@@ -5102,20 +5446,20 @@ void GLFWCALL clickGL(int button, int action)
                 hostDetails();
               }
             }
-            else if ((ht = seltd->col))
+            else if (seltd && (ht = seltd->col))
             {
               seltd->sld = 0;
               seltd = ht;  //cycle thru hosts in cluster
               seltd->sld = 1;
               hostDetails();
             }
-            else if (seltd->pip)
+            else if (seltd && seltd->pip)
             {
               seltd->sld = 0;
               seltd->pip = 0;
               seltd = 0;
             }
-            else
+            else if (seltd)
             {
               seltd->sld = 1;
               seltd->pip = 1;  //activate persistant IP
@@ -5123,10 +5467,10 @@ void GLFWCALL clickGL(int button, int action)
           }
           else seltd = 0;
         }
+        }
         else seltd = 0;
       }
     }
-  }
   else if (button == GLFW_MOUSE_BUTTON_MIDDLE) mView = action;  //start move view
   else if (!GLWin.On()) mnuProcess(100);
   refresh = true;
@@ -7035,6 +7379,7 @@ int main(int argc, char *argv[])
   helpOverlayLoad();
   netpsLoad();  //load netpos
   osdUpdate();
+  hostnameResolveInit();
   netLoad(hsddata("0network.hnl"));  //load network layout 0
   netposExactHostsSync();
   if (goHosts) goHosts = 0;
@@ -7061,6 +7406,7 @@ int main(int argc, char *argv[])
   signal(SIGTERM, hsdStop);  //capture kill
   while (goRun)
   {
+    hostnameResolvePumpResults();
     if ((milliTime(0) - fps) > 40)  //25 FPS
     {
       if (setts.anm) dAnom = true;
@@ -7085,6 +7431,7 @@ int main(int argc, char *argv[])
   localHsenStopManaged(false);
   goHosts = 2;
   glfwWaitThread(gthrd, GLFW_WAIT);
+  hostnameResolveShutdownAll();
   settsSave();  //save settings
   netSave(hsddata("0network.hnl"));  //save network layout 0
   allDestroy();
