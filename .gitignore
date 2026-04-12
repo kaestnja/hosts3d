@@ -12,22 +12,15 @@ hsen-interfaces-*.txt
 Tools/Wireshark/WiresharkPortable64_4.6.4.paf.exe
 
 # Machine-local Hosts3D runtime data
-**/hsd-data/0network.hnl
-**/hsd-data/1network.hnl
-**/hsd-data/2network.hnl
-**/hsd-data/3network.hnl
-**/hsd-data/4network.hnl
-**/hsd-data/controls.txt
-**/hsd-data/netpos.txt
-**/hsd-data/settings.ini
-**/hsd-data/settings-hsd
+**/hsd-data/*network*.hnl
+**/hsd-data/controls*
+**/hsd-data/netpos*
+**/hsd-data/settings*
 **/hsd-data/traffic*.hpt
+**/hsd-data/tmp*
 hsen-interfaces-JAN1.txt
 **/hsd-data/local-hsen-windows.state
 **/hsd-data/local-hsen.state
-**/hsd-data/tmp-hinfo-hsd
-**/hsd-data/tmp-netpos-hsd
-**/hsd-data/tmp-flist-hsd
 Release/dist/
 Release/windows/*/README-runtime-windows.md
 Release/windows/*/Packet.dll
