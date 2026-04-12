@@ -16,6 +16,7 @@
 
 #include <ctype.h>  //tolower()
 #include <algorithm>
+#include <atomic>
 #include <stdint.h>
 #include <map>
 #include <math.h>  //cos(), sin(), sqrt()
@@ -52,6 +53,21 @@
 #include "version.h"
 #include "glwin.h"
 #include "objects.h"
+
+struct atomic_u8_state
+{
+  std::atomic<unsigned char> value;
+  explicit atomic_u8_state(unsigned char initial = 0) : value(initial) {}
+  atomic_u8_state &operator=(unsigned char next)
+  {
+    value.store(next, std::memory_order_release);
+    return *this;
+  }
+  operator unsigned char() const
+  {
+    return value.load(std::memory_order_acquire);
+  }
+};
 
 FILE *pfile;  //packet traffic record file
 bool goRun = true, goSize = true, goAnim = true, mMove = false, mView = false, dAnom = false, refresh = false, animate = false, fullscn = false;
@@ -132,7 +148,8 @@ pkrc_type pkrp;  //packet traffic replay packet
 bool pkrLegacy = false;
 unsigned short frame = 0;
 unsigned long long fps = 0, rpoff;  //packet traffic replay time offset
-char goHosts = 2, htdtls[960];
+atomic_u8_state goHosts(2);
+char htdtls[960];
 unsigned int osdTextLineCount = 0;
 view_type vwdef[2] = {
   {0.0, 0.0, {0.0, 75.0, -360.0}, {0.0, 75.0, MOV - 360.0}},
@@ -3147,47 +3164,56 @@ void hostDetails()
 {
   char pbuf[16];
   host_runtime_meta_type *meta;
-  strcpy(htdtls, "IP: ");  //4
-  strcat(htdtls, seltd->htip);  //15
+  htdtls[0] = '\0';
+  auto appendDetail = [&](const char *text)
+  {
+    size_t used;
+    if (!text || !*text) return;
+    used = strlen(htdtls);
+    if (used >= (sizeof(htdtls) - 1)) return;
+    snprintf(htdtls + used, sizeof(htdtls) - used, "%s", text);
+  };
+  appendDetail("IP: ");
+  appendDetail(seltd->htip);
   if (*seltd->htmc && strcmp(seltd->htmc, "00:00:00:00:00:00"))
   {
-    strcat(htdtls, "\nMAC: ");  //6
-    strcat(htdtls, seltd->htmc);  //17
+    appendDetail("\nMAC: ");
+    appendDetail(seltd->htmc);
   }
   if (*seltd->htnm)
   {
-    strcat(htdtls, "\nName: ");  //7
-    strcat(htdtls, seltd->htnm);  //255
+    appendDetail("\nName: ");
+    appendDetail(seltd->htnm);
   }
   if (*seltd->htrm)
   {
-    strcat(htdtls, "\nRemarks: ");  //10
-    strcat(htdtls, seltd->htrm);  //255
+    appendDetail("\nRemarks: ");
+    appendDetail(seltd->htrm);
   }
   meta = hostRuntimeMeta(seltd, false);
   if (meta && meta->pr)
   {
-    strcat(htdtls, "\nLast Protocol: ");
-    if (meta->pr == IPPROTO_OTHER) strcat(htdtls, "Other");
-    else strcat(htdtls, protoDecode(meta->pr, pbuf));
+    appendDetail("\nLast Protocol: ");
+    if (meta->pr == IPPROTO_OTHER) appendDetail("Other");
+    else appendDetail(protoDecode(meta->pr, pbuf));
     if (meta->shp)
     {
-      strcat(htdtls, "\nLast Packet Form: ");
-      strcat(htdtls, (meta->flt ? packetTreeFilterLabel(meta->flt) : packetShapeFilterLabel(meta->shp)));
+      appendDetail("\nLast Packet Form: ");
+      appendDetail((meta->flt ? packetTreeFilterLabel(meta->flt) : packetShapeFilterLabel(meta->shp)));
     }
     if (meta->port)
     {
-      sprintf(pbuf, "%u", meta->port);
-      strcat(htdtls, "\nLast Likely Relevant Port: ");
-      strcat(htdtls, pbuf);
+      snprintf(pbuf, sizeof(pbuf), "%u", meta->port);
+      appendDetail("\nLast Likely Relevant Port: ");
+      appendDetail(pbuf);
     }
   }
   if (meta && *meta->dnm)
   {
-    strcat(htdtls, "\nLast Discovery Name: ");
-    strcat(htdtls, meta->dnm);
+    appendDetail("\nLast Discovery Name: ");
+    appendDetail(meta->dnm);
   }
-  if (hostIsKnownNetpos(seltd)) strcat(htdtls, "\nKnown Host: netpos exact");
+  if (hostIsKnownNetpos(seltd)) appendDetail("\nKnown Host: netpos exact");
 }
 
 //2D GUI window "please wait"
@@ -3489,27 +3515,39 @@ void btnProcessExportCsvCb(void **data, HtArgType arg1, HtArgType arg2,
   host_type *ht = *((host_type **) data);
   FILE *cf = (FILE *) ptrFromHtArg(arg1);
   unsigned char cnt;
-  char buf[5], svc[12], row[1097];
+  char buf[5];
+
+  auto writeCsvQuotedField = [](FILE *fp, const char *text)
+  {
+    if (!fp) return;
+    if (!text) text = "";
+    fputc('"', fp);
+    while (*text)
+    {
+      if (*text == '\"') fputc('\"', fp);
+      fputc((unsigned char)*text, fp);
+      text++;
+    }
+    fputc('\"', fp);
+  };
 
   if (ht->sld)
   {
-    strcpy(row, "\"");
-    quotecsv(ht->htip, row);
-    strcat(row, "\",\"");
-    quotecsv(ht->htmc, row);
-    strcat(row, "\",\"");
-    quotecsv(ht->htnm, row);
-    strcat(row, "\",\"");
-    quotecsv(ht->htrm, row);
-    strcat(row, "\",\"");
+    writeCsvQuotedField(cf, ht->htip);
+    fputc(',', cf);
+    writeCsvQuotedField(cf, ht->htmc);
+    fputc(',', cf);
+    writeCsvQuotedField(cf, ht->htnm);
+    fputc(',', cf);
+    writeCsvQuotedField(cf, ht->htrm);
+    fputc(',', cf);
+    fputc('\"', cf);
     for (cnt = 0; cnt < SVCS; cnt++)
     {
       if (ht->svc[cnt] == -1) break;
-      sprintf(svc, "%s:%d ", protoDecode((ht->svc[cnt] % 10000) / 10, buf), ht->svc[cnt] / 10000);
-      strcat(row, svc);
+      fprintf(cf, "%s:%d ", protoDecode((ht->svc[cnt] % 10000) / 10, buf), ht->svc[cnt] / 10000);
     }
-    strcat(row, "\"\n");
-    fputs(row, cf);
+    fputs("\"\n", cf);
   }
 }
 

@@ -1049,7 +1049,8 @@ void MyGLWin::CreateWin(int left, int top, int width, int height, const char *ti
   else if (glwn.height < screenH) glwn.top = (screenH - glwn.height) / 2;
   else glwn.top = 1;
   glwn.top = screenH - glwn.top;  //invert as 0 is at bottom of screen
-  strcpy(glwn.title, title);  //title bar text
+  strncpy(glwn.title, (title ? title : ""), sizeof(glwn.title) - 1);  //title bar text
+  glwn.title[sizeof(glwn.title) - 1] = '\0';
   selected = glwn.name * 10000;
   lastWin = (glwn_obj *)GLWinLL.Write(new glwn_obj(glwn));
 }
@@ -1067,7 +1068,8 @@ void MyGLWin::AddButton(int left, int top, int value, const char *text, bool ali
 {
   if (!lastWin) return;  //check parent window object exists
   glbt_obj glbt = {GLWIN_BUTTON, lastWin, align, defalt, left, top, value};
-  strcpy(glbt.text, text);
+  strncpy(glbt.text, (text ? text : ""), sizeof(glbt.text) - 1);
+  glbt.text[sizeof(glbt.text) - 1] = '\0';
   GLWinLL.Write(new glbt_obj(glbt));
 }
 
@@ -1114,7 +1116,8 @@ void MyGLWin::AddList(int left, int top, int right, int bottom, const char *fl)
   if (!lastWin || !lastInput) return;  //check parent window/linked input object exists
   glls_obj glls = {GLWIN_LIST, lastWin, names++, left, top, right, bottom, 0, 0, 1, 0, 0, 1, lastInput};
   for (int cnt = 0; cnt < LSTITMS; cnt++) strcpy(glls.items[cnt], "");
-  strcpy(glls.fname, fl);  //file to list
+  strncpy(glls.fname, (fl ? fl : ""), sizeof(glls.fname) - 1);  //file to list
+  glls.fname[sizeof(glls.fname) - 1] = '\0';
   currScroll = (glls.pwn->name * 10000) + (glls.name * 100);  //set scroll object focus (for mouse wheel)
   GLWinLL.Write(new glls_obj(glls));
 }
@@ -1124,7 +1127,8 @@ void MyGLWin::AddView(int left, int top, int right, int bottom, int tab, const c
 {
   if (!lastWin) return;  //check parent window object exists
   glvw_obj glvw = {GLWIN_VIEW, lastWin, names++, left, top, right, bottom, 0, 0, 1, 0, 0, 1, tab};
-  strcpy(glvw.fname, fl);  //file to view
+  strncpy(glvw.fname, (fl ? fl : ""), sizeof(glvw.fname) - 1);  //file to view
+  glvw.fname[sizeof(glvw.fname) - 1] = '\0';
   currScroll = (glvw.pwn->name * 10000) + (glvw.name * 100);  //set scroll object focus (for mouse wheel)
   GLWinLL.Write(new glvw_obj(glvw));
 }
@@ -1150,7 +1154,8 @@ void MyGLWin::AddMenu(int width, const char *text, int itms, int sub, int value,
   glmu.hotkey = hotkey;
   glmu.textIndent = textIndent;
   glmu.accent = accent;
-  strcpy(glmu.text, text);
+  strncpy(glmu.text, (text ? text : ""), sizeof(glmu.text) - 1);
+  glmu.text[sizeof(glmu.text) - 1] = '\0';
   GLWinLL.Write(new glmu_obj(glmu));
 }
 
@@ -1349,7 +1354,8 @@ void MyGLWin::PutLabel(const char *text, int name)
       lb = (gllb_obj *)tp;
       if (lb->name == name)
       {
-        strcpy(lb->text, text);
+        strncpy(lb->text, (text ? text : ""), sizeof(lb->text) - 1);
+        lb->text[sizeof(lb->text) - 1] = '\0';
         break;
       }
     }

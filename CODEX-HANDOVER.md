@@ -305,6 +305,18 @@ Recent behavior decisions that future sessions should preserve unless intentiona
 - `netpos.txt` now supports both legacy `pos ...` rules and newer exact `host ...` rules with optional `ip=`, `mac=`, and `fqdn=` identity fields
 - `netpos` matching is now strict top-to-bottom first-match-wins; do not reintroduce the older `/32`-beats-broad-net special case
 - exact rules with an IP (`pos .../32` or `host ip=...`) are the ones that auto-materialize known hosts at startup
+- the former high-risk string-overflow paths in `hostDetails()` and selection CSV export have been replaced with bounded appends / direct field writing; do not reintroduce raw `strcat()`-style assembly for long host text
+- `glwin` fixed-size text fields (`CreateWin`, `AddButton`, `AddList`, `AddView`, `AddMenu`, `PutLabel`) now clamp copied text; keep new UI text writes bounded by destination buffer sizes
+- `hsddata()` now builds paths with bounded formatting instead of raw `strcpy`/`strcat`
+- `goHosts` is now wrapped in an atomic byte state to reduce the old packet-thread/UI-thread data race; preserve atomic access if that control path is touched again
+
+## Known Technical Debt / Deferred
+
+Still intentionally not fully solved:
+
+- `DrawList()` and `DrawView()` still reopen and reread backing files every render frame; this is a known performance hotspot for larger help/info/list windows
+- host-table traversals used by info/export flows still do not have a broader lock/snapshot model around `hstsByIp` / `hstsByPos`; the `goHosts` atomic fix only addresses the control flag race, not full container synchronization
+- there are still legacy busy-wait loops around `goHosts` (`while (goHosts == 1) usleep(1000)` style); acceptable for now, but a future condition-based pause/resume would be cleaner and cheaper
 
 ## Things To Verify Before Bigger Changes
 

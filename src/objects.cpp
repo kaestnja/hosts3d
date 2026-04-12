@@ -741,8 +741,8 @@ void aobjDraw(bool an)
 //return path with hosts3d data directory
 char *hsddata(const char *fl)
 {
-  strcpy(fullpath, HSDDATA);
-  return strcat(fullpath, fl);
+  snprintf(fullpath, sizeof(fullpath), "%s%s", HSDDATA, (fl ? fl : ""));
+  return fullpath;
 }
 
 //add service to host
