@@ -285,7 +285,7 @@ Notes:
 - Dynamic hosts are automatically removed again after `dynamic_host_ttl_seconds` of inactivity when dynamic cleanup is enabled. This is meant to keep one-off Internet/test sources from staying in the scene indefinitely.
 - Dynamic cleanup skips hosts that are currently selected or locked.
 - Hosts loaded from a saved layout, created manually, manually edited (`Name`/`Remarks`), or named through `Selection > Resolve Hostnames` are treated as `static`.
-- Exact `/32` entries in `netpos.txt` are also treated as known hosts: Hosts3D materializes them at startup, keeps them static, and shows them immediately even when `On-Active Action` is set to `Show Host`.
+- Exact `/32` entries in `netpos.txt` are also treated as known hosts: Hosts3D materializes them at startup, keeps them static, and shows them immediately even when `On Activity` is set to `Highlight Host`.
 - Locked hosts are protected from dynamic cleanup and are also kept when layouts are saved.
 - Saved layouts (`0network.hnl`..`4network.hnl`) persist static and locked hosts only.
 - When a new build first opens an older incompatible `0network.hnl`, Hosts3D now skips that file, continues running, and writes a fresh compatible layout on exit.
@@ -325,10 +325,10 @@ Runtime behavior not explicitly listed in `controls.txt`:
 - The in-app help reflects the current bindings from `settings.ini`; the list below shows the default mapping.
 - When the help overlay is visible, the mouse wheel scrolls the help only while the mouse cursor is over the overlay.
 - Menus now show state markers directly: `[X]/[ ]` for toggles, `(*)/( )` for current mode choices.
-- The top-right OSD now spells out current filters and toggles using the same names as `settings.ini`, for example `Display Mode`, `Display Scope`, `On-Active Action`, and `Packet Limit`.
+- The top-right OSD now spells out current filters and toggles using the same naming style as the menu and in-app help, for example `Display Mode`, `Display Scope`, `On Activity`, and `Packet Limit`.
 - Most mode/toggle rows in the top-right OSD can now be clicked directly to cycle them, so you do not have to remember the corresponding keyboard shortcut first.
 - The OSD is grouped into `FILTERS`, `LABELS`, `PACKETS`, and `RUNTIME`, with grey labels, white values, yellow highlights for active deviations, and red alerts for important attention states.
-- The `LABELS` group now also shows `Known NetPos /32`, so it stays obvious when exact hosts from `netpos.txt` are being kept visible and labelled independently of the normal on-active host mode.
+- The `LABELS` group now also shows `Known NetPos Exact`, so it stays obvious when exact host rules from `netpos.txt` are being kept visible and labelled independently of the normal on-active host mode.
 - The packet legend inside the OSD now renders actual miniature 3D packet examples at an angled view instead of flat markers, using the same shapes as the live animated packet objects.
 - Clicking a packet example inside the OSD legend immediately applies the matching packet-tree filter.
 - Packet traffic filters are exclusive: at any moment you either see all packet traffic, or exactly one active packet filter, whether that filter was chosen by sensor, the packet tree, or a port filter.
@@ -341,12 +341,11 @@ Runtime behavior not explicitly listed in `controls.txt`:
 - `Esc` closes the open menu or dialog.
 
 ### Default Controls List
-Legacy spelling is preserved for parity: `Persistant`.
 
 ```text
 Left Mouse Button	Select Host
 	Click-and-Drag to Select Multiple Hosts
-	Click Selected Host to Toggle Persistant IP/Name
+	Click Selected Host to Toggle Persistent Host Labels
 Middle Mouse Button	Click-and-Drag to Change View
 Right Mouse Button	Show Menu
 Left Mouse Button on OSD Row	Cycle Clicked OSD Setting or Toggle
@@ -384,23 +383,23 @@ A/D	Move Selection Left/Right
 F	Find Hosts
 Tab	Select Next Host in Selection
 Ctrl + Tab	Select Previous Host in Selection
-T	Toggle Persistant IP/Name for Selection
+T	Toggle Persistent Host Labels for Selection
 C	Cycle Show IP - IP/Name - Name Only
-Ctrl + D	Toggle Add Destination Hosts [D]
-M	Make Host
+Ctrl + D	Toggle Create Hosts for Destination Targets [D]
+M	Create Host...
 N	Edit Hostname for Selected Host
 Ctrl + N	Select All Named Hosts
 R	Edit Remarks for Selected Host
-L	Press Twice with Different Selected Hosts for Link Line
-Ctrl + L	Delete Link Line (2nd Selected Host, Press Link on 1st)
-Y	Automatic Link Lines for All Hosts
-Ctrl + Y	Toggle Automatic Link Lines for New Hosts [L]
-J	Automatic Link Lines for Selection
-Ctrl + J	Stop Automatic Link Lines for Selection
+L	Start Link Line from Selected Host (then press on the other host)
+Ctrl + L	Start Delete Link Line from Selected Host (then press on the other host)
+Y	Auto Link All Hosts
+Ctrl + Y	Toggle Auto Link New Hosts [L]
+J	Auto Link Hosts in Selection
+Ctrl + J	Stop Auto Link Hosts in Selection
 Ctrl + R	Delete Link Lines for All Hosts
 P	Show Packets for Selection
 Ctrl + P	Stop Showing Packets for Selection
-U	Show Packets for All Hosts
+U	Packet Display On
 Ctrl + U	Toggle Show Packets for New Hosts [P]
 1	Show Packets from Sensor 1
 2	Show Packets from Sensor 2
@@ -413,27 +412,27 @@ Ctrl + U	Toggle Show Packets for New Hosts [P]
 9	Show Packets from Sensor 9
 0	Show Packets from All Sensors
 Comma / Period	Change Sensor to Show Packets from
-B	Toggle Show Simulated Broadcasts [B]
+B	Toggle Simulate Broadcast to all Known Net Hosts [B]
 Minus	Decrease Allowed Packets
 Plus	Increase Allowed Packets
 Ctrl + T	Toggle Show Packet Destination Port
 Z	Toggle Double Speed Packets [F]
-K	Packets Off
-F12	Record Packet Traffic
-F10	Replay Recorded Packet Traffic
+K	Packet Display Off
+F12	Start Recording Packet Traffic
+F10	Replay Packet Traffic File...
 Page Up	Skip to Next Packet during Replay Traffic
-F11	Stop Record/Replay of Packet Traffic
+F11	Stop Recording / Replay
 F7	Open Packet Traffic File...
 F8	Save Packet Traffic File As...
-Space	Toggle Pause Animation
+Space	Pause / Resume Packet Animation
 Ctrl + X	Cut Input Box Text
 Ctrl + C	Copy Input Box Text
 Ctrl + V	Paste Input Box Text
 Ctrl + K	Acknowledge All Anomalies
-O	Toggle Show OSD
+O	Show OSD / Hide OSD
 X	Export Selection Details in CSV File As...
-I	Show Selected Host Information
-G	Show Selection Information
+I	Host Information
+G	Information for Hosts in Selection
 H	Toggle Help Overlay
 ```
 
@@ -446,100 +445,141 @@ The running UI is authoritative: menu items now show direct shortcuts in parenth
 ### Main Menu
 | Menu | Items |
 |---|---|
-| `MAIN` | `Selected` (if a host is selected), `Selection`, `Anomalies`, `IP/Name`, `Packets`, `On-Active`, `View`, `Layout`, `Other`, `Local hsen`, `Exit` |
+| `MAIN` | `Selected Host` (if a host is selected), `Selection of Hosts`, `Host Lines`, `Anomalies`, `Host Labels`, `Packet Filters`, `Packet Display On/Off`, `Pause/Resume Packet Animation`, `Packet Capture & Replay`, `On Activity`, `View`, `Net Layout`, `Net Positions Editor`, `Create Host...`, `Select Inactive Hosts`, `Find Hosts...`, `Show OSD / Hide OSD`, `Help`, `About Hosts3D`, `Configure Local Sensors (hsen)`, `Exit` |
 
-### `Selected`
+### `Selected Host`
 | Item |
 |---|
-| `Information (I)` |
-| `Show Packets Only` |
+| `Host Information (I)` |
+| `Show Only This Host's Packets` |
 | `Move Here` |
 | `Go To` |
 | `Hostname (N)` |
 | `Remarks (R)` |
-| `Add Net Position` |
+| `Add This Host To Net Positions` |
 
-### `Selection`
+### `Selection of Hosts`
 | Item |
 |---|
-| `Information (G)` |
-| `Add Multiple Hosts To NetPos` |
-| `Resolve Hostnames` |
-| `Colour` |
-| `Lock` |
-| `Move To Zone` |
-| `Arrange` |
-| `Commands` |
+| `SELECTION TOOLS` |
+| `Select All Hosts (Ctrl+A)` |
+| `Invert Current Selection (Ctrl+S)` |
+| `Select All Named Hosts (Ctrl+N)` |
+| `Persistent Host Labels for Selection (T)` |
+| `Show Packets for Selection (P)` |
+| `Stop Showing Packets for Selection (Ctrl+P)` |
+| `Export Selection Details in CSV File As... (X)` |
+| `Information for Hosts in Selection (G)` |
+| `Add Selected Hosts To Net Positions` |
+| `Resolve Hostnames for Hosts in Selection` |
+| `Combine by DNS Suffix (4+ Layers)` |
+| `Combine by DNS Suffix (3 Layers)` |
+| `Combine by DNS Suffix (2 Layers)` |
+| `Set Host Colour` (inline colour boxes) |
+| `Lock the Position` |
+| `Move To Colour Zone` |
+| `Auto Arrange` |
+| `Run Commands` |
 | `Reset` |
-| `Delete` |
+| `Delete Hosts in Selection` |
 
-#### `Selection > Colour`
-`Grey`, `Orange`, `Yellow`, `Fluro`, `Green`, `Mint`, `Aqua`, `Blue`, `Purple`, `Violet`
+#### `Selection of Hosts > Set Host Colour`
+Inline colour boxes: `Grey`, `Orange`, `Yellow`, `Fluro`, `Green`, `Mint`, `Aqua`, `Blue`, `Purple`, `Violet`
 
-#### `Selection > Lock`
+#### `Selection of Hosts > Lock the Position`
 `On`, `Off`
 
-#### `Selection > Move To Zone`
+#### `Selection of Hosts > Move To Colour Zone`
 `Grey`, `Blue`, `Green`, `Red`
 
-#### `Selection > Arrange`
-`Default`, `10x10`, `10x10 2xSpc`, `Into Nets`
+#### `Selection of Hosts > Auto Arrange`
+`Default`, `10x10`, `10x10 2xSpc`, `Arrange By Net Positions`
 
-#### `Selection > Commands`
+#### `Selection of Hosts > Run Commands`
 `Command 1`, `Command 2`, `Command 3`, `Command 4`, `Set`
 
-#### `Selection > Reset`
-`Link Lines`, `Downloads`, `Uploads`, `Services`
+#### `Selection of Hosts > Reset`
+`Reset Traffic Counters`, `Services`
 
-#### `Selection > Delete`
-`Confirm`
+### `Host Lines`
+| Item |
+|---|
+| `WITH SELECTED HOST` |
+| `Start Link Line from Selected Host (L)` |
+| `Start Delete Link Line from Selected Host (Ctrl+L)` |
+| `AUTOMATIC` |
+| `Auto Link All Hosts (Y)` |
+| `Auto Link Hosts in Selection (J)` |
+| `Stop Auto Link Hosts in Selection (Ctrl+J)` |
+| `Auto Link New Hosts (Ctrl+Y)` |
+| `DELETE` |
+| `Delete Link Lines for Hosts in Selection` |
+| `Delete All Link Lines (Ctrl+R)` |
 
 ### `Anomalies`
 | Item |
 |---|
-| `Select All` |
-| `Acknowledge` |
-| `Toggle Detection` |
+| `Select Hosts With Anomalies` |
+| `ACKNOWLEDGE ANOMALIES` |
+| `Acknowledge Current Selection` |
+| `Acknowledge All Anomalies (Ctrl+K)` |
+| `ANOMALY DETECTION` |
+| `Anomaly Detection On` |
+| `Anomaly Detection Off` |
 
-#### `Anomalies > Acknowledge`
-`Selection`, `All (Ctrl+K)`
-
-### `IP/Name`
+### `Host Labels`
 Conditional items depend on current display mode.
 
 | Possible item |
 |---|
-| `Show Selection` |
-| `Show All` |
-| `Show On-Active` |
-| `Show Off` |
-| `All Off` |
+| `Show Labels for Hosts in Selection` |
+| `Show Labels for All Hosts` |
+| `Show Labels On Activity` |
+| `Hide Standard Labels` |
+| `Hide All Host Labels` |
 
-### `Packets`
+### `Packet Filters`
 | Item |
 |---|
-| `Show All (U)` |
-| `Sensor` |
-| `Filter` |
-| `Port` |
-| `Select Showing` |
-| `Off (K)` |
+| `Sensor Filter` (inline choice boxes: `All`, `1`, `2`, `3`, `4`, `5`, `6`, `7`, `8`, `9`) |
+| `Packet Type Filter` |
+| `Port Filter` |
+| `Select Hosts With Packet Display` |
 
-#### `Packets > Sensor`
-| Possible item |
+### Top-Level Packet Toggles
+| Item |
 |---|
-| `All` |
-| `Sensor 1` |
-| `Sensor 2` |
-| `Sensor 3` |
-| `Sensor 4` |
-| `Sensor 5` |
-| `Sensor 6` |
-| `Sensor 7` |
-| `Sensor 8` |
-| `Sensor 9` |
+| `Packet Display On (U)` / `Packet Display Off (K)` |
+| `Pause Packet Animation (Space)` / `Resume Packet Animation (Space)` |
 
-#### `Packets > Filter`
+### `Packet Capture & Replay`
+| Item |
+|---|
+| `CAPTURE` |
+| `Start Recording Packet Traffic (F12)` |
+| `Stop Recording / Replay (F11)` |
+| `REPLAY` |
+| `Replay Packet Traffic File... (F10)` |
+| `Skip to Next Replay Packet (Page Up)` |
+| `FILES` |
+| `Open Packet Traffic File... (F7)` |
+| `Save Packet Traffic File As... (F8)` |
+
+The top-right OSD also shows:
+- `Packet Capture & Replay`: `Idle`, `Recording HH:MM:SS`, or `Replay`
+- `Replay Packet Time`: the exact timestamp of the replay packet currently being shown
+
+### Top-Level Host Creation
+| Item |
+|---|
+| `Create Host... (M)` |
+
+### Top-Level OSD Toggle
+| Item |
+|---|
+| `Show OSD` / `Hide OSD` |
+
+#### `Packet Filters > Packet Type Filter`
 Current packet-tree items:
 
 ```text
@@ -564,89 +604,117 @@ OTHER
  OTHER fragmented
 ```
 
-#### `Packets > Port`
+#### `Packet Filters > Port Filter`
 | Possible item |
 |---|
 | `All` |
 | `Enter...` |
 
-### `On-Active`
+### `On Activity`
 Conditional by active on-active mode.
 
 | Possible item |
 |---|
-| `Alert` |
-| `Show IP/Name` |
-| `Show Host` |
-| `Select` |
-| `Do Nothing` |
+| `Create Activity Alert` |
+| `Show Label On Activity` |
+| `Highlight Host` |
+| `Add Host to Selection On Activity` |
+| `No Extra Action On Activity` |
 
 ### `View`
 | Item |
 |---|
-| `Recall` |
-| `Save` |
+| `LOAD VIEW` |
+| `Home (Home)` |
+| `Alternate Home (Ctrl+Home)` |
+| `View 1 (F1)` |
+| `View 2 (F2)` |
+| `View 3 (F3)` |
+| `View 4 (F4)` |
+| `SAVE VIEW` |
+| `View 1 (Ctrl+F1)` |
+| `View 2 (Ctrl+F2)` |
+| `View 3 (Ctrl+F3)` |
+| `View 4 (Ctrl+F4)` |
 
-#### `View > Recall`
-`Home (Home)`, `Alternate Home (Ctrl+Home)`, `Pos 1 (F1)`, `Pos 2 (F2)`, `Pos 3 (F3)`, `Pos 4 (F4)`
-
-#### `View > Save`
-`Pos 1 (Ctrl+F1)`, `Pos 2 (Ctrl+F2)`, `Pos 3 (Ctrl+F3)`, `Pos 4 (Ctrl+F4)`
-
-### `Layout`
+### `Net Layout`
 | Item |
 |---|
-| `Restore` |
-| `Save` |
-| `Net Positions` |
-| `Clear` |
+| `LOAD LAYOUT` |
+| `Open Layout File...` |
+| `Layout 1 (Shift+F1)` |
+| `Layout 2 (Shift+F2)` |
+| `Layout 3 (Shift+F3)` |
+| `Layout 4 (Shift+F4)` |
+| `SAVE LAYOUT` |
+| `Save To Layout File...` |
+| `Layout 1 (Ctrl+Shift+F1)` |
+| `Layout 2 (Ctrl+Shift+F2)` |
+| `Layout 3 (Ctrl+Shift+F3)` |
+| `Layout 4 (Ctrl+Shift+F4)` |
+| `Clear Current Layout` |
 
-#### `Layout > Restore`
-`File`, `Net 1 (Shift+F1)`, `Net 2 (Shift+F2)`, `Net 3 (Shift+F3)`, `Net 4 (Shift+F4)`
-
-#### `Layout > Save`
-`File`, `Net 1 (Ctrl+Shift+F1)`, `Net 2 (Ctrl+Shift+F2)`, `Net 3 (Ctrl+Shift+F3)`, `Net 4 (Ctrl+Shift+F4)`
-
-#### `Layout > Clear`
-`Confirm`
-
-### `Other`
+### `Net Positions Editor`
 | Item |
 |---|
-| `Find Hosts (F)` |
-| `Select Inactive` |
+| `Net Positions Editor` |
+
+### `Select Inactive Hosts`
+| Item |
+|---|
+| `Older Than 5 Minutes` |
+| `Older Than 1 Hour` |
+| `Older Than 1 Day` |
+| `Older Than 1 Week` |
+| `Custom Threshold...` |
+
+### `Find Hosts`
+| Item |
+|---|
+| `Find Hosts... (F)` |
+
+### `Help`
+| Item |
+|---|
 | `Help (H)` |
-| `About` |
 
-#### `Other > Select Inactive`
-`> 5 Minutes`, `> 1 Hour`, `> 1 Day`, `> 1 Week`, `> Other`
+### `About Hosts3D`
+| Item |
+|---|
+| `About Hosts3D` |
 
-### `Local hsen`
+### `Configure Local Sensors (hsen)`
 - discovers interfaces via `hsen -l`
 - shows Ethernet/WLAN/Other adapters in a selection dialog
-- `Save + Start`, `Stop`, `Refresh`, `Close`
+- shows the current IPv4 addresses of each discovered adapter to help choose the right local sensor
+- uses `Refresh`, `Save`, and a combined `Start` / `Stop` button
+- no extra success popups for local hsen actions; only errors open a dialog
 
 ## Net Positions (`netpos.txt`)
 This is an advanced layout feature. Use it when you want known networks to appear in predictable positions and colors.
 
-Format:
+Formats:
 ```text
 pos net x-position y-position z-position colour [hold]
+host ip=1.2.3.4 [mac=00:11:22:33:44:55] [fqdn=host.example] x=0 y=0 z=0 color=green [hold]
 ```
 
 Example:
 ```text
 pos 123.123.123.123/32 10 0 -10 green
 pos 123.123.123.123/32 10 0 -10 green hold
+host ip=123.123.123.123 x=10 y=0 z=-10 color=green
+host ip=123.123.123.123 mac=00:11:22:33:44:55 fqdn=host.example x=10 y=0 z=-10 color=green hold
 ```
 
 Important behavior:
-- General CIDR entries continue to act as placement/color rules only.
-- Exact `/32` entries now also materialize those hosts immediately at startup if they are not already present in the current layout.
-- These exact `/32` hosts are treated as known/static hosts, inherit their `netpos.txt` position/color, and show an IP or resolved name immediately.
-- If an exact `/32` host already exists in the layout, `netpos.txt` still wins for its startup position/color.
-- Exact `/32` rules now also win over broader matching nets even if the broader net appears earlier in the file.
-- For broader nets, the first matching rule from top to bottom still wins.
+- `pos ...` rules continue to work for CIDR nets and exact `/32` IPs.
+- `host ...` rules are for exact host identity and may use any combination of `ip=`, `mac=`, and `fqdn=`.
+- In `host ...` rules, all given identity fields are AND-linked. If one does not match, the rule is ignored.
+- Rules are evaluated strictly from top to bottom. The first fully matching rule wins, and all following rules are ignored.
+- Exact rules with an IP (`pos .../32` and `host ip=...`) now also materialize those hosts immediately at startup if they are not already present in the current layout.
+- These exact hosts are treated as known/static hosts, inherit their `netpos.txt` position/color, and show an IP or resolved name immediately.
+- If an exact host already exists in the layout, `netpos.txt` still wins for its startup position/color.
 - Normal colour rules use the given position as an anchor and move colliding hosts to the nearest free position around it.
 - Adding `hold` disables that automatic offset, so the host stays exactly on the configured position even when it collides.
 
@@ -666,6 +734,21 @@ Allowed color tokens:
 - `green` means: set colour and allow collision-avoidance offsetting
 - `hold` means: keep the current colour and do not offset
 - `green hold` means: set colour and also keep the host fixed exactly at that position
+
+### Special Address / Identity Cases (Design Notes, Not Yet Implemented)
+These are candidate rules under discussion for future automatic placement and display behavior. They do not describe the current implementation yet.
+
+| Case | Current behavior | Candidate rule |
+|---|---|---|
+| `0.0.0.0` | Can appear as a normal IP host if traffic or `netpos` creates it. | Treat as a single grey meta-host at a reserved position, do not DNS-resolve it, and do not promote it to a normal confirmed host. |
+| `255.255.255.255` | Can appear as a normal host in some paths, while broadcast handling also has separate fan-out logic. | Treat as one dedicated global broadcast marker at a reserved position, not as a normal host. |
+| Mask-like addresses such as `255.255.255.0` | Treated as normal IP hosts today. | Treat as suspicious/meta addresses by default, unless an explicit `/32` `netpos` rule says otherwise. |
+| Loopback `127.0.0.0/8` | Treated as normal IP hosts today. | Reserve a dedicated loopback marker or loopback zone and avoid normal hostname resolution for it. |
+| Multiple IPs with the same MAC | Separate hosts with no visible relationship. | Keep separate IP hosts, but prefer nearby placement and add a future visual relation instead of auto-merging them. |
+| One IP seen with multiple MACs | Host identity stays IP-based; the first seen MAC tends to stick. | Keep one IP host, but flag a MAC-conflict/anomaly state instead of silently trusting the first MAC forever. |
+
+Planned precedence rule:
+- explicit `/32` `netpos` rules should continue to override future automatic special-case placement rules
 
 ## Visual Mapping (Current Code)
 This section helps you map what you see on-screen back to the current implementation (`src/misc.h`, `src/objects.cpp`, `src/hosts3d.cpp`).
@@ -740,7 +823,7 @@ Press `H` to toggle the help overlay (`controls.txt`, generated from code).
 - Protocol `249` is used internally to identify ARP packets
 - Protocol `250` is used internally to identify fragmented IP packets
 - ARP traffic is distinguished into request, reply, and gratuitous ARP
-- Default host creation is source-IP based; enable Add Destination Hosts to include destination IPs
+- Default host creation is source-IP based; enable Create Hosts for Destination Targets to include destination-side targets as hosts
 - Anomalies represent new hosts or new host services
 - Dynamic hosts are automatically removed again after the configured inactivity timeout in `[dynamic_hosts]`, unless they are currently selected, locked, or have already been promoted to static
 - Large menu operations on thousands of hosts can take minutes

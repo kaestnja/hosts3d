@@ -204,7 +204,9 @@ struct sett_type
 struct netp_type
 {
   int px, py, pz;
-  char clr, hld, nt[19];  //colour, hold/fixed flag, CIDR net
+  char clr, hld, rtp;
+  bool hip, hmc, hfq;
+  char nt[19], ip[16], mac[18], fqdn[256];  //colour, hold/fixed flag, rule type, identity fields
 };
 
 //draw cross object
@@ -235,6 +237,7 @@ void svcAdd(host_type *sht, int svc, bool anm);
 
 //load netpos file into memory, create empty
 void netpsLoad();
+bool netpsLineExactIp(const char *line, in_addr *ip);
 
 //destroy net positions LL
 void netpsDestroy();

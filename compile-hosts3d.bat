@@ -105,7 +105,7 @@ if errorlevel 1 goto :fail
 if errorlevel 1 goto :fail
 "%WINDRES_EXE%" -I"src" -O coff -i src/hosts3d.rc -o "%OBJDIR%\hosts3d-res.o"
 if errorlevel 1 goto :fail
-"%GPP_EXE%" -Wall -O2 -static-libgcc -static-libstdc++ -o "%OUTDIR%\Hosts3D.exe" "%OBJDIR%\llist.o" "%OBJDIR%\misc.o" "%OBJDIR%\glwin.o" "%OBJDIR%\objects.o" "%OBJDIR%\hosts3d.o" "%OBJDIR%\hosts3d-res.o" -L"%GLFW_LIBDIR%" %GLFW_LIB_OPT% -lopengl32 -lglu32 -lws2_32
+"%GPP_EXE%" -Wall -O2 -static-libgcc -static-libstdc++ -o "%OUTDIR%\Hosts3D.exe" "%OBJDIR%\llist.o" "%OBJDIR%\misc.o" "%OBJDIR%\glwin.o" "%OBJDIR%\objects.o" "%OBJDIR%\hosts3d.o" "%OBJDIR%\hosts3d-res.o" -L"%GLFW_LIBDIR%" %GLFW_LIB_OPT% -lopengl32 -lglu32 -lws2_32 -liphlpapi
 if errorlevel 1 goto :fail
 if exist "%GLFW_BINDIR%\glfw.dll" copy /Y "%GLFW_BINDIR%\glfw.dll" "%OUTDIR%\glfw.dll" >NUL
 if exist "%MINGW_BIN%libwinpthread-1.dll" copy /Y "%MINGW_BIN%libwinpthread-1.dll" "%OUTDIR%\libwinpthread-1.dll" >NUL

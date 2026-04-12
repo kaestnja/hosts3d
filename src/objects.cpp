@@ -15,6 +15,7 @@
    GNU General Public License for more details. */
 
 #include <GL/glfw.h>
+#include <ctype.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>  //atoi()
@@ -60,18 +61,115 @@ static bool netpsIsHoldToken(const char *tok)
   return (tok && !strcmp(tok, "hold"));
 }
 
-static bool netpsParseLine(const char *line, netp_type *out)
+static bool netpsParseIntToken(const char *tok, int *out)
 {
-  char kw[8], net[19], tok1[16] = "", tok2[16] = "";
-  int got;
-  if (!line || !out) return false;
-  memset(out, 0, sizeof(*out));
-  got = sscanf(line, " %7s %18s %d %d %d %15s %15s", kw, net, &out->px, &out->py, &out->pz, tok1, tok2);
-  if ((got < 6) || strcmp(kw, "pos")) return false;
+  char *end;
+  long val;
+  if (!tok || !*tok || !out) return false;
+  val = strtol(tok, &end, 10);
+  if (*end) return false;
+  *out = (int) val;
+  return true;
+}
+
+static bool netpsEqNoCase(const char *left, const char *right)
+{
+  if (!left || !right) return false;
+  while (*left && *right)
+  {
+    if (tolower((unsigned char)*left) != tolower((unsigned char)*right)) return false;
+    left++;
+    right++;
+  }
+  return (!*left && !*right);
+}
+
+static void netpsNormalizeFqdn(const char *src, char *dst, size_t dstsz)
+{
+  size_t pos = 0, end;
+  if (!dst || !dstsz)
+    return;
+  dst[0] = '\0';
+  if (!src || !*src)
+    return;
+  while (*src && isspace((unsigned char)*src)) src++;
+  while (*src && (pos + 1 < dstsz))
+  {
+    if (!isspace((unsigned char)*src)) dst[pos++] = (char) tolower((unsigned char)*src);
+    src++;
+  }
+  dst[pos] = '\0';
+  end = strlen(dst);
+  while (end && (dst[end - 1] == '.'))
+  {
+    dst[end - 1] = '\0';
+    end--;
+  }
+}
+
+static bool netpsNormalizeMacToken(const char *src, char *dst, size_t dstsz)
+{
+  unsigned int values[6];
+  if (!src || !*src || !dst || (dstsz < 18)) return false;
+  if ((sscanf(src, "%2x:%2x:%2x:%2x:%2x:%2x", &values[0], &values[1], &values[2], &values[3], &values[4], &values[5]) != 6)
+      && (sscanf(src, "%2x-%2x-%2x-%2x-%2x-%2x", &values[0], &values[1], &values[2], &values[3], &values[4], &values[5]) != 6))
+    return false;
+  snprintf(dst, dstsz, "%02X:%02X:%02X:%02X:%02X:%02X",
+           values[0], values[1], values[2], values[3], values[4], values[5]);
+  return true;
+}
+
+static bool netpsParseIpValue(const char *src, char *dst, size_t dstsz)
+{
+  unsigned long addr;
+  if (!src || !*src || !dst || !dstsz) return false;
+  addr = inet_addr(src);
+  if ((addr == INADDR_NONE) && strcmp(src, "255.255.255.255")) return false;
+  strncpy(dst, src, dstsz - 1);
+  dst[dstsz - 1] = '\0';
+  return true;
+}
+
+static char *netpsNextToken(char **cursor)
+{
+  char *start, *end;
+  if (!cursor || !*cursor) return 0;
+  start = *cursor;
+  while (*start && isspace((unsigned char)*start)) start++;
+  if (!*start || (*start == '#'))
+  {
+    *cursor = start;
+    return 0;
+  }
+  end = start;
+  while (*end && !isspace((unsigned char)*end)) end++;
+  if (*end)
+  {
+    *end = '\0';
+    end++;
+  }
+  *cursor = end;
+  return start;
+}
+
+static bool netpsParsePosRule(char *cursor, netp_type *out)
+{
+  char *net, *x, *y, *z, *tok1 = 0, *tok2 = 0;
+  if (!cursor || !out) return false;
+  net = netpsNextToken(&cursor);
+  x = netpsNextToken(&cursor);
+  y = netpsNextToken(&cursor);
+  z = netpsNextToken(&cursor);
+  tok1 = netpsNextToken(&cursor);
+  tok2 = netpsNextToken(&cursor);
+  if (!net || !x || !y || !z || !tok1 || netpsNextToken(&cursor)) return false;
+  if (strlen(net) >= sizeof(out->nt)) return false;
   strcpy(out->nt, net);
+  if (!netpsParseIntToken(x, &out->px) || !netpsParseIntToken(y, &out->py) || !netpsParseIntToken(z, &out->pz)) return false;
+  out->rtp = 'p';
   if (netpsIsHoldToken(tok1)) out->hld = 1;
   else if ((out->clr = netpsColorToken(tok1)) == '\0') return false;
-  if (got >= 7)
+  if (tok2)
   {
     if (netpsIsHoldToken(tok2)) out->hld = 1;
     else if (!out->clr && (out->clr = netpsColorToken(tok2))) {}
@@ -80,10 +178,93 @@ static bool netpsParseLine(const char *line, netp_type *out)
   return (out->clr || out->hld);
 }
 
+static bool netpsParseHostRule(char *cursor, netp_type *out)
+{
+  char *tok;
+  bool gotx = false, goty = false, gotz = false;
+  if (!cursor || !out) return false;
+  out->rtp = 'h';
+  while ((tok = netpsNextToken(&cursor)))
+  {
+    char *eq;
+    if (netpsIsHoldToken(tok))
+    {
+      out->hld = 1;
+      continue;
+    }
+    eq = strchr(tok, '=');
+    if (!eq) return false;
+    *eq = '\0';
+    eq++;
+    if (!*eq) return false;
+    if (netpsEqNoCase(tok, "ip"))
+    {
+      if (out->hip || !netpsParseIpValue(eq, out->ip, sizeof(out->ip))) return false;
+      out->hip = true;
+    }
+    else if (netpsEqNoCase(tok, "mac"))
+    {
+      if (out->hmc || !netpsNormalizeMacToken(eq, out->mac, sizeof(out->mac))) return false;
+      out->hmc = true;
+    }
+    else if (netpsEqNoCase(tok, "fqdn"))
+    {
+      if (out->hfq) return false;
+      netpsNormalizeFqdn(eq, out->fqdn, sizeof(out->fqdn));
+      if (!*out->fqdn) return false;
+      out->hfq = true;
+    }
+    else if (netpsEqNoCase(tok, "x"))
+    {
+      if (gotx || !netpsParseIntToken(eq, &out->px)) return false;
+      gotx = true;
+    }
+    else if (netpsEqNoCase(tok, "y"))
+    {
+      if (goty || !netpsParseIntToken(eq, &out->py)) return false;
+      goty = true;
+    }
+    else if (netpsEqNoCase(tok, "z"))
+    {
+      if (gotz || !netpsParseIntToken(eq, &out->pz)) return false;
+      gotz = true;
+    }
+    else if (netpsEqNoCase(tok, "color"))
+    {
+      if (out->clr || ((out->clr = netpsColorToken(eq)) == '\0')) return false;
+    }
+    else return false;
+  }
+  if (!(out->hip || out->hmc || out->hfq)) return false;
+  if (!gotx || !goty || !gotz) return false;
+  return (out->clr || out->hld);
+}
+
+static bool netpsParseLine(const char *line, netp_type *out)
+{
+  char buf[512], *cursor, *kw;
+  if (!line || !out) return false;
+  memset(out, 0, sizeof(*out));
+  strncpy(buf, line, sizeof(buf) - 1);
+  buf[sizeof(buf) - 1] = '\0';
+  cursor = buf;
+  kw = netpsNextToken(&cursor);
+  if (!kw) return false;
+  if (!strcmp(kw, "pos")) return netpsParsePosRule(cursor, out);
+  if (!strcmp(kw, "host")) return netpsParseHostRule(cursor, out);
+  return false;
+}
+
 static bool netpExactIp(const netp_type *ne, in_addr_t *ip)
 {
   char ntmp[19], *cd;
   if (!ne) return false;
+  if (ne->rtp == 'h')
+  {
+    if (!ne->hip) return false;
+    if (ip) *ip = inet_addr(ne->ip);
+    return true;
+  }
   strcpy(ntmp, ne->nt);
   cd = strchr(ntmp, '/');
   if (!cd || strcmp(cd, "/32")) return false;
@@ -112,6 +293,24 @@ static void netpApplyVisual(host_type *ht, const netp_type *ne)
   ht->px = ne->px * SPC;
   ht->py = ne->py * SPC;
   ht->pz = ne->pz * SPC;
+}
+
+static bool netpMatchHostRule(const netp_type *ne, const host_type *ht)
+{
+  char buf[256], mac[18];
+  if (!ne || !ht || (ne->rtp != 'h')) return false;
+  if (ne->hip && strcmp(ne->ip, ht->htip)) return false;
+  if (ne->hmc)
+  {
+    if (!*ht->htmc || !netpsNormalizeMacToken(ht->htmc, mac, sizeof(mac)) || strcmp(ne->mac, mac)) return false;
+  }
+  if (ne->hfq)
+  {
+    if (!*ht->htnm) return false;
+    netpsNormalizeFqdn(ht->htnm, buf, sizeof(buf));
+    if (!*buf || strcmp(ne->fqdn, buf)) return false;
+  }
+  return true;
 }
 
 //cross object vertexs, squares
@@ -577,8 +776,20 @@ void netpsLoad()
   else if ((npos = fopen(hsddata("netpos.txt"), "w")))
   {
     fputs("#pos net x-position y-position z-position colour [hold]\n", npos);
+    fputs("#host ip=1.2.3.4 [mac=00:11:22:33:44:55] [fqdn=host.example] x=0 y=0 z=0 color=green [hold]\n", npos);
     fclose(npos);
   }
+}
+
+bool netpsLineExactIp(const char *line, in_addr *ip)
+{
+  netp_type ne;
+  in_addr_t addr;
+  if (!line || !ip) return false;
+  if (!netpsParseLine(line, &ne)) return false;
+  if (!netpExactIp(&ne, &addr)) return false;
+  ip->s_addr = addr;
+  return true;
 }
 
 //destroy net positions LL
@@ -603,6 +814,11 @@ in_addr_t isBroadcast(in_addr ip)
   ntpsLL.Start(2);
   while ((ne = (netp_type *)ntpsLL.Read(2)))
   {
+    if (ne->rtp == 'h')
+    {
+      ntpsLL.Next(2);
+      continue;
+    }
     strcpy(ntmp, ne->nt);
     if ((cd = strchr(ntmp, '/')))
     {
@@ -619,26 +835,17 @@ in_addr_t isBroadcast(in_addr ip)
 //check if a host is to be positioned into a net
 int hostNet(host_type *ht)
 {
-  netp_type *ne, *match = 0;
+  netp_type *ne;
   ntpsLL.Start(1);
   while ((ne = (netp_type *)ntpsLL.Read(1)))
   {
-    if (inNet(ne->nt, ht->htip))
+    if (((ne->rtp == 'h') && netpMatchHostRule(ne, ht))
+        || ((ne->rtp != 'h') && inNet(ne->nt, ht->htip)))
     {
-      in_addr_t nip = 0;
-      if (netpExactIp(ne, &nip) && (nip == ht->hip.s_addr))
-      {
-        netpApplyVisual(ht, ne);
-        return (ne->hld ? 2 : 1);
-      }
-      if (!match) match = ne;
+      netpApplyVisual(ht, ne);
+      return (ne->hld ? 2 : 1);
     }
     ntpsLL.Next(1);
-  }
-  if (match)
-  {
-    netpApplyVisual(ht, match);
-    return (match->hld ? 2 : 1);
   }
   return 0;
 }
@@ -669,4 +876,3 @@ void pkrcCopy(const char *ifn, const char *ofn)
     fclose(ifile);
   }
 }
-

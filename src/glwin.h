@@ -113,8 +113,18 @@ class MyGLWin
     struct glmu_obj  //menu object
     {
       unsigned char type;  //GLWIN_MENU
-      int left, top, width, sub, value, hotkey;  //display sub-menu object
+      int left, top, width, sub, value, hotkey, textIndent;  //display sub-menu object
+      bool accent;
       char text[96];
+    };
+    struct glmc_obj  //menu colours object
+    {
+      unsigned char type;
+      int left, top, width, count, prefixWidth;
+      int itemWidth[12], itemValue[12];
+      unsigned char itemColor[12][3];
+      bool itemActive[12];
+      char text[32], itemText[12][16];
     };
     int names, selected, currInput, currScroll, screenW, screenH, mouseX, mouseY, menuY;  //input object with focus (for keys), scroll object with focus (for mouse wheel)
     GLuint fontDraw;  //GL compiled font
@@ -132,6 +142,7 @@ class MyGLWin
     void DrawList(GLenum mode, glls_obj *ls);
     void DrawView(GLenum mode, glvw_obj *vw);
     void DrawMenu(GLenum mode, glmu_obj *mu);
+    void DrawMenuColors(GLenum mode, glmc_obj *mc);
     void TabInput(bool nx);
     void GLWinDestroy(glwn_obj *pw);
   public:
@@ -149,7 +160,9 @@ class MyGLWin
     int AddLabel(int left, int top, const char *text);
     void AddList(int left, int top, int right, int bottom, const char *fl);
     void AddView(int left, int top, int right, int bottom, int tab, const char *fl);
-    void AddMenu(int width, const char *text, int itms, int sub, int value, int hotkey = 0, int indent = 0);
+    void AddMenu(int width, const char *text, int itms, int sub, int value, int hotkey = 0, int indent = 0, int textIndent = 0, int anchorRow = 0, bool accent = false);
+    void AddMenuColors(const char *text, int itms, int count, const char *const itemTexts[], const int itemValues[],
+                       const unsigned char itemColors[][3], const bool *itemActive = 0, int indent = 0, int anchorRow = 0);
     void Draw(GLenum mode);
     int DefaultButton();
     bool GetCheck(int name);

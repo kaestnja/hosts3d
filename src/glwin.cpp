@@ -34,6 +34,7 @@
 #define GLWIN_LIST    0x07
 #define GLWIN_VIEW    0x08
 #define GLWIN_MENU    0x09
+#define GLWIN_MENCOL  0x0A
 
 const int TITLEH = 20, MENUH = 18;  //title bar height, menu object height
 const GLubyte GABE_5X10[96][10] =
@@ -711,10 +712,33 @@ void MyGLWin::DrawMenu(GLenum mode, glmu_obj *mu)
   int pr = mu->left + mu->width;
   if (mode == GL_RENDER)
   {
-    if (MouseOver(mu->left + 1, mu->top - 1, pr, mu->top - MENUH) && mu->value) glColor3ub(hlblue[0], hlblue[1], hlblue[2]);
-    else glColor3ub(dlblue[0], dlblue[1], dlblue[2]);
+    bool groupTitle = (!mu->value && !mu->sub);
+    unsigned char fillR = dlblue[0], fillG = dlblue[1], fillB = dlblue[2];
+    unsigned char edgeR = brblue[0], edgeG = brblue[1], edgeB = brblue[2];
+    if (groupTitle)
+    {
+      fillR = slblue[0];
+      fillG = slblue[1];
+      fillB = slblue[2];
+    }
+    else if (MouseOver(mu->left + 1, mu->top - 1, pr, mu->top - MENUH) && mu->value)
+    {
+      fillR = hlblue[0];
+      fillG = hlblue[1];
+      fillB = hlblue[2];
+    }
+    else if (mu->accent)
+    {
+      fillR = (unsigned char)(((int)dlblue[0] + (int)aqua[0]) / 2);
+      fillG = (unsigned char)(((int)dlblue[1] + (int)aqua[1]) / 2);
+      fillB = (unsigned char)(((int)dlblue[2] + (int)aqua[2]) / 2);
+      edgeR = (unsigned char)(((int)brblue[0] + (int)aqua[0]) / 2);
+      edgeG = (unsigned char)(((int)brblue[1] + (int)aqua[1]) / 2);
+      edgeB = (unsigned char)(((int)brblue[2] + (int)aqua[2]) / 2);
+    }
+    glColor3ub(fillR, fillG, fillB);
     glRecti(mu->left, mu->top, pr, mu->top - MENUH);
-    glColor3ub(brblue[0], brblue[1], brblue[2]);
+    glColor3ub(edgeR, edgeG, edgeB);
     glBegin(GL_LINE_LOOP);
       glVertex2i(mu->left, mu->top);
       glVertex2i(pr, mu->top);
@@ -726,14 +750,82 @@ void MyGLWin::DrawMenu(GLenum mode, glmu_obj *mu)
       glRasterPos2i(pr - 10, mu->top - 12);
       glBitmap(4, 7, 0.0, 0.0, 0.0, 0.0, syms[(mu->sub == 1 ? 6 : 7)]);  //point object
     }
-    glColor3ub(white[0], white[1], white[2]);
-    glRasterPos2i(mu->left + 6, mu->top - 14);
+    if (groupTitle) glColor3ub(brgrey[0], brgrey[1], brgrey[2]);
+    else glColor3ub(white[0], white[1], white[2]);
+    glRasterPos2i(mu->left + 6 + mu->textIndent, mu->top - 14);
     DrawString((const unsigned char *)mu->text);
   }
   else  //menu object selectable
   {
     glLoadName((mu->value * 100) + GLWIN_MNUITM);
     glRecti(mu->left + 1, mu->top - 1, pr, mu->top - MENUH);
+  }
+}
+
+void MyGLWin::DrawMenuColors(GLenum mode, glmc_obj *mc)
+{
+  int pr = mc->left + mc->width;
+  if (mode == GL_RENDER)
+  {
+    bool hoverAny = false;
+    int px = mc->left + 6 + mc->prefixWidth + 8;
+    for (int cnt = 0; cnt < mc->count; cnt++)
+    {
+      int ir = px + mc->itemWidth[cnt];
+      if (MouseOver(px + 1, mc->top - 1, ir, mc->top - MENUH) && mc->itemValue[cnt])
+      {
+        hoverAny = true;
+        break;
+      }
+      px = ir + 4;
+    }
+    glColor3ub((hoverAny ? hlblue[0] : dlblue[0]), (hoverAny ? hlblue[1] : dlblue[1]), (hoverAny ? hlblue[2] : dlblue[2]));
+    glRecti(mc->left, mc->top, pr, mc->top - MENUH);
+    glColor3ub(brblue[0], brblue[1], brblue[2]);
+    glBegin(GL_LINE_LOOP);
+      glVertex2i(mc->left, mc->top);
+      glVertex2i(pr, mc->top);
+      glVertex2i(pr, mc->top - MENUH);
+      glVertex2i(mc->left, mc->top - MENUH);
+    glEnd();
+    glColor3ub(white[0], white[1], white[2]);
+    glRasterPos2i(mc->left + 6, mc->top - 14);
+    DrawString((const unsigned char *)mc->text);
+
+    px = mc->left + 6 + mc->prefixWidth + 8;
+    for (int cnt = 0; cnt < mc->count; cnt++)
+    {
+      int ir = px + mc->itemWidth[cnt];
+      bool hover = MouseOver(px + 1, mc->top - 1, ir, mc->top - MENUH) && mc->itemValue[cnt];
+      glColor3ub(mc->itemColor[cnt][0], mc->itemColor[cnt][1], mc->itemColor[cnt][2]);
+      glRecti(px, mc->top - 2, ir, mc->top - MENUH + 2);
+      if (mc->itemActive[cnt]) glColor3ub(white[0], white[1], white[2]);
+      else if (hover) glColor3ub(hlblue[0], hlblue[1], hlblue[2]);
+      else glColor3ub(brblue[0], brblue[1], brblue[2]);
+      glBegin(GL_LINE_LOOP);
+        glVertex2i(px, mc->top - 2);
+        glVertex2i(ir, mc->top - 2);
+        glVertex2i(ir, mc->top - MENUH + 2);
+        glVertex2i(px, mc->top - MENUH + 2);
+      glEnd();
+      glColor3ub(white[0], white[1], white[2]);
+      int tx = px + ((mc->itemWidth[cnt] - ((int)strlen(mc->itemText[cnt]) * 6)) / 2);
+      if (tx < (px + 4)) tx = px + 4;
+      glRasterPos2i(tx, mc->top - 14);
+      DrawString((const unsigned char *)mc->itemText[cnt]);
+      px = ir + 4;
+    }
+  }
+  else
+  {
+    int px = mc->left + 6 + mc->prefixWidth + 8;
+    for (int cnt = 0; cnt < mc->count; cnt++)
+    {
+      int ir = px + mc->itemWidth[cnt];
+      glLoadName((mc->itemValue[cnt] * 100) + GLWIN_MNUITM);
+      glRecti(px + 1, mc->top - 1, ir, mc->top - MENUH);
+      px = ir + 4;
+    }
   }
 }
 
@@ -794,6 +886,7 @@ void MyGLWin::GLWinDestroy(glwn_obj *pw)
   glls_obj *ls;
   glvw_obj *vw;
   glmu_obj *mu;
+  glmc_obj *mc;
   unsigned char *tp;
   GLWinLL.Start(1);
   while ((tp = (unsigned char *)GLWinLL.Read(1)))
@@ -877,6 +970,15 @@ void MyGLWin::GLWinDestroy(glwn_obj *pw)
         {
           mu = (glmu_obj *)tp;
           delete mu;
+          GLWinLL.Delete(1);
+        }
+        else GLWinLL.Next(1);
+        break;
+      case GLWIN_MENCOL:
+        if (!pw)
+        {
+          mc = (glmc_obj *)tp;
+          delete mc;
           GLWinLL.Delete(1);
         }
         else GLWinLL.Next(1);
@@ -1000,7 +1102,8 @@ int MyGLWin::AddLabel(int left, int top, const char *text)
 {
   if (!lastWin) return -1;  //check parent window object exists
   gllb_obj gllb = {GLWIN_LABEL, lastWin, names++, left, top};
-  strcpy(gllb.text, text);
+  strncpy(gllb.text, (text ? text : ""), sizeof(gllb.text) - 1);
+  gllb.text[sizeof(gllb.text) - 1] = '\0';
   GLWinLL.Write(new gllb_obj(gllb));
   return gllb.name;
 }
@@ -1027,7 +1130,7 @@ void MyGLWin::AddView(int left, int top, int right, int bottom, int tab, const c
 }
 
 //create menu object
-void MyGLWin::AddMenu(int width, const char *text, int itms, int sub, int value, int hotkey, int indent)
+void MyGLWin::AddMenu(int width, const char *text, int itms, int sub, int value, int hotkey, int indent, int textIndent, int anchorRow, bool accent)
 {
   glmu_obj glmu;
   glmu.type = GLWIN_MENU;
@@ -1035,7 +1138,8 @@ void MyGLWin::AddMenu(int width, const char *text, int itms, int sub, int value,
   if (mleft < (screenW - (width + 1))) glmu.left = mleft;
   else glmu.left = screenW - (width + 1);
   if (glmu.left < 0) glmu.left = 0;
-  if (mouseY > (itms * MENUH)) glmu.top = mouseY;
+  int desiredTop = mouseY + (anchorRow * MENUH);
+  if (desiredTop > (itms * MENUH)) glmu.top = desiredTop;
   else glmu.top = itms * MENUH;
   if (glmu.top > (screenH - 1)) glmu.top = screenH - 1;
   glmu.top -= menuY;
@@ -1044,8 +1148,48 @@ void MyGLWin::AddMenu(int width, const char *text, int itms, int sub, int value,
   glmu.sub = sub;  //display sub-menu object
   glmu.value = value;
   glmu.hotkey = hotkey;
+  glmu.textIndent = textIndent;
+  glmu.accent = accent;
   strcpy(glmu.text, text);
   GLWinLL.Write(new glmu_obj(glmu));
+}
+
+void MyGLWin::AddMenuColors(const char *text, int itms, int count, const char *const itemTexts[], const int itemValues[],
+                            const unsigned char itemColors[][3], const bool *itemActive, int indent, int anchorRow)
+{
+  glmc_obj glmc;
+  memset(&glmc, 0, sizeof(glmc));
+  glmc.type = GLWIN_MENCOL;
+  if (count > 12) count = 12;
+  glmc.count = count;
+  glmc.prefixWidth = ((int)strlen(text) * 6);
+  strncpy(glmc.text, text, sizeof(glmc.text) - 1);
+  int width = 6 + glmc.prefixWidth + 8;
+  for (int cnt = 0; cnt < glmc.count; cnt++)
+  {
+    strncpy(glmc.itemText[cnt], itemTexts[cnt], sizeof(glmc.itemText[cnt]) - 1);
+    glmc.itemValue[cnt] = itemValues[cnt];
+    glmc.itemColor[cnt][0] = itemColors[cnt][0];
+    glmc.itemColor[cnt][1] = itemColors[cnt][1];
+    glmc.itemColor[cnt][2] = itemColors[cnt][2];
+    glmc.itemActive[cnt] = (itemActive ? itemActive[cnt] : false);
+    glmc.itemWidth[cnt] = (((int)strlen(glmc.itemText[cnt]) * 6) + 10);
+    if (glmc.itemWidth[cnt] < 28) glmc.itemWidth[cnt] = 28;
+    width += glmc.itemWidth[cnt] + 4;
+  }
+  width += 2;
+  int mleft = mouseX + indent;
+  if (mleft < (screenW - (width + 1))) glmc.left = mleft;
+  else glmc.left = screenW - (width + 1);
+  if (glmc.left < 0) glmc.left = 0;
+  int desiredTop = mouseY + (anchorRow * MENUH);
+  if (desiredTop > (itms * MENUH)) glmc.top = desiredTop;
+  else glmc.top = itms * MENUH;
+  if (glmc.top > (screenH - 1)) glmc.top = screenH - 1;
+  glmc.top -= menuY;
+  menuY += MENUH;
+  glmc.width = width;
+  GLWinLL.Write(new glmc_obj(glmc));
 }
 
 //draw all 2D GUI objects
@@ -1060,6 +1204,7 @@ void MyGLWin::Draw(GLenum mode)
   glls_obj *ls;
   glvw_obj *vw;
   glmu_obj *mu;
+  glmc_obj *mc;
   unsigned char *tp;
   GLWinLL.Start(1);
   while ((tp = (unsigned char *)GLWinLL.Read(1)))
@@ -1101,6 +1246,10 @@ void MyGLWin::Draw(GLenum mode)
       case GLWIN_MENU:
         mu = (glmu_obj *)tp;
         DrawMenu(mode, mu);
+        break;
+      case GLWIN_MENCOL:
+        mc = (glmc_obj *)tp;
+        DrawMenuColors(mode, mc);
         break;
     }
     GLWinLL.Next(1);

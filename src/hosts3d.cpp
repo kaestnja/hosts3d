@@ -31,11 +31,14 @@
 #include <getopt.h>  //getopt()
 #include <winsock2.h>
 #include <ws2tcpip.h>
+#include <windows.h>
+#include <iphlpapi.h>
 #else
 #include <arpa/inet.h>  //inet_addr(), inet_ntoa()
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>  //fcntl()
+#include <ifaddrs.h>
 #include <limits.h>
 #include <netdb.h>
 #include <syslog.h>  //syslog()
@@ -49,9 +52,6 @@
 #include "version.h"
 #include "glwin.h"
 #include "objects.h"
-#ifdef __MINGW32__
-#include <windows.h>
-#endif
 
 FILE *pfile;  //packet traffic record file
 bool goRun = true, goSize = true, goAnim = true, mMove = false, mView = false, dAnom = false, refresh = false, animate = false, fullscn = false;
@@ -297,6 +297,7 @@ struct localhsen_if_type
   char id[256];
   char name[256];
   char klass[16];
+  char ips[160];
   bool selected;
   unsigned char sensorId;
 };
@@ -465,8 +466,8 @@ enum menustate_type { msNone, msToggle, msChoice };
 
 struct menu_selection_state_type
 {
-  bool any, mixedLock, mixedColour, mixedZone;
-  bool lockOn;
+  bool any, mixedLock, mixedColour, mixedZone, mixedPersistent;
+  bool lockOn, persistentOn;
   unsigned char colour;
   unsigned char zone;
 };
@@ -482,9 +483,13 @@ static bool parseBindingValue(const char *value, int *out);
 static void bindingLabel(int encoded, char *buf, size_t bufsz);
 static const char *menuLabelWithHint(const char *title, int hotkey, menustate_type state = msNone, bool active = false);
 static int menuDepthForId(int menuid);
+static int menuParentId(int menuid);
+static int menuAnchorRowForMenu(int menuid);
 static int menuItemHotkey(int value, keyact_type action);
-static int menuItemWidth(const char *label, bool submenu);
-static void addMenuItem(const char *title, int items, int sub, int value, int mnemonic = 0, keyact_type action = kaCount, menustate_type state = msNone, bool active = false);
+static int menuItemWidth(const char *label, bool submenu, int itemIndent = 0);
+static void addMenuItem(const char *title, int items, int sub, int value, int mnemonic = 0, keyact_type action = kaCount, menustate_type state = msNone, bool active = false, int itemIndent = 0, bool accent = false);
+static void addMenuColorsRow(const char *title, int items, int count, const char *const itemTexts[], const int itemValues[],
+                             const unsigned char itemColors[][3], const bool *itemActive = 0);
 static keyact_type keyActionFromInput(int encoded);
 static void triggerKeyAction(keyact_type action);
 static keyact_type menuActionForValue(int value);
@@ -521,7 +526,6 @@ static void hostnameResolvePumpResults();
 static bool hostnameResolveStatusValue(char *buf, size_t bufsz, osd_color_type *color);
 static bool hostDnsSuffixKey(const char *hostname, unsigned int commonLayers, bool deeperThan, char *buf, size_t bufsz);
 static unsigned int combineSelectedDnsHosts(unsigned int commonLayers, bool deeperThan);
-static bool parseNetposExactIpToken(const char *token, in_addr *ip);
 static bool hostApplyNetposLayout(host_type *ht);
 static void netposExactHostsSync();
 static const char *packetShapeFilterLabel(unsigned char psf);
@@ -581,17 +585,22 @@ void pcktsDestroy(bool gh = false);
 void offsetReset();
 static void dynamicHostsCleanupMaybe();
 static void settsSave();
-static void localHsenDialogOpen();
-static bool localHsenStopManaged(bool showmsg = false);
+static void localHsenDialogOpen(bool rescan = true);
+static bool localHsenStopManaged(char *errbuf = 0, size_t errbufsz = 0);
 static bool localHsenSaveUiState();
-static bool localHsenStartSelected(bool showmsg = false);
+static bool localHsenStartSelected(char *errbuf = 0, size_t errbufsz = 0);
 static bool localHsenDiscoverInterfaces(bool keepSelections = true);
+static void localHsenPopulateInterfaceIps();
+static bool localHsenManagedRunning();
 static void localHsenAutostartMaybe();
 void displayGL();
 
 static const int MENU_LEVEL_INDENT = 18;
+static const int MENU_GROUP_ITEM_INDENT = 12;
 static int menuBuildDepth = 0;
 static int menuBaseX = 0;
+static int menuAnchorRow = 0;
+static int menuOpenId = 0;
 
 void hsdStop(int sig)
 {
@@ -897,23 +906,6 @@ static void hostRuntimeNoteDiscoveryName(host_type *ht, const char *name)
   meta->dnm[sizeof(meta->dnm) - 1] = '\0';
 }
 
-static bool parseNetposExactIpToken(const char *token, in_addr *ip)
-{
-  char buf[32], *slash;
-  unsigned long addr;
-  if (!token || !*token || !ip) return false;
-  strncpy(buf, token, sizeof(buf) - 1);
-  buf[sizeof(buf) - 1] = '\0';
-  slash = strchr(buf, '/');
-  if (!slash || strcmp(slash, "/32")) return false;
-  *slash = '\0';
-  if (!*buf) return false;
-  addr = inet_addr(buf);
-  if ((addr == INADDR_NONE) && strcmp(buf, "255.255.255.255")) return false;
-  ip->s_addr = addr;
-  return true;
-}
-
 static bool hostApplyNetposLayout(host_type *ht)
 {
   int oldx, oldy, oldz, hnet;
@@ -941,7 +933,7 @@ static void netposExactHostsSync()
   std::map<unsigned long, bool>::iterator mit;
   std::map<unsigned long, bool> exactHosts;
   FILE *npos;
-  char line[512], net[19];
+  char line[512];
   unsigned int exactCount = 0;
   bool changed = false;
   bool pausedHosts = false;
@@ -961,7 +953,7 @@ static void netposExactHostsSync()
     while (fgets(line, sizeof(line), npos))
     {
       in_addr ip;
-      if ((sscanf(line, "pos %18s", net) == 1) && parseNetposExactIpToken(net, &ip))
+      if (netpsLineExactIp(line, &ip))
         exactHosts[(unsigned long)ip.s_addr] = true;
     }
     fclose(npos);
@@ -2065,9 +2057,9 @@ static const char *sipsToLabel(sips_type mode)
 {
   switch (mode)
   {
-  case sel: return "Selection";
-  case all: return "All";
-  default: return "Off";
+  case sel: return "Hosts in Selection";
+  case all: return "All Hosts";
+  default: return "Hidden";
   }
 }
 
@@ -2075,17 +2067,17 @@ static const char *sonaToLabel(sona_type mode)
 {
   switch (mode)
   {
-  case alt: return "Alert";
-  case ipn: return "Show IP + Name";
-  case hst: return "Show Host";
-  case slt: return "Select Host";
-  default: return "Do Nothing";
+  case alt: return "Create Activity Alert";
+  case ipn: return "Show Label On Activity";
+  case hst: return "Highlight Host";
+  case slt: return "Add Host to Selection On Activity";
+  default: return "No Extra Action On Activity";
   }
 }
 
 static const char *osdDisplayScopeLabel()
 {
-  return ((setts.sona == ipn) ? "On-Active" : sipsToLabel(setts.sips));
+  return ((setts.sona == ipn) ? "On Activity" : sipsToLabel(setts.sips));
 }
 
 static void packetTrafficLabelSet(const char *path)
@@ -2247,6 +2239,38 @@ static void packetTrafficDurationLabel(time_t started, char *buf, size_t bufsz)
   snprintf(buf, bufsz, "%02u:%02u:%02u", hours, mins, secs);
 }
 
+static void packetCaptureReplayStatusLabel(char *buf, size_t bufsz, osd_color_type *color)
+{
+  char elapsed[16];
+  if (color) *color = osdNormal;
+  if (!buf || !bufsz) return;
+  if (ptrc == rec)
+  {
+    packetTrafficDurationLabel(packetTrafficStarted, elapsed, sizeof(elapsed));
+    snprintf(buf, bufsz, "Recording %s", elapsed);
+    if (color) *color = osdAccent;
+  }
+  else if (ptrc == rpy)
+  {
+    strcpy(buf, "Replay");
+    if (color) *color = osdAccent;
+  }
+  else strcpy(buf, "Idle");
+}
+
+static void replayPacketTimeLabel(char *buf, size_t bufsz)
+{
+  time_t replayPacketTime;
+  if (!buf || !bufsz) return;
+  if (ptrc != rpy)
+  {
+    *buf = 0;
+    return;
+  }
+  replayPacketTime = (time_t) pkrp.ptime.tv_sec;
+  strftime(buf, bufsz, "%d-%m-%y %H:%M:%S", localtime(&replayPacketTime));
+}
+
 static void osdAddSection(const char *label)
 {
   osd_row_type *row;
@@ -2359,7 +2383,8 @@ void osdUpdate()
 {
   char sensorLabel[16], packetFilterLabel[32], portLabel[16], knownLabel[24];
   char packetLimitLabel[16], visiblePacketsLabel[16], hostnameResolveLabel[24];
-  osd_color_type hostnameResolveColor = osdNormal;
+  char packetCaptureReplayLabel[32], replayPacketTime[24];
+  osd_color_type hostnameResolveColor = osdNormal, packetCaptureReplayColor = osdNormal;
   if (setts.sen) snprintf(sensorLabel, sizeof(sensorLabel), "%u", setts.sen);
   else strcpy(sensorLabel, "All");
   strcpy(packetFilterLabel, packetTreeFilterLabel(packetTreeFilter));
@@ -2372,29 +2397,33 @@ void osdUpdate()
   osdTextLineCount = 0;
   osdAddSection("FILTERS");
   osdAddRow("Sensor Filter", sensorLabel, (setts.sen ? osdAccent : osdNormal), osaSensorFilter);
-  osdAddRow("Packet Filter", packetFilterLabel, ((packetTreeFilter != pfAll) ? osdAccent : osdNormal), osaPacketFilter);
+  osdAddRow("Packet Type Filter", packetFilterLabel, ((packetTreeFilter != pfAll) ? osdAccent : osdNormal), osaPacketFilter);
   osdAddRow("Port Filter", portLabel, (setts.prt ? osdAccent : osdNormal), osaPortFilter);
   osdAddSection("LABELS");
   osdAddRow("Display Mode", sipnToLabel(setts.sipn), osdNormal, osaDisplayMode);
   osdAddRow("Display Scope", osdDisplayScopeLabel(), ((setts.sips != off) || (setts.sona == ipn) ? osdAccent : osdNormal), osaDisplayScope);
-  osdAddRow("Known NetPos /32", knownLabel, (knownNetposExactHostCount ? osdAccent : osdNormal));
-  osdAddRow("On-Active Action", sonaToLabel(setts.sona), osdNormal, osaOnActiveAction);
+  osdAddRow("Known NetPos Exact", knownLabel, (knownNetposExactHostCount ? osdAccent : osdNormal));
+  osdAddRow("On Activity", sonaToLabel(setts.sona), osdNormal, osaOnActiveAction);
   osdAddSection("PACKETS");
   osdAddRow("Anomaly Detection", osdOnOff(setts.anm), (setts.anm ? osdNormal : osdAccent), osaAnomalyDetection);
   osdAddRow("Fast Packets", osdOnOff(setts.fsp), (setts.fsp ? osdAccent : osdNormal), osaFastPackets);
-  osdAddRow("Add Destination Hosts", osdOnOff(setts.adh), (setts.adh ? osdAccent : osdNormal), osaAddDestinationHosts);
-  osdAddRow("Show Broadcast Hosts", osdOnOff(setts.bct), (setts.bct ? osdAccent : osdNormal), osaShowBroadcastHosts);
-  osdAddRow("New Host Packets", osdOnOff(setts.nhp), (setts.nhp ? osdAccent : osdNormal), osaNewHostPackets);
-  osdAddRow("New Host Links", osdOnOff(setts.nhl), (setts.nhl ? osdAccent : osdNormal), osaNewHostLinks);
-  osdAddRow("Show Packet Dest Port", osdOnOff(setts.pdp), (setts.pdp ? osdAccent : osdNormal), osaShowPacketDestPort);
+  osdAddRow("Create Hosts for Destination Targets", osdOnOff(setts.adh), (setts.adh ? osdAccent : osdNormal), osaAddDestinationHosts);
+  osdAddRow("Simulate Broadcast to all Known Net Hosts", osdOnOff(setts.bct), (setts.bct ? osdAccent : osdNormal), osaShowBroadcastHosts);
+  osdAddRow("Show Packets for New Hosts", osdOnOff(setts.nhp), (setts.nhp ? osdAccent : osdNormal), osaNewHostPackets);
+  osdAddRow("Auto Link New Hosts", osdOnOff(setts.nhl), (setts.nhl ? osdAccent : osdNormal), osaNewHostLinks);
+  osdAddRow("Show Packet Destination Port", osdOnOff(setts.pdp), (setts.pdp ? osdAccent : osdNormal), osaShowPacketDestPort);
   osdAddRow("Packet Limit", packetLimitLabel, osdNormal, osaPacketLimit);
   osdAddSection("RUNTIME");
   osdAddRow("Packet Animation", (goAnim ? "Running" : "Paused"), (goAnim ? osdNormal : osdAccent), osaPacketAnimation);
+  packetCaptureReplayStatusLabel(packetCaptureReplayLabel, sizeof(packetCaptureReplayLabel), &packetCaptureReplayColor);
+  osdAddRow("Packet Capture & Replay", packetCaptureReplayLabel, packetCaptureReplayColor);
+  replayPacketTimeLabel(replayPacketTime, sizeof(replayPacketTime));
+  if (replayPacketTime[0]) osdAddRow("Replay Packet Time", replayPacketTime, osdAccent);
   osdAddRow("Visible Packets", visiblePacketsLabel);
   hostnameResolveStatusValue(hostnameResolveLabel, sizeof(hostnameResolveLabel), &hostnameResolveColor);
   osdAddRow("Hostname Resolve", hostnameResolveLabel, hostnameResolveColor);
-  osdAddRow("Unacked Anomalies", (dAnom ? "Y" : ""), (dAnom ? osdAlert : osdNormal), osaAcknowledgeAnomalies);
-  if (lnkht) osdAddRow("Link Line", "Pending", osdAccent);
+  osdAddRow("Unacknowledged Anomalies", (dAnom ? "Y" : ""), (dAnom ? osdAlert : osdNormal), osaAcknowledgeAnomalies);
+  if (lnkht) osdAddRow("Host Line", "Pending", osdAccent);
 }
 
 static void osdPacketHitsClear()
@@ -2551,7 +2580,7 @@ static void drawPacketTrafficStatus()
   y = top - PACKET_STATUS_PAD_Y - 10;
   glColor3ub(brgrey[0], brgrey[1], brgrey[2]);
   glRasterPos2i(left + PACKET_STATUS_PAD_X, y);
-  GLWin.DrawString((const unsigned char *)"PACKET TRAFFIC");
+  GLWin.DrawString((const unsigned char *)"PACKET CAPTURE & REPLAY");
   y -= PACKET_STATUS_LINE_H + 2;
 
   glColor3ub(white[0], white[1], white[2]);
@@ -3112,7 +3141,7 @@ void hostDetails()
     strcat(htdtls, "\nLast Discovery Name: ");
     strcat(htdtls, meta->dnm);
   }
-  if (hostIsKnownNetpos(seltd)) strcat(htdtls, "\nKnown Host: netpos /32");
+  if (hostIsKnownNetpos(seltd)) strcat(htdtls, "\nKnown Host: netpos exact");
 }
 
 //2D GUI window "please wait"
@@ -4030,27 +4059,49 @@ void btnProcess(int gs)
       else messageBox("ERROR", "Enter Days, Hours or Minutes!");
       break;
     case HSD_HSENRUN:
+    {
+      char emsg[160];
       if (gs == GLWIN_MISC1)
       {
         if (!localHsenSaveUiState()) break;
-        settsSave();
         GLWin.Close(false);
-        localHsenDialogOpen();
+        localHsenDialogOpen(true);
       }
-      else if (gs == GLWIN_MISC2)
-      {
-        localHsenStopManaged(true);
-      }
-      else
+      else if (gs == GLWIN_OK)
       {
         if (!localHsenSaveUiState()) break;
         settsSave();
-        if (localHsenStartSelected(true)) GLWin.Close();
+      }
+      else
+      {
+        bool running = localHsenManagedRunning();
+        emsg[0] = '\0';
+        if (running)
+        {
+          localHsenStopManaged(emsg, sizeof(emsg));
+          GLWin.Close(false);
+          localHsenDialogOpen(false);
+          if (*emsg) messageBox("ERROR", emsg);
+        }
+        else
+        {
+          if (!localHsenSaveUiState()) break;
+          localHsenStartSelected(emsg, sizeof(emsg));
+          GLWin.Close(false);
+          localHsenDialogOpen(false);
+          if (*emsg) messageBox("ERROR", emsg);
+        }
       }
       break;
+    }
     case HSD_HSENSTP:
-      localHsenStopManaged(true);
+    {
+      char emsg[160];
+      emsg[0] = '\0';
+      localHsenStopManaged(emsg, sizeof(emsg));
+      if (*emsg) messageBox("ERROR", emsg);
       break;
+    }
   }
 }
 
@@ -4102,9 +4153,9 @@ void infoHost()
     fputs(htdtls, info);
     fprintf(info, "\n\nAnomaly: %s\nLast Sensor: %u\nLast Packet: %sShow Packets: %s\nDownloads: %s"
       , (seltd->anm ? "Yes" : "No"), seltd->lsn, ctime(&seltd->lpk), (seltd->shp ? "Yes" : "No"), formatBytes(seltd->dld, buf));
-    fprintf(info, "\nUploads: %s\nAuto Link Lines: %s\nLock: %s\nLifetime: %s"
+    fprintf(info, "\nUploads: %s\nAuto Link Hosts: %s\nLock: %s\nLifetime: %s"
       , formatBytes(seltd->uld, buf), (seltd->alk ? "Yes" : "No"), (seltd->lck ? "On" : "Off"), (hostIsDynamic(seltd) ? "Dynamic" : "Static"));  //reuse buf
-    if (hostIsKnownNetpos(seltd)) fprintf(info, "\nKnown Host: netpos /32");
+    if (hostIsKnownNetpos(seltd)) fprintf(info, "\nKnown Host: netpos exact");
     if (meta && meta->pr)
     {
       fprintf(info, "\nLast Protocol: %s", (meta->pr == IPPROTO_OTHER ? "Other" : protoDecode(meta->pr, pbuf)));
@@ -4138,7 +4189,20 @@ void infoSelectionForEachCb(void **data, HtArgType arg1, HtArgType arg2, HtArgTy
   host_type *ht = *((host_type **) data);
   FILE *fp = (FILE *) ptrFromHtArg(arg1);
   if (ht->sld)
-    fprintf(fp, "\n%s\t%s", ht->htip, ht->htnm);
+  {
+    host_runtime_meta_type *meta = hostRuntimeMeta(ht, false);
+    char sensorBuf[8];
+    if (ht->lsn) snprintf(sensorBuf, sizeof(sensorBuf), "%u", ht->lsn);
+    else strcpy(sensorBuf, "-");
+    fprintf(fp, "\n%-15s  %-24s  %-7s  %-7s  %-4s  %-11s  %s",
+            ht->htip,
+            (*ht->htnm ? ht->htnm : "-"),
+            (ht->anm ? "Yes" : "No"),
+            (hostIsDynamic(ht) ? "Dynamic" : "Static"),
+            (ht->lck ? "On" : "Off"),
+            sensorBuf,
+            ((meta && *meta->dnm) ? meta->dnm : "-"));
+  }
 }
 
 //generate selection info
@@ -4147,7 +4211,9 @@ void infoSelection()
   FILE *info;
   if ((info = fopen(hsddata("tmp-hinfo-hsd"), "w")))
   {
-    fprintf(info, "CURRENT SELECTION\n");
+    fprintf(info, "CURRENT SELECTION\n\n");
+    fprintf(info, "%-15s  %-24s  %-7s  %-7s  %-4s  %-11s  %s",
+            "IP", "Name", "Anomaly", "Type", "Lock", "Last Sensor", "Last Discovery Name");
     hstsByPos.forEach(1, &infoSelectionForEachCb, htArgFromPtr(info), 0, 0, 0);
     fclose(info);
   }
@@ -4581,7 +4647,7 @@ void GLFWCALL keyboardGL(int key, int action)
         if (fileExists(hsddata(packetTrafficLabel))) setStringValue(replayName, sizeof(replayName), packetTrafficLabel);
         else setStringValue(replayName, sizeof(replayName), firstReplay);
         GLWin.CreateWin(-1, -1, 332, 234, "REPLAY PACKET TRAFFIC FILE...", true, true);
-        GLWin.AddLabel(10, 10, "Choose Recording:");
+        GLWin.AddLabel(10, 10, "Choose Packet Traffic File:");
         GLResult[0] = (GLWin.AddInput(10, 26, 50, 251, replayName) * 100) + HSD_HPTRPY;
         GLWin.AddList(10, 52, 10, 50, hsddata("tmp-flist-hsd"));
         GLWin.AddButton(128, 60, GLWIN_OK, "Replay", false, true);
@@ -4671,6 +4737,7 @@ static keyact_type menuActionForValue(int value)
     case 47: return kaAcknowledgeAllAnomalies;
     case 60: return kaShowAllPackets;
     case 69: return kaPacketsOff;
+    case 176: return kaToggleAnimation;
     case 70: return kaViewHome;
     case 71: return kaViewPos1;
     case 72: return kaViewPos2;
@@ -4715,11 +4782,13 @@ static void menuSelectionStateCb(void **data, HtArgType arg1, HtArgType arg2, Ht
   {
     state->any = true;
     state->lockOn = ht->lck;
+    state->persistentOn = ht->pip;
     state->colour = ht->clr;
     state->zone = hostZone(ht);
     return;
   }
   if (state->lockOn != ((bool) ht->lck)) state->mixedLock = true;
+  if (state->persistentOn != ((bool) ht->pip)) state->mixedPersistent = true;
   if (state->colour != ht->clr) state->mixedColour = true;
   zone = hostZone(ht);
   if (state->zone != zone) state->mixedZone = true;
@@ -4730,6 +4799,23 @@ static menu_selection_state_type menuSelectionState()
   menu_selection_state_type state = {0};
   hstsByIp.forEach(1, &menuSelectionStateCb, htArgFromPtr(&state), 0, 0, 0);
   return state;
+}
+
+static void packetDisplayStateCb(void **data, HtArgType arg1, HtArgType arg2, HtArgType arg3, HtArgType arg4)
+{
+  host_type *ht = *((host_type **) data);
+  bool *showing = (bool *) ptrFromHtArg(arg1);
+  (void) arg2;
+  (void) arg3;
+  (void) arg4;
+  if (ht->shp) *showing = true;
+}
+
+static bool packetDisplayActive()
+{
+  bool showing = (setts.nhp != 0);
+  if (!showing) hstsByIp.forEach(1, &packetDisplayStateCb, htArgFromPtr(&showing), 0, 0, 0);
+  return showing;
 }
 
 static void hostDeleteManaged(host_type *ht)
@@ -4965,12 +5051,10 @@ void mnuKeyProcessLe36Cb(void **data, HtArgType arg1, HtArgType arg2, HtArgType 
 	break;  //lock off
 
       case 23:
-	ht->dld = 0;
-	break;  //reset downloads
-
       case 24:
+	ht->dld = 0;
 	ht->uld = 0;
-	break;  //reset uploads
+	break;  //reset traffic counters
 
       case 25:
 	for (cnt = 0; cnt < SVCS; cnt++)
@@ -4998,11 +5082,14 @@ void mnuKeyProcessLe36Cb(void **data, HtArgType arg1, HtArgType arg2, HtArgType 
 //process 2D GUI menu item selected
 void mnuProcess(int m)
 {
+  int previousMenuId = menuOpenId;
   GLWin.Close();  //close all 2D GUI windows
   GLResult[0] = 0;
   if (!m) return;
+  menuAnchorRow = (m == menuParentId(previousMenuId) ? menuAnchorRowForMenu(previousMenuId) : 0);
   menuBuildDepth = menuDepthForId(m);
   if (m == 100) menuBaseX = mPsx;
+  menuOpenId = ((m == 100) || (menuBuildDepth > 0) ? m : 0);
   if (m <= 9)
   {
     waitShow();
@@ -5116,6 +5203,14 @@ void mnuProcess(int m)
         setts.anm = !setts.anm;
         dAnom = setts.anm;
         break;
+      case 173:  //anomaly detection on
+        setts.anm = true;
+        dAnom = true;
+        break;
+      case 174:  //anomaly detection off
+        setts.anm = false;
+        dAnom = false;
+        break;
       case 50:  //show selection IPs/names
         setts.sips = sel;
         if (setts.sona == ipn) setts.sona = don;
@@ -5174,7 +5269,7 @@ void mnuProcess(int m)
         osdUpdate();
         break;
       case 68:  //enter port to show packets for
-        GLWin.CreateWin(-1, -1, 158, 100, "PACKETS PORT");
+        GLWin.CreateWin(-1, -1, 158, 100, "PORT FILTER");
         GLWin.AddLabel(10, 15, "Enter Port No.:");
         GLResult[0] = (GLWin.AddInput(106, 10, 5, 5, "") * 100) + HSD_PKTSPRT;
         GLWin.AddButton(30, 40, GLWIN_OK, "OK", true, true);
@@ -5212,6 +5307,30 @@ void mnuProcess(int m)
         break;
       }
       case 69: triggerKeyAction(kaPacketsOff); break;  //packets off
+      case 176: triggerKeyAction(kaToggleAnimation); break;  //pause/resume packet animation
+      case 177: triggerKeyAction(kaSelectAll); break;  //select all hosts
+      case 178: triggerKeyAction(kaInvertSelection); break;  //invert selection
+      case 179: triggerKeyAction(kaSelectNamed); break;  //select all named hosts
+      case 180: triggerKeyAction(kaShowSelectionPackets); break;  //show packets for selection
+      case 181: triggerKeyAction(kaHideSelectionPackets); break;  //stop showing packets for selection
+      case 182: triggerKeyAction(kaExportSelectionCsv); break;  //export selection csv
+      case 183: triggerKeyAction(kaMakeHost); break;  //create host
+      case 184: triggerKeyAction(kaToggleOsd); break;  //show/hide osd
+      case 187: triggerKeyAction(kaToggleSelectionPersistant); break;  //toggle persistent host labels for selection
+      case 188: triggerKeyAction(kaCreateLinkLine); break;  //start link line with selected host
+      case 189: triggerKeyAction(kaDeleteLinkLine); break;  //start delete link line with selected host
+      case 190: triggerKeyAction(kaAutoLinksAll); break;  //auto link all hosts
+      case 191: triggerKeyAction(kaAutoLinksSelection); break;  //auto link hosts in selection
+      case 192: triggerKeyAction(kaStopAutoLinksSelection); break;  //stop auto link hosts in selection
+      case 193: mnuProcess(39); break;  //delete link lines for hosts in selection
+      case 194: triggerKeyAction(kaToggleNewHostLinks); break;  //toggle auto link new hosts
+      case 195: triggerKeyAction(kaDeleteAllLinks); break;  //delete all link lines
+      case 196: triggerKeyAction(kaRecordPacketTraffic); break;  //start recording packet traffic
+      case 197: triggerKeyAction(kaStopPacketTraffic); break;  //stop recording/replay
+      case 198: triggerKeyAction(kaReplayPacketTraffic); break;  //replay packet traffic
+      case 199: triggerKeyAction(kaSkipReplayPacket); break;  //skip next replay packet
+      case 200: triggerKeyAction(kaOpenPacketTrafficFile); break;  //open packet traffic file
+      case 201: triggerKeyAction(kaSavePacketTrafficFile); break;  //save packet traffic file as
       case 70: triggerKeyAction(kaViewHome); break;  //recall home view
       case 71: triggerKeyAction(kaViewPos1); break;  //recall view position 1
       case 72: triggerKeyAction(kaViewPos2); break;  //recall view position 2
@@ -5264,8 +5383,13 @@ void mnuProcess(int m)
         localHsenDialogOpen();
         break;
       case 95:  //stop local hsen
-        localHsenStopManaged(true);
+      {
+        char emsg[160];
+        emsg[0] = '\0';
+        localHsenStopManaged(emsg, sizeof(emsg));
+        if (*emsg) messageBox("ERROR", emsg);
         break;
+      }
       case 96:  //resolve hostnames for selection
       {
         ResolveHostnamesCbData rd = {0, 0, 0, 0};
@@ -5325,10 +5449,9 @@ void mnuProcess(int m)
         goHosts = 0;
         break;
       }
-      case 168: combineSelectedDnsHosts(4, true); break;   //combine selected hosts by DNS suffix with 5+ layers
-      case 169: combineSelectedDnsHosts(4, false); break;  //combine selected hosts by DNS suffix with 4 layers
-      case 170: combineSelectedDnsHosts(3, false); break;  //combine selected hosts by DNS suffix with 3 layers
-      case 171: combineSelectedDnsHosts(2, false); break;  //combine selected hosts by DNS suffix with 2 layers
+      case 168: combineSelectedDnsHosts(3, true); break;   //combine selected hosts by DNS suffix with 4+ layers
+      case 169: combineSelectedDnsHosts(3, false); break;  //combine selected hosts by DNS suffix with 3 layers
+      case 170: combineSelectedDnsHosts(2, false); break;  //combine selected hosts by DNS suffix with 2 layers
       case 97:
         GLWin.Close();
         helpOverlayToggle();
@@ -5383,112 +5506,205 @@ void mnuProcess(int m)
         break;
       case 99: goRun = false; break;  //exit
       case 100:
-        addMenuItem("MAIN", 12, 0, 0);
-        if (seltd) addMenuItem("Selected", 12, 1, 101, 'D');
-        addMenuItem("Selection", 12, 1, 102, 'S');
-        addMenuItem("Anomalies", 12, 1, 103, 'A');
-        addMenuItem("IP/Name", 12, 1, 104, 'N');
-        addMenuItem("Packets", 12, 1, 105, 'P');
-        addMenuItem("On-Active", 12, 1, 106, 'O');
-        addMenuItem("View", 12, 1, 107, 'V');
-        addMenuItem("Layout", 12, 1, 108, 'L');
-        addMenuItem("Other", 12, 1, 109, 'T');
-        addMenuItem("Local hsen", 12, 0, 94, 'H');
-        addMenuItem("Exit", 12, 0, 99, 'X');
+      {
+        bool pktDisplay = packetDisplayActive();
+        int mainItems = (seltd ? 22 : 21);
+        addMenuItem("MAIN", mainItems, 0, 0);
+        if (seltd) addMenuItem("Selected Host", mainItems, 1, 101, 'D');
+        addMenuItem("Selection of Hosts", mainItems, 1, 102, 'S');
+        addMenuItem("Host Lines", mainItems, 1, 185, 0, kaCount, msNone, false, 0, true);
+        addMenuItem("Anomalies", mainItems, 1, 103, 'A');
+        addMenuItem("Host Labels", mainItems, 1, 104, 'N');
+        addMenuItem("Packet Filters", mainItems, 1, 105, 'P');
+        addMenuItem((pktDisplay ? "Packet Display Off" : "Packet Display On"), mainItems, 0, (pktDisplay ? 69 : 60), 0, kaCount, msNone, false, 0, true);
+        addMenuItem((goAnim ? "Pause Packet Animation" : "Resume Packet Animation"), mainItems, 0, 176, 0, kaCount, msNone, false, 0, true);
+        addMenuItem("Packet Capture & Replay", mainItems, 1, 186, 0, kaCount, msNone, false, 0, true);
+        addMenuItem("On Activity", mainItems, 1, 106, 'O');
+        addMenuItem("View", mainItems, 1, 107, 'V');
+        addMenuItem("Net Layout", mainItems, 1, 108, 'L');
+        addMenuItem("Net Positions Editor", mainItems, 0, 90, 'N', kaCount, msNone, false, 0, true);
+        addMenuItem("Create Host...", mainItems, 0, 183, 0, kaMakeHost, msNone, false, 0, true);
+        addMenuItem("Select Inactive Hosts", mainItems, 1, 109, 'T');
+        addMenuItem("Find Hosts...", mainItems, 0, 93, 0, kaFindHosts);
+        addMenuItem((setts.osd ? "Hide OSD" : "Show OSD"), mainItems, 0, 184, 0, kaToggleOsd, msNone, false, 0, true);
+        addMenuItem("Help", mainItems, 0, 97, 0, kaShowHelp);
+        addMenuItem("About Hosts3D", mainItems, 0, 98, 'A');
+        addMenuItem("Configure Local Sensors (hsen)", mainItems, 0, 94, 'H');
+        addMenuItem("Exit", mainItems, 0, 99, 'X');
         break;
+      }
       case 101:
-        addMenuItem("SELECTED", 8, 2, 100, GLFW_KEY_BACKSPACE);
-        addMenuItem("Information", 8, 0, 40, 0, kaShowHostInformation);
-        addMenuItem("Show Packets Only", 8, 0, 41, 'P');
+        addMenuItem("SELECTED HOST", 8, 2, 100, GLFW_KEY_BACKSPACE);
+        addMenuItem("Host Information", 8, 0, 40, 0, kaShowHostInformation);
+        addMenuItem("Show Only This Host's Packets", 8, 0, 41, 'P');
         addMenuItem("Move Here", 8, 0, 42, 'M');
         addMenuItem("Go To", 8, 0, 43, 'G');
         addMenuItem("Hostname", 8, 0, 44, 0, kaEditHostname);
         addMenuItem("Remarks", 8, 0, 45, 0, kaEditRemarks);
-        addMenuItem("Add Net Position", 8, 0, 91, 'A');
+        addMenuItem("Add This Host To Net Positions", 8, 0, 91, 'A');
         break;
       case 102:
-        addMenuItem("SELECTION", 14, 2, 100, GLFW_KEY_BACKSPACE);
-        addMenuItem("Information", 14, 0, 46, 0, kaShowSelectionInformation);
-        addMenuItem("Add Multiple Hosts To NetPos", 14, 0, 172);
-        addMenuItem("Resolve Hostnames", 14, 0, 96, 'H');
-        addMenuItem("Combine by DNS Suffix (5+ Layers)", 14, 0, 168);
-        addMenuItem("Combine by DNS Suffix (4 Layers)", 14, 0, 169);
-        addMenuItem("Combine by DNS Suffix (3 Layers)", 14, 0, 170);
-        addMenuItem("Combine by DNS Suffix (2 Layers)", 14, 0, 171);
-        addMenuItem("Colour", 14, 1, 110, 'C');
-        addMenuItem("Lock", 14, 1, 111, 'L');
-        addMenuItem("Move To Zone", 14, 1, 112, 'M');
-        addMenuItem("Arrange", 14, 1, 113, 'A');
-        addMenuItem("Commands", 14, 1, 114, 'O');
-        addMenuItem("Reset", 14, 1, 115, 'R');
-        addMenuItem("Delete", 14, 1, 116, 'X');
+      {
+        static const char *const colourLabels[] = {"Grey", "Orange", "Yellow", "Fluro", "Green", "Mint", "Aqua", "Blue", "Purple", "Violet"};
+        static const int colourValues[] = {10, 11, 12, 13, 14, 15, 16, 17, 18, 19};
+        unsigned char colourColors[10][3] = {{grey[0], grey[1], grey[2]},
+                                             {orange[0], orange[1], orange[2]},
+                                             {yellow[0], yellow[1], yellow[2]},
+                                             {fluro[0], fluro[1], fluro[2]},
+                                             {green[0], green[1], green[2]},
+                                             {mint[0], mint[1], mint[2]},
+                                             {aqua[0], aqua[1], aqua[2]},
+                                             {blue[0], blue[1], blue[2]},
+                                             {purple[0], purple[1], purple[2]},
+                                             {violet[0], violet[1], violet[2]}};
+        bool colourActive[10] = {false, false, false, false, false, false, false, false, false, false};
+        menu_selection_state_type state = menuSelectionState();
+        if (state.any && !state.mixedColour && (state.colour < 10)) colourActive[state.colour] = true;
+        addMenuItem("SELECTION OF HOSTS", 22, 2, 100, GLFW_KEY_BACKSPACE);
+        addMenuItem("SELECTION TOOLS", 22, 0, 0);
+        addMenuItem("Select All Hosts", 22, 0, 177, 0, kaSelectAll, msNone, false, MENU_GROUP_ITEM_INDENT);
+        addMenuItem("Invert Current Selection", 22, 0, 178, 0, kaInvertSelection, msNone, false, MENU_GROUP_ITEM_INDENT);
+        addMenuItem("Select All Named Hosts", 22, 0, 179, 0, kaSelectNamed, msNone, false, MENU_GROUP_ITEM_INDENT);
+        addMenuItem("Persistent Host Labels for Selection", 22, 0, 187, 0, kaToggleSelectionPersistant, msToggle,
+                    (state.any && !state.mixedPersistent && state.persistentOn), MENU_GROUP_ITEM_INDENT);
+        addMenuItem("Show Packets for Selection", 22, 0, 180, 0, kaShowSelectionPackets, msNone, false, MENU_GROUP_ITEM_INDENT);
+        addMenuItem("Stop Showing Packets for Selection", 22, 0, 181, 0, kaHideSelectionPackets, msNone, false, MENU_GROUP_ITEM_INDENT);
+        addMenuItem("Export Selection Details in CSV File As...", 22, 0, 182, 0, kaExportSelectionCsv, msNone, false, MENU_GROUP_ITEM_INDENT);
+        addMenuItem("Information for Hosts in Selection", 22, 0, 46, 0, kaShowSelectionInformation);
+        addMenuItem("Add Selected Hosts To Net Positions", 22, 0, 172);
+        addMenuItem("Resolve Hostnames for Hosts in Selection", 22, 0, 96, 'H');
+        addMenuItem("Combine by DNS Suffix (4+ Layers)", 22, 0, 168);
+        addMenuItem("Combine by DNS Suffix (3 Layers)", 22, 0, 169);
+        addMenuItem("Combine by DNS Suffix (2 Layers)", 22, 0, 170);
+        addMenuColorsRow("Set Host Colour", 22, 10, colourLabels, colourValues, colourColors, colourActive);
+        addMenuItem("Lock the Position", 22, 1, 111, 'L');
+        addMenuItem("Move To Colour Zone", 22, 1, 112, 'M');
+        addMenuItem("Auto Arrange", 22, 1, 113, 'A');
+        addMenuItem("Run Commands", 22, 1, 114, 'O');
+        addMenuItem("Reset", 22, 1, 115, 'R');
+        addMenuItem("Delete Hosts in Selection", 22, 0, 9, 'X');
+        break;
+      }
+      case 185:
+        addMenuItem("HOST LINES", 11, 2, 100, GLFW_KEY_BACKSPACE);
+        addMenuItem("WITH SELECTED HOST", 11, 0, 0);
+        addMenuItem("Start Link Line from Selected Host", 11, 0, 188, 0, kaCreateLinkLine, msNone, false, MENU_GROUP_ITEM_INDENT);
+        addMenuItem("Start Delete Link Line from Selected Host", 11, 0, 189, 0, kaDeleteLinkLine, msNone, false, MENU_GROUP_ITEM_INDENT);
+        addMenuItem("AUTOMATIC", 11, 0, 0);
+        addMenuItem("Auto Link All Hosts", 11, 0, 190, 0, kaAutoLinksAll, msNone, false, MENU_GROUP_ITEM_INDENT);
+        addMenuItem("Auto Link Hosts in Selection", 11, 0, 191, 0, kaAutoLinksSelection, msNone, false, MENU_GROUP_ITEM_INDENT);
+        addMenuItem("Stop Auto Link Hosts in Selection", 11, 0, 192, 0, kaStopAutoLinksSelection, msNone, false, MENU_GROUP_ITEM_INDENT);
+        addMenuItem("Auto Link New Hosts", 11, 0, 194, 0, kaToggleNewHostLinks, msToggle, setts.nhl, MENU_GROUP_ITEM_INDENT);
+        addMenuItem("DELETE", 11, 0, 0);
+        addMenuItem("Delete Link Lines for Hosts in Selection", 11, 0, 193, 0, kaCount, msNone, false, MENU_GROUP_ITEM_INDENT);
+        addMenuItem("Delete All Link Lines", 11, 0, 195, 0, kaDeleteAllLinks, msNone, false, MENU_GROUP_ITEM_INDENT);
         break;
       case 103:
-        addMenuItem("ANOMALIES", 4, 2, 100, GLFW_KEY_BACKSPACE);
-        addMenuItem("Select All", 4, 0, 31, 'S');
-        addMenuItem("Acknowledge", 4, 1, 117, 'K');
-        addMenuItem("Toggle Detection", 4, 0, 48, 'T', kaCount, msToggle, setts.anm);
+        addMenuItem("ANOMALIES", 8, 2, 100, GLFW_KEY_BACKSPACE);
+        addMenuItem("Select Hosts With Anomalies", 8, 0, 31, 'S');
+        addMenuItem("ACKNOWLEDGE ANOMALIES", 8, 0, 0);
+        addMenuItem("Acknowledge Current Selection", 8, 0, 26, 0, kaCount, msNone, false, MENU_GROUP_ITEM_INDENT);
+        addMenuItem("Acknowledge All Anomalies", 8, 0, 47, 0, kaAcknowledgeAllAnomalies, msNone, false, MENU_GROUP_ITEM_INDENT);
+        addMenuItem("ANOMALY DETECTION", 8, 0, 0);
+        addMenuItem("Anomaly Detection On", 8, 0, 173, 0, kaCount, msChoice, setts.anm, MENU_GROUP_ITEM_INDENT);
+        addMenuItem("Anomaly Detection Off", 8, 0, 174, 0, kaCount, msChoice, !setts.anm, MENU_GROUP_ITEM_INDENT);
         break;
       case 104:
       {
-        addMenuItem("IP/NAME", 6, 2, 100, GLFW_KEY_BACKSPACE);
-        addMenuItem("Show Selection", 6, 0, 50, 'S', kaCount, msChoice, (setts.sips == sel));
-        addMenuItem("Show All", 6, 0, 51, 'A', kaCount, msChoice, (setts.sips == all));
-        addMenuItem("Show On-Active", 6, 0, 52, 'O', kaCount, msChoice, (setts.sona == ipn));
-        addMenuItem("Show Off", 6, 0, 53, 'F', kaCount, msChoice, ((setts.sips == off) && (setts.sona != ipn)));
-        addMenuItem("All Off", 6, 0, 54, 'X');
+        addMenuItem("HOST LABELS", 6, 2, 100, GLFW_KEY_BACKSPACE);
+        addMenuItem("Show Labels for Hosts in Selection", 6, 0, 50, 'S', kaCount, msChoice, (setts.sips == sel));
+        addMenuItem("Show Labels for All Hosts", 6, 0, 51, 'A', kaCount, msChoice, (setts.sips == all));
+        addMenuItem("Show Labels On Activity", 6, 0, 52, 'O', kaCount, msChoice, (setts.sona == ipn));
+        addMenuItem("Hide Standard Labels", 6, 0, 53, 'F', kaCount, msChoice, ((setts.sips == off) && (setts.sona != ipn)));
+        addMenuItem("Hide All Host Labels", 6, 0, 54, 'X');
         break;
       }
       case 105:
-        addMenuItem("PACKETS", 9, 2, 100, GLFW_KEY_BACKSPACE);
-        addMenuItem("Show All", 7, 0, 60, 0, kaShowAllPackets);
-        addMenuItem("Sensor", 9, 1, 138, 'N', kaCount, msChoice, (setts.sen != 0));
-        addMenuItem("Filter", 9, 1, 118, 'F', kaCount, msChoice, (packetTreeFilter != pfAll));
-        addMenuItem("Port", 9, 1, 119, 'T', kaCount, msChoice, (setts.prt != 0));
-        addMenuItem("Select Showing", 9, 0, 32, 'S');
-        addMenuItem("Off", 9, 0, 69, 0, kaPacketsOff);
+      {
+        static const char *const sensorLabels[] = {"All", "1", "2", "3", "4", "5", "6", "7", "8", "9"};
+        static const int sensorValues[] = {139, 140, 141, 142, 143, 144, 145, 146, 147, 148};
+        unsigned char sensorColors[10][3];
+        bool sensorActive[10] = {false, false, false, false, false, false, false, false, false, false};
+        for (int cnt = 0; cnt < 10; cnt++)
+        {
+          sensorColors[cnt][0] = dlgrey[0];
+          sensorColors[cnt][1] = dlgrey[1];
+          sensorColors[cnt][2] = dlgrey[2];
+        }
+        if (packetFilterAllActive()) sensorActive[0] = true;
+        else if ((packetTreeFilter == pfAll) && !setts.prt && (setts.sen >= 1) && (setts.sen <= 9))
+          sensorActive[setts.sen] = true;
+
+        addMenuItem("PACKET FILTERS", 5, 2, 100, GLFW_KEY_BACKSPACE);
+        addMenuColorsRow("Sensor Filter", 5, 10, sensorLabels, sensorValues, sensorColors, sensorActive);
+        addMenuItem("Packet Type Filter", 5, 1, 118, 'F', kaCount, msChoice, (packetTreeFilter != pfAll));
+        addMenuItem("Port Filter", 5, 1, 119, 'T', kaCount, msChoice, (setts.prt != 0));
+        addMenuItem("Select Hosts With Packet Display", 5, 0, 32, 'S');
+        break;
+      }
+      case 186:
+        addMenuItem("PACKET CAPTURE & REPLAY", 10, 2, 100, GLFW_KEY_BACKSPACE);
+        addMenuItem("CAPTURE", 10, 0, 0);
+        addMenuItem("Start Recording Packet Traffic", 10, 0, 196, 0, kaRecordPacketTraffic, msChoice, (ptrc == rec), MENU_GROUP_ITEM_INDENT);
+        addMenuItem("Stop Recording / Replay", 10, 0, 197, 0, kaStopPacketTraffic, msToggle, (ptrc > hlt), MENU_GROUP_ITEM_INDENT);
+        addMenuItem("REPLAY", 10, 0, 0);
+        addMenuItem("Replay Packet Traffic File...", 10, 0, 198, 0, kaReplayPacketTraffic, msChoice, (ptrc == rpy), MENU_GROUP_ITEM_INDENT);
+        addMenuItem("Skip to Next Replay Packet", 10, 0, 199, 0, kaSkipReplayPacket, msChoice, (ptrc == rpy), MENU_GROUP_ITEM_INDENT);
+        addMenuItem("FILES", 10, 0, 0);
+        addMenuItem("Open Packet Traffic File...", 10, 0, 200, 0, kaOpenPacketTrafficFile, msNone, false, MENU_GROUP_ITEM_INDENT);
+        addMenuItem("Save Packet Traffic File As...", 10, 0, 201, 0, kaSavePacketTrafficFile, msNone, false, MENU_GROUP_ITEM_INDENT);
         break;
       case 106:
-        addMenuItem("ON-ACTIVE", 6, 2, 100, GLFW_KEY_BACKSPACE);
-        addMenuItem("Alert", 6, 0, 55, 'A', kaCount, msChoice, (setts.sona == alt));
-        addMenuItem("Show IP/Name", 6, 0, 52, 'N', kaCount, msChoice, (setts.sona == ipn));
-        addMenuItem("Show Host", 6, 0, 56, 'H', kaCount, msChoice, (setts.sona == hst));
-        addMenuItem("Select", 6, 0, 57, 'S', kaCount, msChoice, (setts.sona == slt));
-        addMenuItem("Do Nothing", 6, 0, 58, 'D', kaCount, msChoice, (setts.sona == don));
+        addMenuItem("ON ACTIVITY", 6, 2, 100, GLFW_KEY_BACKSPACE);
+        addMenuItem("Create Activity Alert", 6, 0, 55, 'A', kaCount, msChoice, (setts.sona == alt));
+        addMenuItem("Show Label On Activity", 6, 0, 52, 'N', kaCount, msChoice, (setts.sona == ipn));
+        addMenuItem("Highlight Host", 6, 0, 56, 'H', kaCount, msChoice, (setts.sona == hst));
+        addMenuItem("Add Host to Selection On Activity", 6, 0, 57, 'S', kaCount, msChoice, (setts.sona == slt));
+        addMenuItem("No Extra Action On Activity", 6, 0, 58, 'D', kaCount, msChoice, (setts.sona == don));
         break;
       case 107:
         addMenuItem("VIEW", 13, 2, 100, GLFW_KEY_BACKSPACE);
-        addMenuItem("RECALL", 13, 0, 0);
-        addMenuItem("Home", 13, 0, 70, 0, kaViewHome);
-        addMenuItem("Alternate Home", 13, 0, 79, 0, kaViewHomeAlt);
-        addMenuItem("Pos 1", 13, 0, 71, 0, kaViewPos1);
-        addMenuItem("Pos 2", 13, 0, 72, 0, kaViewPos2);
-        addMenuItem("Pos 3", 13, 0, 73, 0, kaViewPos3);
-        addMenuItem("Pos 4", 13, 0, 74, 0, kaViewPos4);
-        addMenuItem("SAVE", 13, 0, 0);
-        addMenuItem("Pos 1", 13, 0, 75, 0, kaViewSave1);
-        addMenuItem("Pos 2", 13, 0, 76, 0, kaViewSave2);
-        addMenuItem("Pos 3", 13, 0, 77, 0, kaViewSave3);
-        addMenuItem("Pos 4", 13, 0, 78, 0, kaViewSave4);
+        addMenuItem("LOAD VIEW", 13, 0, 0);
+        addMenuItem("Home", 13, 0, 70, 0, kaViewHome, msNone, false, MENU_GROUP_ITEM_INDENT);
+        addMenuItem("Alternate Home", 13, 0, 79, 0, kaViewHomeAlt, msNone, false, MENU_GROUP_ITEM_INDENT);
+        addMenuItem("View 1", 13, 0, 71, 0, kaViewPos1, msNone, false, MENU_GROUP_ITEM_INDENT);
+        addMenuItem("View 2", 13, 0, 72, 0, kaViewPos2, msNone, false, MENU_GROUP_ITEM_INDENT);
+        addMenuItem("View 3", 13, 0, 73, 0, kaViewPos3, msNone, false, MENU_GROUP_ITEM_INDENT);
+        addMenuItem("View 4", 13, 0, 74, 0, kaViewPos4, msNone, false, MENU_GROUP_ITEM_INDENT);
+        addMenuItem("SAVE VIEW", 13, 0, 0);
+        addMenuItem("View 1", 13, 0, 75, 0, kaViewSave1, msNone, false, MENU_GROUP_ITEM_INDENT);
+        addMenuItem("View 2", 13, 0, 76, 0, kaViewSave2, msNone, false, MENU_GROUP_ITEM_INDENT);
+        addMenuItem("View 3", 13, 0, 77, 0, kaViewSave3, msNone, false, MENU_GROUP_ITEM_INDENT);
+        addMenuItem("View 4", 13, 0, 78, 0, kaViewSave4, msNone, false, MENU_GROUP_ITEM_INDENT);
         break;
       case 108:
-        addMenuItem("LAYOUT", 5, 2, 100, GLFW_KEY_BACKSPACE);
-        addMenuItem("Restore", 5, 1, 122, 'R');
-        addMenuItem("Save", 5, 1, 123, 'S');
-        addMenuItem("Net Positions", 5, 0, 90, 'N');
-        addMenuItem("Clear", 5, 1, 124, 'C');
+        addMenuItem("NET LAYOUT", 14, 2, 100, GLFW_KEY_BACKSPACE);
+        addMenuItem("LOAD LAYOUT", 14, 0, 0);
+        addMenuItem("Open Layout File...", 14, 0, 80, 'F', kaCount, msNone, false, MENU_GROUP_ITEM_INDENT);
+        addMenuItem("Layout 1", 14, 0, 81, '1', kaCount, msNone, false, MENU_GROUP_ITEM_INDENT);
+        addMenuItem("Layout 2", 14, 0, 82, '2', kaCount, msNone, false, MENU_GROUP_ITEM_INDENT);
+        addMenuItem("Layout 3", 14, 0, 83, '3', kaCount, msNone, false, MENU_GROUP_ITEM_INDENT);
+        addMenuItem("Layout 4", 14, 0, 84, '4', kaCount, msNone, false, MENU_GROUP_ITEM_INDENT);
+        addMenuItem("SAVE LAYOUT", 14, 0, 0);
+        addMenuItem("Save To Layout File...", 14, 0, 85, 'F', kaCount, msNone, false, MENU_GROUP_ITEM_INDENT);
+        addMenuItem("Layout 1", 14, 0, 86, '1', kaCount, msNone, false, MENU_GROUP_ITEM_INDENT);
+        addMenuItem("Layout 2", 14, 0, 87, '2', kaCount, msNone, false, MENU_GROUP_ITEM_INDENT);
+        addMenuItem("Layout 3", 14, 0, 88, '3', kaCount, msNone, false, MENU_GROUP_ITEM_INDENT);
+        addMenuItem("Layout 4", 14, 0, 89, '4', kaCount, msNone, false, MENU_GROUP_ITEM_INDENT);
+        addMenuItem("Clear Current Layout", 14, 0, 92, 'C');
         break;
       case 109:
-        addMenuItem("OTHER", 5, 2, 100, GLFW_KEY_BACKSPACE);
-        addMenuItem("Find Hosts", 5, 0, 93, 0, kaFindHosts);
-        addMenuItem("Select Inactive", 5, 1, 125, 'I');
-        addMenuItem("Help", 5, 0, 97, 0, kaShowHelp);
-        addMenuItem("About", 5, 0, 98, 'A');
+        addMenuItem("SELECT INACTIVE HOSTS", 6, 2, 100, GLFW_KEY_BACKSPACE);
+        addMenuItem("Older Than 5 Minutes", 6, 0, 33, '5');
+        addMenuItem("Older Than 1 Hour", 6, 0, 34, 'H');
+        addMenuItem("Older Than 1 Day", 6, 0, 35, 'D');
+        addMenuItem("Older Than 1 Week", 6, 0, 36, 'W');
+        addMenuItem("Custom Threshold...", 6, 0, 37, 'O');
         break;
       case 110:
       {
         menu_selection_state_type state = menuSelectionState();
-        addMenuItem("COLOUR", 11, 2, 102, GLFW_KEY_BACKSPACE);
+        addMenuItem("SET COLOUR", 11, 2, 102, GLFW_KEY_BACKSPACE);
         addMenuItem("Grey", 11, 0, 10, 'G', kaCount, msChoice, (state.any && !state.mixedColour && (state.colour == 0)));
         addMenuItem("Orange", 11, 0, 11, 'O', kaCount, msChoice, (state.any && !state.mixedColour && (state.colour == 1)));
         addMenuItem("Yellow", 11, 0, 12, 'Y', kaCount, msChoice, (state.any && !state.mixedColour && (state.colour == 2)));
@@ -5504,7 +5720,7 @@ void mnuProcess(int m)
       case 111:
       {
         menu_selection_state_type state = menuSelectionState();
-        addMenuItem("LOCK", 3, 2, 102, GLFW_KEY_BACKSPACE);
+        addMenuItem("LOCK THE POSITION", 3, 2, 102, GLFW_KEY_BACKSPACE);
         addMenuItem("On", 3, 0, 21, 'O', kaCount, msChoice, (state.any && !state.mixedLock && state.lockOn));
         addMenuItem("Off", 3, 0, 22, 'F', kaCount, msChoice, (state.any && !state.mixedLock && !state.lockOn));
         break;
@@ -5512,7 +5728,7 @@ void mnuProcess(int m)
       case 112:
       {
         menu_selection_state_type state = menuSelectionState();
-        addMenuItem("MOVE TO ZONE", 5, 2, 102, GLFW_KEY_BACKSPACE);
+        addMenuItem("MOVE TO COLOUR ZONE", 5, 2, 102, GLFW_KEY_BACKSPACE);
         addMenuItem("Grey", 5, 0, 1, 'G', kaCount, msChoice, (state.any && !state.mixedZone && (state.zone == 1)));
         addMenuItem("Blue", 5, 0, 2, 'B', kaCount, msChoice, (state.any && !state.mixedZone && (state.zone == 2)));
         addMenuItem("Green", 5, 0, 3, 'N', kaCount, msChoice, (state.any && !state.mixedZone && (state.zone == 3)));
@@ -5520,14 +5736,14 @@ void mnuProcess(int m)
         break;
       }
       case 113:
-        addMenuItem("ARRANGE", 5, 2, 102, GLFW_KEY_BACKSPACE);
+        addMenuItem("AUTO ARRANGE", 5, 2, 102, GLFW_KEY_BACKSPACE);
         addMenuItem("Default", 5, 0, 5, 'D');
         addMenuItem("10x10", 5, 0, 6, '1');
         addMenuItem("10x10 2xSpc", 5, 0, 7, '2');
-        addMenuItem("Into Nets", 5, 0, 8, 'N');
+        addMenuItem("Arrange By Net Positions", 5, 0, 8, 'N');
         break;
       case 114:
-        addMenuItem("COMMANDS", 6, 2, 102, GLFW_KEY_BACKSPACE);
+        addMenuItem("RUN COMMANDS", 6, 2, 102, GLFW_KEY_BACKSPACE);
         addMenuItem("Command 1", 6, 0, 27, '1');
         addMenuItem("Command 2", 6, 0, 28, '2');
         addMenuItem("Command 3", 6, 0, 29, '3');
@@ -5535,26 +5751,20 @@ void mnuProcess(int m)
         addMenuItem("Set", 6, 0, 38, 'S');
         break;
       case 115:
-        addMenuItem("RESET", 5, 2, 102, GLFW_KEY_BACKSPACE);
-        addMenuItem("Link Lines", 5, 0, 39, 'L');
-        addMenuItem("Downloads", 5, 0, 23, 'D');
-        addMenuItem("Uploads", 5, 0, 24, 'U');
-        addMenuItem("Services", 5, 0, 25, 'S');
-        break;
-      case 116:
-        addMenuItem("DELETE", 2, 2, 102, GLFW_KEY_BACKSPACE);
-        addMenuItem("Confirm", 2, 0, 9, 'C');
+        addMenuItem("RESET", 3, 2, 102, GLFW_KEY_BACKSPACE);
+        addMenuItem("Reset Traffic Counters", 3, 0, 23, 'T');
+        addMenuItem("Services", 3, 0, 25, 'S');
         break;
       case 117:
-        addMenuItem("ACKNOWLEDGE", 3, 2, 103, GLFW_KEY_BACKSPACE);
-        addMenuItem("Selection", 3, 0, 26, 'S');
-        addMenuItem("All", 3, 0, 47, 0, kaAcknowledgeAllAnomalies);
+        addMenuItem("ACKNOWLEDGE ANOMALIES", 3, 2, 103, GLFW_KEY_BACKSPACE);
+        addMenuItem("Acknowledge Current Selection", 3, 0, 26, 'S');
+        addMenuItem("Acknowledge All Anomalies", 3, 0, 47, 0, kaAcknowledgeAllAnomalies);
         break;
       case 118:
       {
         unsigned int rowsCount = 0;
         const packet_tree_row_type *rows = packetTreeRows(&rowsCount);
-        addMenuItem("FILTER", (int)rowsCount + 1, 2, 105, GLFW_KEY_BACKSPACE);
+        addMenuItem("PACKET TYPE FILTER", (int)rowsCount + 1, 2, 105, GLFW_KEY_BACKSPACE);
         for (unsigned int cnt = 0; cnt < rowsCount; cnt++)
         {
           char label[64];
@@ -5569,13 +5779,13 @@ void mnuProcess(int m)
         char portLabel[32];
         if (setts.prt) snprintf(portLabel, sizeof(portLabel), "Enter... [%u]", setts.prt);
         else strcpy(portLabel, "Enter...");
-        addMenuItem("PORT", 3, 2, 105, GLFW_KEY_BACKSPACE);
+        addMenuItem("PORT FILTER", 3, 2, 105, GLFW_KEY_BACKSPACE);
         addMenuItem("All", 3, 0, 67, 'A', kaCount, msChoice, packetFilterAllActive());
         addMenuItem(portLabel, 3, 0, 68, 'E', kaCount, msChoice, (setts.prt != 0) && !setts.sen && (packetTreeFilter == pfAll));
         break;
       }
       case 138:
-        addMenuItem("SENSOR", 11, 2, 105, GLFW_KEY_BACKSPACE);
+        addMenuItem("SENSOR FILTER", 11, 2, 105, GLFW_KEY_BACKSPACE);
         addMenuItem("All", 11, 0, 139, 'A', kaCount, msChoice, packetFilterAllActive());
         addMenuItem("Sensor 1", 11, 0, 140, '1', kaCount, msChoice, (setts.sen == 1) && !setts.prt && (packetTreeFilter == pfAll));
         addMenuItem("Sensor 2", 11, 0, 141, '2', kaCount, msChoice, (setts.sen == 2) && !setts.prt && (packetTreeFilter == pfAll));
@@ -5612,16 +5822,12 @@ void mnuProcess(int m)
         addMenuItem("Net 4", 6, 0, 84, '4');
         break;
       case 123:
-        addMenuItem("SAVE", 6, 2, 108, GLFW_KEY_BACKSPACE);
+        addMenuItem("SAVE LAYOUT", 6, 2, 108, GLFW_KEY_BACKSPACE);
         addMenuItem("File", 6, 0, 85, 'F');
         addMenuItem("Net 1", 6, 0, 86, '1');
         addMenuItem("Net 2", 6, 0, 87, '2');
         addMenuItem("Net 3", 6, 0, 88, '3');
         addMenuItem("Net 4", 6, 0, 89, '4');
-        break;
-      case 124:
-        addMenuItem("CLEAR", 2, 2, 108, GLFW_KEY_BACKSPACE);
-        addMenuItem("Confirm", 2, 0, 92, 'C');
         break;
       case 125:
         addMenuItem("SELECT INACTIVE", 6, 2, 109, GLFW_KEY_BACKSPACE);
@@ -5830,7 +6036,11 @@ void GLFWCALL clickGL(int button, int action)
       }
     }
   else if (button == GLFW_MOUSE_BUTTON_MIDDLE) mView = action;  //start move view
-  else if (!GLWin.On()) mnuProcess(100);
+  else if (!GLWin.On())
+  {
+    menuOpenId = 0;
+    mnuProcess(100);
+  }
   refresh = true;
 }
 
@@ -6208,6 +6418,108 @@ static const char *localHsenClassLabel(const char *klass)
   return "Other";
 }
 
+static void localHsenAdapterKey(const char *src, char *dst, size_t dstsz)
+{
+  size_t pos = 0;
+  if (!dst || !dstsz) return;
+  dst[0] = '\0';
+  if (!src) return;
+  while (*src && (pos + 1 < dstsz))
+  {
+    if (isalnum((unsigned char)*src)) dst[pos++] = (char)toupper((unsigned char)*src);
+    src++;
+  }
+  dst[pos] = '\0';
+}
+
+static bool localHsenAdapterKeyContains(const char *text, const char *token)
+{
+  char left[512], right[512];
+  if (!text || !token || !*text || !*token) return false;
+  localHsenAdapterKey(text, left, sizeof(left));
+  localHsenAdapterKey(token, right, sizeof(right));
+  if (!*left || !*right) return false;
+  return (strstr(left, right) != 0);
+}
+
+static bool localHsenInterfaceMatchesAdapter(const localhsen_if_type *iface, const char *adapterId, const char *adapterName = 0)
+{
+  if (!iface) return false;
+  if (adapterId && *adapterId)
+  {
+    if (localHsenAdapterKeyContains(iface->id, adapterId) || localHsenAdapterKeyContains(iface->name, adapterId))
+      return true;
+  }
+  if (adapterName && *adapterName)
+  {
+    if (localHsenAdapterKeyContains(iface->name, adapterName) || localHsenAdapterKeyContains(adapterName, iface->name))
+      return true;
+  }
+  return false;
+}
+
+static void localHsenAppendIp(char *dst, size_t dstsz, const char *ip)
+{
+  size_t len;
+  if (!dst || !dstsz || !ip || !*ip) return;
+  len = strlen(dst);
+  if (len)
+  {
+    if ((len + 2) >= dstsz) return;
+    strcat(dst, ", ");
+  }
+  strncat(dst, ip, dstsz - strlen(dst) - 1);
+}
+
+static void localHsenPopulateInterfaceIps()
+{
+  for (unsigned char cnt = 0; cnt < localHsenIfCount; cnt++) localHsenIfs[cnt].ips[0] = '\0';
+#ifdef __MINGW32__
+  ULONG bufsz = 0;
+  DWORD rc = GetAdaptersInfo(0, &bufsz);
+  if ((rc != ERROR_BUFFER_OVERFLOW) || !bufsz) return;
+  std::vector<unsigned char> raw(bufsz, 0);
+  IP_ADAPTER_INFO *ad = (IP_ADAPTER_INFO *)&raw[0];
+  if (GetAdaptersInfo(ad, &bufsz) != NO_ERROR) return;
+  while (ad)
+  {
+    for (unsigned char cnt = 0; cnt < localHsenIfCount; cnt++)
+    {
+      if (localHsenInterfaceMatchesAdapter(&localHsenIfs[cnt], ad->AdapterName, ad->Description))
+      {
+        IP_ADDR_STRING *ua = &ad->IpAddressList;
+        while (ua)
+        {
+          if (strcmp(ua->IpAddress.String, "0.0.0.0"))
+            localHsenAppendIp(localHsenIfs[cnt].ips, sizeof(localHsenIfs[cnt].ips), ua->IpAddress.String);
+          ua = ua->Next;
+        }
+        break;
+      }
+    }
+    ad = ad->Next;
+  }
+#else
+  ifaddrs *ifaddr = 0, *ifa;
+  char ip[INET_ADDRSTRLEN];
+  if (getifaddrs(&ifaddr) == -1) return;
+  for (ifa = ifaddr; ifa; ifa = ifa->ifa_next)
+  {
+    if (!ifa->ifa_addr || (ifa->ifa_addr->sa_family != AF_INET)) continue;
+    for (unsigned char cnt = 0; cnt < localHsenIfCount; cnt++)
+    {
+      if (localHsenInterfaceMatchesAdapter(&localHsenIfs[cnt], ifa->ifa_name, ifa->ifa_name))
+      {
+        sockaddr_in *sin = (sockaddr_in *)ifa->ifa_addr;
+        if (inet_ntop(AF_INET, &sin->sin_addr, ip, sizeof(ip)))
+          localHsenAppendIp(localHsenIfs[cnt].ips, sizeof(localHsenIfs[cnt].ips), ip);
+      }
+    }
+  }
+  freeifaddrs(ifaddr);
+#endif
+}
+
 static bool localHsenDefaultSelected(const char *klass)
 {
   return !strcmp(klass, "ethernet");
@@ -6418,6 +6730,91 @@ static bool localHsenProcessLooksManaged(
 #endif
 }
 
+static bool localHsenPidRecordActive(const localhsen_pid_type *pidrec)
+{
+  if (!pidrec || !pidrec->pid) return false;
+#ifdef __MINGW32__
+  HANDLE proc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE, FALSE, (DWORD)pidrec->pid);
+  bool active = false;
+  if (!proc) return false;
+  if (localHsenProcessLooksManaged(proc))
+  {
+    unsigned long long stamp = localHsenProcessCreateStamp(proc);
+    DWORD code = 0;
+    if ((!pidrec->created || !stamp || (stamp == pidrec->created)) &&
+        GetExitCodeProcess(proc, &code) && (code == STILL_ACTIVE))
+      active = true;
+  }
+  CloseHandle(proc);
+  return active;
+#else
+  pid_t pid = (pid_t)pidrec->pid;
+  if (!localHsenProcessLooksManaged(pidrec->pid)) return false;
+  if ((kill(pid, 0) == -1) && (errno == ESRCH)) return false;
+  if (pidrec->created)
+  {
+    unsigned long long stamp = localHsenProcessCreateStamp(pidrec->pid);
+    if (stamp && (stamp != pidrec->created)) return false;
+  }
+  return true;
+#endif
+}
+
+static bool localHsenWaitPidInactive(const localhsen_pid_type *pidrec, unsigned char tries = 30)
+{
+  for (unsigned char cnt = 0; cnt < tries; cnt++)
+  {
+    if (!localHsenPidRecordActive(pidrec)) return true;
+#ifdef __MINGW32__
+    Sleep(100);
+#else
+    usleep(100000);
+#endif
+  }
+  return !localHsenPidRecordActive(pidrec);
+}
+
+#ifdef __MINGW32__
+static void localHsenTaskkillPid(unsigned long pid)
+{
+  STARTUPINFOA si;
+  PROCESS_INFORMATION pi;
+  char cmd[96];
+  ZeroMemory(&si, sizeof(si));
+  ZeroMemory(&pi, sizeof(pi));
+  si.cb = sizeof(si);
+  si.dwFlags = STARTF_USESHOWWINDOW;
+  si.wShowWindow = SW_HIDE;
+  snprintf(cmd, sizeof(cmd), "taskkill /PID %lu /T /F", pid);
+  if (!CreateProcessA(0, cmd, 0, 0, FALSE, CREATE_NO_WINDOW, 0, 0, &si, &pi)) return;
+  WaitForSingleObject(pi.hProcess, 5000);
+  CloseHandle(pi.hThread);
+  CloseHandle(pi.hProcess);
+}
+#endif
+
+static unsigned char localHsenCollectManagedActive(localhsen_pid_type *pids, unsigned char maxpids)
+{
+  localhsen_pid_type loaded[LOCAL_HSEN_MAX_INTERFACES];
+  unsigned char count = localHsenStateLoad(loaded, LOCAL_HSEN_MAX_INTERFACES), active = 0;
+  if (!count)
+  {
+    localHsenStateClear();
+    return 0;
+  }
+  for (unsigned char cnt = 0; (cnt < count) && (active < maxpids); cnt++)
+    if (localHsenPidRecordActive(&loaded[cnt])) pids[active++] = loaded[cnt];
+  if (active) localHsenStateSave(pids, active);
+  else localHsenStateClear();
+  return active;
+}
+
+static bool localHsenManagedRunning()
+{
+  localhsen_pid_type pids[LOCAL_HSEN_MAX_INTERFACES];
+  return (localHsenCollectManagedActive(pids, LOCAL_HSEN_MAX_INTERFACES) > 0);
+}
+
 static bool localHsenRunAndCaptureDiscovery(char *output, size_t outsz)
 {
 #ifdef __MINGW32__
@@ -6532,6 +6929,7 @@ static bool localHsenDiscoverInterfaces(bool keepSelections)
     localHsenIfCount++;
     line = strtok(0, "\r\n");
   }
+  localHsenPopulateInterfaceIps();
   return true;
 }
 
@@ -6564,67 +6962,55 @@ static bool localHsenSaveUiState()
   return true;
 }
 
-static bool localHsenStopManaged(bool showmsg)
+static bool localHsenStopManaged(char *errbuf, size_t errbufsz)
 {
   localhsen_pid_type pids[LOCAL_HSEN_MAX_INTERFACES];
-  unsigned char count = localHsenStateLoad(pids, LOCAL_HSEN_MAX_INTERFACES);
-  bool stopped = false, failed = false;
+  unsigned char count;
+  if (errbuf && errbufsz) *errbuf = '\0';
+  count = localHsenCollectManagedActive(pids, LOCAL_HSEN_MAX_INTERFACES);
   for (unsigned char cnt = 0; cnt < count; cnt++)
   {
 #ifdef __MINGW32__
-    HANDLE proc = OpenProcess(PROCESS_TERMINATE | SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pids[cnt].pid);
-    if (!proc) continue;
-    if (!localHsenProcessLooksManaged(proc))
+    HANDLE proc = OpenProcess(PROCESS_TERMINATE | SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION, FALSE, (DWORD)pids[cnt].pid);
+    if (proc)
     {
+      if (localHsenProcessLooksManaged(proc))
+      {
+        unsigned long long stamp = localHsenProcessCreateStamp(proc);
+        DWORD code = 0;
+        if ((!pids[cnt].created || !stamp || (stamp == pids[cnt].created)) &&
+            (!GetExitCodeProcess(proc, &code) || (code == STILL_ACTIVE)))
+        {
+          if (TerminateProcess(proc, 0)) WaitForSingleObject(proc, 3000);
+        }
+      }
       CloseHandle(proc);
-      continue;
     }
-    if (localHsenProcessCreateStamp(proc) != pids[cnt].created)
+    if (!localHsenWaitPidInactive(&pids[cnt]))
     {
-      CloseHandle(proc);
-      continue;
+      localHsenTaskkillPid(pids[cnt].pid);
+      localHsenWaitPidInactive(&pids[cnt], 50);
     }
-    DWORD code = 0;
-    if (GetExitCodeProcess(proc, &code) && (code != STILL_ACTIVE))
-    {
-      CloseHandle(proc);
-      continue;
-    }
-    if (!TerminateProcess(proc, 0)) failed = true;
-    else
-    {
-      WaitForSingleObject(proc, 3000);
-      stopped = true;
-    }
-    CloseHandle(proc);
 #else
     pid_t pid = (pid_t) pids[cnt].pid;
-    unsigned long long stamp = localHsenProcessCreateStamp(pids[cnt].pid);
-    if (!localHsenProcessLooksManaged(pids[cnt].pid)) continue;
-    if (pids[cnt].created && stamp && (stamp != pids[cnt].created)) continue;
-    if ((kill(pid, 0) == -1) && (errno == ESRCH)) continue;
-    if (kill(pid, SIGTERM) == -1) failed = true;
-    else
+    if (localHsenPidRecordActive(&pids[cnt]))
     {
-      for (unsigned char tries = 0; tries < 30; tries++)
+      kill(pid, SIGTERM);
+      if (!localHsenWaitPidInactive(&pids[cnt]))
       {
-        int status;
-        pid_t rc = waitpid(pid, &status, WNOHANG);
-        if ((rc == pid) || ((rc == -1) && (errno == ECHILD))) break;
-        usleep(100000);
+        kill(pid, SIGKILL);
+        localHsenWaitPidInactive(&pids[cnt], 50);
       }
-      stopped = true;
     }
 #endif
   }
-  localHsenStateClear();
-  if (showmsg)
+  count = localHsenCollectManagedActive(pids, LOCAL_HSEN_MAX_INTERFACES);
+  if (count)
   {
-    if (failed) messageBox("ERROR", "Stopping one or more managed local hsen processes failed.");
-    else if (stopped) messageBox("LOCAL hsen", "Managed local hsen processes stopped.");
-    else messageBox("LOCAL hsen", "No managed local hsen processes were running.");
+    if (errbuf && errbufsz) setStringValue(errbuf, errbufsz, "Stopping one or more managed local hsen processes failed.");
+    return false;
   }
-  return !failed;
+  return true;
 }
 
 static bool localHsenLaunchOne(const localhsen_if_type *iface, unsigned long *pidOut)
@@ -6675,17 +7061,17 @@ static bool localHsenLaunchOne(const localhsen_if_type *iface, unsigned long *pi
 #endif
 }
 
-static bool localHsenStartSelected(bool showmsg)
+static bool localHsenStartSelected(char *errbuf, size_t errbufsz)
 {
   localhsen_pid_type pids[LOCAL_HSEN_MAX_INTERFACES];
   unsigned char count = 0;
-  bool failed = false, anySelected = false;
-  localHsenStopManaged(false);
+  bool failed = false;
+  if (errbuf && errbufsz) *errbuf = '\0';
+  if (!localHsenStopManaged(errbuf, errbufsz)) return false;
   for (unsigned char cnt = 0; cnt < localHsenIfCount; cnt++)
   {
     unsigned long pid;
     if (!localHsenIfs[cnt].selected) continue;
-    anySelected = true;
     if (!localHsenLaunchOne(&localHsenIfs[cnt], &pid)) failed = true;
     else
     {
@@ -6702,34 +7088,34 @@ static bool localHsenStartSelected(bool showmsg)
   }
   if (count) localHsenStateSave(pids, count);
   else localHsenStateClear();
-  if (showmsg)
-  {
-    if (failed) messageBox("ERROR", "One or more local hsen processes failed to start.");
-    else if (anySelected) messageBox("LOCAL hsen", "Selected local hsen interfaces started.");
-    else messageBox("LOCAL hsen", "Settings saved. No local hsen interfaces are selected.");
-  }
+  if (failed && errbuf && errbufsz) setStringValue(errbuf, errbufsz, "One or more local hsen processes failed to start.");
   return !failed;
 }
 
-static void localHsenDialogOpen()
+static void localHsenDialogOpen(bool rescan)
 {
   int btnTop, rowTop;
   unsigned char rows;
-  char sbuf[64], lbuf[64];
-  bool discovered = localHsenDiscoverInterfaces(true);
+  char sbuf[64], lbuf[96], ipbuf[72];
+  bool discovered = true;
+  if (rescan) discovered = localHsenDiscoverInterfaces(true);
+  bool running = localHsenManagedRunning();
   localHsenResetUiNames();
   rows = (localHsenIfCount ? localHsenIfCount : 1);
-  GLWin.CreateWin(-1, -1, 520, 148 + (rows * 22), "LOCAL hsen", true, false);
-  GLWin.AddLabel(10, 10, "Target Host: 127.0.0.1");
-  GLWin.AddLabel(10, 34, "Autostart:");
-  localHsenUiAutostart = GLWin.AddCheck(88, 29, localHsenWindowsAutostart);
-  GLWin.AddLabel(138, 34, "Promiscuous:");
-  localHsenUiPromisc = GLWin.AddCheck(236, 29, localHsenWindowsPromisc);
-  GLWin.AddLabel(286, 34, "Ethernet preselected, WLAN/other visible.");
-  GLWin.AddLabel(10, 58, "Use");
-  GLWin.AddLabel(48, 58, "Sensor");
-  GLWin.AddLabel(104, 58, "Type / Interface");
-  rowTop = 74;
+  GLWin.CreateWin(-1, -1, 760, 186 + (rows * 22), "CONFIGURE LOCAL SENSORS (hsen)", true, false);
+  GLWin.AddLabel(10, 10, "Local sensors (hsen) capture packets on this computer.");
+  GLWin.AddLabel(10, 24, "Choose adapters, set sensor IDs, then start or stop them.");
+  GLWin.AddLabel(10, 48, "Target Host: 127.0.0.1");
+  GLWin.AddLabel(10, 72, "Autostart:");
+  localHsenUiAutostart = GLWin.AddCheck(88, 67, localHsenWindowsAutostart);
+  GLWin.AddLabel(138, 72, "Promiscuous:");
+  localHsenUiPromisc = GLWin.AddCheck(236, 67, localHsenWindowsPromisc);
+  GLWin.AddLabel(286, 72, "Ethernet preselected, WLAN/other visible.");
+  GLWin.AddLabel(10, 96, "Use");
+  GLWin.AddLabel(48, 96, "Sensor");
+  GLWin.AddLabel(104, 96, "Type / Interface");
+  GLWin.AddLabel(442, 96, "Current IPv4");
+  rowTop = 112;
   if (!localHsenIfCount)
   {
     GLWin.AddLabel(10, rowTop, (discovered ? "No interfaces found." : "Interface scan failed. Check hsen."));
@@ -6739,22 +7125,24 @@ static void localHsenDialogOpen()
     localHsenUiIfaceChecks[cnt] = GLWin.AddCheck(10, rowTop - 5, localHsenIfs[cnt].selected);
     snprintf(sbuf, sizeof(sbuf), "%u", localHsenIfs[cnt].sensorId);
     localHsenUiIfaceSensors[cnt] = GLWin.AddInput(48, rowTop - 5, 3, 3, sbuf);
-    snprintf(lbuf, sizeof(lbuf), "%s  %.50s", localHsenClassLabel(localHsenIfs[cnt].klass), localHsenIfs[cnt].name);
+    snprintf(lbuf, sizeof(lbuf), "%s  %.36s", localHsenClassLabel(localHsenIfs[cnt].klass), localHsenIfs[cnt].name);
     GLWin.AddLabel(104, rowTop, lbuf);
+    snprintf(ipbuf, sizeof(ipbuf), "%.60s", (*localHsenIfs[cnt].ips ? localHsenIfs[cnt].ips : "-"));
+    GLWin.AddLabel(442, rowTop, ipbuf);
     rowTop += 22;
   }
-  btnTop = 94 + (rows * 22);
+  btnTop = 132 + (rows * 22);
   GLResult[0] = HSD_HSENRUN;
   GLWin.AddButton(10, btnTop, GLWIN_MISC1, "Refresh");
-  GLWin.AddButton(120, btnTop, GLWIN_OK, "Save + Start", true, true);
-  GLWin.AddButton(256, btnTop, GLWIN_MISC2, "Stop");
+  GLWin.AddButton(120, btnTop, GLWIN_OK, "Save");
+  GLWin.AddButton(220, btnTop, GLWIN_MISC2, (running ? "Stop" : "Start"), true, true);
 }
 
 static void localHsenAutostartMaybe()
 {
   if (!localHsenWindowsAutostart) return;
   if (!localHsenDiscoverInterfaces(true)) return;
-  localHsenStartSelected(false);
+  localHsenStartSelected();
 }
 
 static void compactBindingToken(const char *src, char *dst, size_t dstsz)
@@ -6951,12 +7339,63 @@ static int menuDepthForId(int menuid)
       return 0;
     case 101: case 102: case 103: case 104: case 105:
     case 106: case 107: case 108: case 109:
+    case 185: case 186:
       return 1;
     case 110: case 111: case 112: case 113: case 114:
     case 115: case 116: case 117: case 118: case 119:
     case 120: case 121: case 122: case 123: case 124:
     case 125: case 126: case 134: case 138:
       return 2;
+    default:
+      return 0;
+  }
+}
+
+static int menuParentId(int menuid)
+{
+  switch (menuid)
+  {
+    case 101: case 102: case 103: case 104: case 105:
+    case 106: case 107: case 108: case 109:
+    case 185: case 186:
+      return 100;
+    case 110: case 111: case 112: case 113: case 114:
+    case 115:
+      return 102;
+    case 117:
+      return 103;
+    case 118: case 119: case 138:
+      return 105;
+    default:
+      return 0;
+  }
+}
+
+static int menuAnchorRowForMenu(int menuid)
+{
+  switch (menuid)
+  {
+    case 101: return 1;
+    case 102: return (seltd ? 2 : 1);
+    case 185: return (seltd ? 3 : 2);
+    case 103: return (seltd ? 4 : 3);
+    case 104: return (seltd ? 5 : 4);
+    case 105: return (seltd ? 6 : 5);
+    case 186: return (seltd ? 9 : 8);
+    case 106: return (seltd ? 10 : 9);
+    case 107: return (seltd ? 11 : 10);
+    case 108: return (seltd ? 12 : 11);
+    case 109: return (seltd ? 15 : 14);
+    case 110: return 16;
+    case 111: return 17;
+    case 112: return 18;
+    case 113: return 19;
+    case 114: return 20;
+    case 115: return 21;
+    case 117: return 2;
+    case 138: return 1;
+    case 118: return 2;
+    case 119: return 3;
     default:
       return 0;
   }
@@ -6969,18 +7408,25 @@ static int menuItemHotkey(int value, keyact_type action)
   return 0;
 }
 
-static int menuItemWidth(const char *label, bool submenu)
+static int menuItemWidth(const char *label, bool submenu, int itemIndent)
 {
-  return 12 + ((int)strlen(label) * 6) + (submenu ? 16 : 6);
+  return 12 + itemIndent + ((int)strlen(label) * 6) + (submenu ? 16 : 6);
 }
 
-static void addMenuItem(const char *title, int items, int sub, int value, int mnemonic, keyact_type action, menustate_type state, bool active)
+static void addMenuItem(const char *title, int items, int sub, int value, int mnemonic, keyact_type action, menustate_type state, bool active, int itemIndent, bool accent)
 {
   (void) mnemonic;
   int hotkey = menuItemHotkey(value, action);
   const char *label = menuLabelWithHint(title, hotkey, state, active);
-  GLWin.AddMenu(menuItemWidth(label, (sub != 0)), label, items, sub, value, hotkey,
-                (menuBaseX - mPsx) + (menuBuildDepth * MENU_LEVEL_INDENT));
+  GLWin.AddMenu(menuItemWidth(label, (sub != 0), itemIndent), label, items, sub, value, hotkey,
+                (menuBaseX - mPsx) + (menuBuildDepth * MENU_LEVEL_INDENT), itemIndent, menuAnchorRow, accent);
+}
+
+static void addMenuColorsRow(const char *title, int items, int count, const char *const itemTexts[], const int itemValues[],
+                             const unsigned char itemColors[][3], const bool *itemActive)
+{
+  GLWin.AddMenuColors(title, items, count, itemTexts, itemValues, itemColors, itemActive,
+                      (menuBaseX - mPsx) + (menuBuildDepth * MENU_LEVEL_INDENT), menuAnchorRow);
 }
 
 static keyact_type keyActionFromInput(int encoded)
@@ -7409,7 +7855,7 @@ void checkControls()
   {
     controlLine(ctls, "Left Mouse Button", "Select Host");
     controlLine(ctls, "", "Click-and-Drag to Select Multiple Hosts");
-    controlLine(ctls, "", "Click Selected Host to Toggle Persistant IP/Name");
+    controlLine(ctls, "", "Click Selected Host to Toggle Persistent Host Labels");
     controlLine(ctls, "Middle Mouse Button", "Click-and-Drag to Change View");
     controlLine(ctls, "Right Mouse Button", "Show Menu");
     controlLine(ctls, "Left Mouse Button on OSD Row", "Cycle Clicked OSD Setting or Toggle");
@@ -7449,26 +7895,26 @@ void checkControls()
     controlLinePair(ctls, kaSelMoveUp, kaSelMoveDown, "Move Selection Up/Down");
     controlLinePair(ctls, kaSelMoveForward, kaSelMoveBack, "Move Selection Forward/Back");
     controlLinePair(ctls, kaSelMoveLeft, kaSelMoveRight, "Move Selection Left/Right");
-    controlLineKey(ctls, kaFindHosts, "Find Hosts");
+    controlLineKey(ctls, kaFindHosts, "Find Hosts...");
     controlLineKey(ctls, kaNextSelectedHost, "Select Next Host in Selection");
     controlLineKey(ctls, kaPrevSelectedHost, "Select Previous Host in Selection");
-    controlLineKey(ctls, kaToggleSelectionPersistant, "Toggle Persistant IP/Name for Selection");
+    controlLineKey(ctls, kaToggleSelectionPersistant, "Toggle Persistent Host Labels for Selection");
     controlLineKey(ctls, kaCycleIpNameDisplay, "Cycle Show IP - IP/Name - Name Only");
-    controlLineKey(ctls, kaToggleAddDestinationHosts, "Toggle Add Destination Hosts [D]");
-    controlLineKey(ctls, kaMakeHost, "Make Host");
+    controlLineKey(ctls, kaToggleAddDestinationHosts, "Toggle Create Hosts for Destination Targets [D]");
+    controlLineKey(ctls, kaMakeHost, "Create Host...");
     controlLineKey(ctls, kaEditHostname, "Edit Hostname for Selected Host");
     controlLineKey(ctls, kaSelectNamed, "Select All Named Hosts");
     controlLineKey(ctls, kaEditRemarks, "Edit Remarks for Selected Host");
-    controlLineKey(ctls, kaCreateLinkLine, "Press Twice with Different Selected Hosts for Link Line");
-    controlLineKey(ctls, kaDeleteLinkLine, "Delete Link Line (2nd Selected Host, Press Link on 1st)");
-    controlLineKey(ctls, kaAutoLinksAll, "Automatic Link Lines for All Hosts");
-    controlLineKey(ctls, kaToggleNewHostLinks, "Toggle Automatic Link Lines for New Hosts [L]");
-    controlLineKey(ctls, kaAutoLinksSelection, "Automatic Link Lines for Selection");
-    controlLineKey(ctls, kaStopAutoLinksSelection, "Stop Automatic Link Lines for Selection");
+    controlLineKey(ctls, kaCreateLinkLine, "Start Link Line from Selected Host (then press on the other host)");
+    controlLineKey(ctls, kaDeleteLinkLine, "Start Delete Link Line from Selected Host (then press on the other host)");
+    controlLineKey(ctls, kaAutoLinksAll, "Auto Link All Hosts");
+    controlLineKey(ctls, kaToggleNewHostLinks, "Toggle Auto Link New Hosts [L]");
+    controlLineKey(ctls, kaAutoLinksSelection, "Auto Link Hosts in Selection");
+    controlLineKey(ctls, kaStopAutoLinksSelection, "Stop Auto Link Hosts in Selection");
     controlLineKey(ctls, kaDeleteAllLinks, "Delete Link Lines for All Hosts");
     controlLineKey(ctls, kaShowSelectionPackets, "Show Packets for Selection");
     controlLineKey(ctls, kaHideSelectionPackets, "Stop Showing Packets for Selection");
-    controlLineKey(ctls, kaShowAllPackets, "Show Packets for All Hosts");
+    controlLineKey(ctls, kaShowAllPackets, "Packet Display On");
     controlLineKey(ctls, kaToggleNewHostPackets, "Toggle Show Packets for New Hosts [P]");
     controlLineKey(ctls, kaShowSensor1Packets, "Show Packets from Sensor 1");
     controlLineKey(ctls, kaShowSensor2Packets, "Show Packets from Sensor 2");
@@ -7481,27 +7927,27 @@ void checkControls()
     controlLineKey(ctls, kaShowSensor9Packets, "Show Packets from Sensor 9");
     controlLineKey(ctls, kaShowAllSensorPackets, "Show Packets from All Sensors");
     controlLinePair(ctls, kaPrevSensorPackets, kaNextSensorPackets, "Change Sensor to Show Packets from");
-    controlLineKey(ctls, kaToggleBroadcasts, "Toggle Show Simulated Broadcasts [B]");
+    controlLineKey(ctls, kaToggleBroadcasts, "Toggle Simulate Broadcast to all Known Net Hosts [B]");
     controlLineKey(ctls, kaDecreasePacketLimit, "Decrease Allowed Packets");
     controlLineKey(ctls, kaIncreasePacketLimit, "Increase Allowed Packets");
     controlLineKey(ctls, kaTogglePacketDestPort, "Toggle Show Packet Destination Port");
     controlLineKey(ctls, kaTogglePacketSpeed, "Toggle Double Speed Packets [F]");
-    controlLineKey(ctls, kaPacketsOff, "Packets Off");
-    controlLineKey(ctls, kaRecordPacketTraffic, "Record Packet Traffic");
-    controlLineKey(ctls, kaReplayPacketTraffic, "Replay Recorded Packet Traffic");
+    controlLineKey(ctls, kaPacketsOff, "Packet Display Off");
+    controlLineKey(ctls, kaRecordPacketTraffic, "Start Recording Packet Traffic");
+    controlLineKey(ctls, kaReplayPacketTraffic, "Replay Packet Traffic File...");
     controlLineKey(ctls, kaSkipReplayPacket, "Skip to Next Packet during Replay Traffic");
-    controlLineKey(ctls, kaStopPacketTraffic, "Stop Record/Replay of Packet Traffic");
+    controlLineKey(ctls, kaStopPacketTraffic, "Stop Recording / Replay");
     controlLineKey(ctls, kaOpenPacketTrafficFile, "Open Packet Traffic File...");
     controlLineKey(ctls, kaSavePacketTrafficFile, "Save Packet Traffic File As...");
-    controlLineKey(ctls, kaToggleAnimation, "Toggle Pause Animation");
+    controlLineKey(ctls, kaToggleAnimation, "Pause / Resume Packet Animation");
     controlLine(ctls, "Ctrl + X", "Cut Input Box Text");
     controlLine(ctls, "Ctrl + C", "Copy Input Box Text");
     controlLine(ctls, "Ctrl + V", "Paste Input Box Text");
     controlLineKey(ctls, kaAcknowledgeAllAnomalies, "Acknowledge All Anomalies");
-    controlLineKey(ctls, kaToggleOsd, "Toggle Show OSD");
+    controlLineKey(ctls, kaToggleOsd, "Show OSD / Hide OSD");
     controlLineKey(ctls, kaExportSelectionCsv, "Export Selection Details in CSV File As...");
-    controlLineKey(ctls, kaShowHostInformation, "Show Selected Host Information");
-    controlLineKey(ctls, kaShowSelectionInformation, "Show Selection Information");
+    controlLineKey(ctls, kaShowHostInformation, "Host Information");
+    controlLineKey(ctls, kaShowSelectionInformation, "Information for Hosts in Selection");
     controlLineKey(ctls, kaShowHelp, "Toggle Help Overlay");
     fclose(ctls);
   }
@@ -7903,7 +8349,7 @@ int main(int argc, char *argv[])
 #ifndef __MINGW32__
   syslog(LOG_INFO, "stopping...\n");
 #endif
-  localHsenStopManaged(false);
+  localHsenStopManaged();
   goHosts = 2;
   glfwWaitThread(gthrd, GLFW_WAIT);
   hostnameResolveShutdownAll();

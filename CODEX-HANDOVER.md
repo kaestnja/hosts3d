@@ -121,7 +121,7 @@ These are important because future changes should not silently undo them.
 - locked or currently selected hosts are not removed by cleanup
 - hosts become effectively persistent when manually created, edited, named, loaded from layouts, or otherwise promoted to static
 - exact `/32` entries in `hsd-data/netpos.txt` are also materialized as known static hosts at startup
-- those known `/32` hosts should stay visible and labelled even when `On-Active Action` is `Show Host`
+- those known `/32` hosts should stay visible and labelled even when `On Activity` is `Highlight Host`
 - exact `/32` `netpos.txt` rules now have priority over broader matching nets
 - `netpos.txt` now accepts `colour [hold]`, so fixed hosts can be both coloured and non-offset
 - saved layouts keep static and locked hosts only
@@ -208,7 +208,7 @@ If controls, menus, OSD labels, or packet meanings change, documentation should 
 - the OSD should remain readable first, decorative second
 - avoid turning it into a rainbow; use limited, meaningful emphasis
 - OSD legend items are part of the interaction model now, not just decoration
-- if host-visibility behavior gains exceptions, reflect that explicitly in the OSD instead of leaving `Display Scope` or `On-Active Action` misleading
+- if host-visibility behavior gains exceptions, reflect that explicitly in the OSD instead of leaving `Display Scope` or `On Activity` misleading
 - most mode/toggle rows in the top-right OSD are now clickable and should stay consistent with both the visible value and the corresponding keyboard/menu behavior
 
 ### Packet filter rules
@@ -281,7 +281,28 @@ Recent behavior decisions that future sessions should preserve unless intentiona
 - DNS collision labels are valid only for collisions created by `Combine by DNS Suffix ...`; do not guess labels for arbitrary collisions
 - `Last Packet Form` should use the same semantic labels as the packet filter tree, and `Last Likely Relevant Port` is intentionally heuristic wording
 - `HOST INFORMATION` and `SELECTION INFORMATION` should stay as smaller left-aligned windows, not near-fullscreen overlays
-- `Selection -> Add Multiple Hosts To NetPos` writes one `/32` line per selected host using the host's current coordinates and colour
+- `Selection of Hosts -> Add Selected Hosts To Net Positions` writes one `/32` line per selected host using the host's current coordinates and colour
+- the `Configure Local Sensors (hsen)` dialog now shows current adapter IPv4 addresses in a dedicated extra column, uses a wider window, and has separate `Refresh` / `Save` buttons plus a single `Start` / `Stop` button
+- local hsen start/stop should stay silent on success and only open an extra dialog on errors; the stop path should fall back to a hard kill if normal termination does not clear all managed `hsen` processes
+- menu confirm submenus for `Selection -> Delete` and `Net Layout -> Clear Current Layout` were intentionally removed; these actions now trigger immediately
+- flattened grouped menus should use a visible fixed text indent for child entries; `View`, `Select Inactive Hosts`, `Net Layout`, and `Anomalies` now use this pattern, and `Net Positions Editor`, `Find Hosts`, `Help`, and `About` were intentionally moved into the top-level main menu
+- `Selection of Hosts -> Set Host Colour` is now a direct inline colour strip with clickable coloured boxes, not a separate submenu
+- `Selection of Hosts` now starts with a grouped `SELECTION TOOLS` block for `Select All Hosts`, `Invert Current Selection`, `Select All Named Hosts`, `Show Packets for Selection`, `Stop Showing Packets for Selection`, and `Export Selection Details in CSV File As...`
+- `Selection of Hosts -> SELECTION TOOLS` also includes `Persistent Host Labels for Selection`, and `Reset` now only covers traffic counters and services
+- `Host Lines` is now its own top-level grouped menu for selected-host link actions, automatic link modes, and link deletion
+- `Packet Filters -> Sensor Filter` is now also a direct inline strip (`All`, `1`..`9`), not a separate submenu
+- `Packet Display On/Off` is now a direct stateful top-level main-menu toggle; it no longer lives inside `Packet Filters`
+- `Pause/Resume Packet Animation` is now also a direct stateful top-level main-menu toggle near `Packet Filters`
+- `Packet Capture & Replay` is now its own top-level grouped menu for recording, replaying, skipping, stopping, and file open/save
+- `Create Host...` now lives directly in the top-level main menu near `Net Positions Editor`
+- `Show OSD` / `Hide OSD` is now a direct stateful top-level main-menu toggle near `Find Hosts...`, `Help`, and `About`
+- a small set of especially important top-level workflow items uses a subtle tinted menu background (currently `Host Lines`, packet display/animation toggles, `Packet Capture & Replay`, `Net Positions Editor`, `Create Host...`, and the OSD toggle); keep this restrained, not broad
+- non-clickable menu group titles use a muted visual style so they stay readable but are clearly distinct from clickable actions
+- OSD wording should stay aligned with the modernized menu/help wording, not older shorthand; examples now include `Packet Type Filter`, `On Activity`, `Show Packets for New Hosts`, `Auto Link New Hosts`, and `Show Packet Destination Port`
+- the OSD `RUNTIME` section now includes `Packet Capture & Replay` plus `Replay Packet Time` while replay is active; keep the exact replay timestamp visible there
+- `netpos.txt` now supports both legacy `pos ...` rules and newer exact `host ...` rules with optional `ip=`, `mac=`, and `fqdn=` identity fields
+- `netpos` matching is now strict top-to-bottom first-match-wins; do not reintroduce the older `/32`-beats-broad-net special case
+- exact rules with an IP (`pos .../32` or `host ip=...`) are the ones that auto-materialize known hosts at startup
 
 ## Things To Verify Before Bigger Changes
 
@@ -324,6 +345,23 @@ Architecture notes to preserve:
 - keep runtime data in `hsd-data` separate from binaries
 - stage replacement files for the next restart instead of trying to overwrite the currently running `Hosts3D.exe`
 - treat rollback/backup and user-visible error handling as part of the real update design, not as an afterthought
+
+### Planned special IP / MAC rules
+
+Design discussion only; not implemented yet:
+
+| Case | Candidate rule |
+|---|---|
+| `0.0.0.0` | single grey meta-host at a reserved position; no DNS resolve; not a normal confirmed host |
+| `255.255.255.255` | one dedicated global broadcast marker instead of a normal host |
+| mask-like addresses such as `255.255.255.0` | treat as suspicious/meta by default unless an explicit `/32` `netpos` rule says otherwise |
+| loopback `127.0.0.0/8` | dedicated loopback marker or loopback zone instead of normal host placement |
+| same MAC on multiple IPs | keep separate hosts, prefer nearby placement, maybe add a future relation marker; no auto-merge by default |
+| same IP with multiple MACs | keep one IP host but flag a MAC-conflict/anomaly state |
+
+Planned precedence:
+
+- explicit `/32` `netpos` rules should still override future automatic special-case placement behavior
 
 ## Open Guidance
 
