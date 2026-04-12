@@ -298,6 +298,8 @@ Recent behavior decisions that future sessions should preserve unless intentiona
 - `Show OSD` / `Hide OSD` is now a direct stateful top-level main-menu toggle near `Find Hosts...`, `Help`, and `About`
 - a small set of especially important top-level workflow items uses a subtle tinted menu background (currently `Host Lines`, packet display/animation toggles, `Packet Capture & Replay`, `Net Positions Editor`, `Create Host...`, and the OSD toggle); keep this restrained, not broad
 - non-clickable menu group titles use a muted visual style so they stay readable but are clearly distinct from clickable actions
+- treat `Selected Host`, `Selection of Hosts`, `Host Labels`, `Packet Filters`, the packet display/animation toggles, `View`, and `Find Hosts...` as the core everyday menu paths
+- treat `Host Lines`, `Packet Capture & Replay`, `Net Positions Editor`, `Create Host...`, and `Configure Local Sensors (hsen)` as the advanced paths; if their wording or placement changes, update the README `Menu Orientation` section too
 - OSD wording should stay aligned with the modernized menu/help wording, not older shorthand; examples now include `Packet Type Filter`, `On Activity`, `Show Packets for New Hosts`, `Auto Link New Hosts`, and `Show Packet Destination Port`
 - the OSD `RUNTIME` section now includes `Packet Capture & Replay` plus `Replay Packet Time` while replay is active; keep the exact replay timestamp visible there
 - `netpos.txt` now supports both legacy `pos ...` rules and newer exact `host ...` rules with optional `ip=`, `mac=`, and `fqdn=` identity fields

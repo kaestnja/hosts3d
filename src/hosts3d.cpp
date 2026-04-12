@@ -110,6 +110,7 @@ static const int INFO_VIEW_WIN_LEFT = 6;
 static const int INFO_VIEW_WIN_TOP = 6;
 static const int INFO_VIEW_WIN_W = 430;
 static const int INFO_VIEW_WIN_H = 300;
+static const int INFO_VIEW_WIN_MIN_W = INFO_VIEW_WIN_W;
 static const double PACKET_CENTER_Y = 5.0;
 static const double PACKET_LABEL_Y = 7.0;
 static const double RAD2DEG = 57.29577951308232;
@@ -192,6 +193,7 @@ enum osd_row_action_type
 struct osd_row_type
 {
   bool section;
+  bool highlight;
   osd_color_type valueColor;
   unsigned char action;
   char label[40];
@@ -2063,15 +2065,15 @@ static const char *sipsToLabel(sips_type mode)
   }
 }
 
-static const char *sonaToLabel(sona_type mode)
+static const char *osdOnActivityLabel(sona_type mode)
 {
   switch (mode)
   {
-  case alt: return "Create Activity Alert";
-  case ipn: return "Show Label On Activity";
+  case alt: return "Activity Alert";
+  case ipn: return "Show Label";
   case hst: return "Highlight Host";
-  case slt: return "Add Host to Selection On Activity";
-  default: return "No Extra Action On Activity";
+  case slt: return "Add to Selection";
+  default: return "No Extra Action";
   }
 }
 
@@ -2239,6 +2241,39 @@ static void packetTrafficDurationLabel(time_t started, char *buf, size_t bufsz)
   snprintf(buf, bufsz, "%02u:%02u:%02u", hours, mins, secs);
 }
 
+static int textFileLongestLineChars(const char *path)
+{
+  FILE *fp;
+  int longest = 0;
+  if ((fp = fopen(path, "r")))
+  {
+    char line[2048];
+    while (fgets(line, sizeof(line), fp))
+    {
+      int len = (int) strlen(line);
+      while (len && ((line[len - 1] == '\n') || (line[len - 1] == '\r'))) len--;
+      if (len > longest) longest = len;
+    }
+    fclose(fp);
+  }
+  return longest;
+}
+
+static int infoViewWidthForFile(const char *path)
+{
+  int longest = textFileLongestLineChars(path);
+  int width = INFO_VIEW_WIN_MIN_W;
+  int maxWidth = wWin - (INFO_VIEW_WIN_LEFT * 2);
+  if (longest > 0)
+  {
+    int calculated = (longest * 6) + 76;
+    if (calculated > width) width = calculated;
+  }
+  if (maxWidth < INFO_VIEW_WIN_MIN_W) maxWidth = INFO_VIEW_WIN_MIN_W;
+  if (width > maxWidth) width = maxWidth;
+  return width;
+}
+
 static void packetCaptureReplayStatusLabel(char *buf, size_t bufsz, osd_color_type *color)
 {
   char elapsed[16];
@@ -2281,12 +2316,13 @@ static void osdAddSection(const char *label)
   strncpy(row->label, label, sizeof(row->label) - 1);
 }
 
-static void osdAddRow(const char *label, const char *value, osd_color_type valueColor = osdNormal, unsigned char action = osaNone)
+static void osdAddRow(const char *label, const char *value, osd_color_type valueColor = osdNormal, unsigned char action = osaNone, bool highlight = false)
 {
   osd_row_type *row;
   if (osdTextLineCount >= OSD_MAX_ROWS) return;
   row = &osdRows[osdTextLineCount++];
   memset(row, 0, sizeof(osd_row_type));
+  row->highlight = highlight;
   row->valueColor = valueColor;
   row->action = action;
   strncpy(row->label, label, sizeof(row->label) - 1);
@@ -2367,7 +2403,17 @@ static void drawOsdPanel()
     {
       if (row->action)
         osdRowHitAdd(left + 2, y + OSD_ROW_HIT_TOP_Y, right - 2, y + OSD_ROW_HIT_BOTTOM_Y, row->action);
-      glColor3ub(grey[0], grey[1], grey[2]);
+      if (row->highlight)
+      {
+        glColor3ub(16, 28, 36);
+        glRecti(left + 2, y + OSD_ROW_HIT_TOP_Y, right - 2, y + OSD_ROW_HIT_BOTTOM_Y);
+        glColor3ub(aqua[0], aqua[1], aqua[2]);
+        glRecti(left + 2, y + OSD_ROW_HIT_TOP_Y, left + 5, y + OSD_ROW_HIT_BOTTOM_Y);
+        glColor3ub((unsigned char)(((int)grey[0] + (int)aqua[0]) / 2),
+                   (unsigned char)(((int)grey[1] + (int)aqua[1]) / 2),
+                   (unsigned char)(((int)grey[2] + (int)aqua[2]) / 2));
+      }
+      else glColor3ub(grey[0], grey[1], grey[2]);
       glRasterPos2i(labelX, y + OSD_ROW_TEXT_Y);
       GLWin.DrawString((const unsigned char *)row->label);
       osdValueColor(row->valueColor);
@@ -2403,18 +2449,18 @@ void osdUpdate()
   osdAddRow("Display Mode", sipnToLabel(setts.sipn), osdNormal, osaDisplayMode);
   osdAddRow("Display Scope", osdDisplayScopeLabel(), ((setts.sips != off) || (setts.sona == ipn) ? osdAccent : osdNormal), osaDisplayScope);
   osdAddRow("Known NetPos Exact", knownLabel, (knownNetposExactHostCount ? osdAccent : osdNormal));
-  osdAddRow("On Activity", sonaToLabel(setts.sona), osdNormal, osaOnActiveAction);
+  osdAddRow("On Activity", osdOnActivityLabel(setts.sona), osdNormal, osaOnActiveAction);
   osdAddSection("PACKETS");
   osdAddRow("Anomaly Detection", osdOnOff(setts.anm), (setts.anm ? osdNormal : osdAccent), osaAnomalyDetection);
   osdAddRow("Fast Packets", osdOnOff(setts.fsp), (setts.fsp ? osdAccent : osdNormal), osaFastPackets);
-  osdAddRow("Create Hosts for Destination Targets", osdOnOff(setts.adh), (setts.adh ? osdAccent : osdNormal), osaAddDestinationHosts);
-  osdAddRow("Simulate Broadcast to all Known Net Hosts", osdOnOff(setts.bct), (setts.bct ? osdAccent : osdNormal), osaShowBroadcastHosts);
-  osdAddRow("Show Packets for New Hosts", osdOnOff(setts.nhp), (setts.nhp ? osdAccent : osdNormal), osaNewHostPackets);
-  osdAddRow("Auto Link New Hosts", osdOnOff(setts.nhl), (setts.nhl ? osdAccent : osdNormal), osaNewHostLinks);
+  osdAddRow("Create Destination Hosts", osdOnOff(setts.adh), (setts.adh ? osdAccent : osdNormal), osaAddDestinationHosts);
+  osdAddRow("Broadcast to Known Net Hosts", osdOnOff(setts.bct), (setts.bct ? osdAccent : osdNormal), osaShowBroadcastHosts);
+  osdAddRow("Show Packets for New Hosts", osdOnOff(setts.nhp), (setts.nhp ? osdAccent : osdNormal), osaNewHostPackets, true);
+  osdAddRow("Auto Link New Hosts", osdOnOff(setts.nhl), (setts.nhl ? osdAccent : osdNormal), osaNewHostLinks, true);
   osdAddRow("Show Packet Destination Port", osdOnOff(setts.pdp), (setts.pdp ? osdAccent : osdNormal), osaShowPacketDestPort);
   osdAddRow("Packet Limit", packetLimitLabel, osdNormal, osaPacketLimit);
   osdAddSection("RUNTIME");
-  osdAddRow("Packet Animation", (goAnim ? "Running" : "Paused"), (goAnim ? osdNormal : osdAccent), osaPacketAnimation);
+  osdAddRow("Packet Animation", (goAnim ? "Running" : "Paused"), (goAnim ? osdNormal : osdAccent), osaPacketAnimation, true);
   packetCaptureReplayStatusLabel(packetCaptureReplayLabel, sizeof(packetCaptureReplayLabel), &packetCaptureReplayColor);
   osdAddRow("Packet Capture & Replay", packetCaptureReplayLabel, packetCaptureReplayColor);
   replayPacketTimeLabel(replayPacketTime, sizeof(replayPacketTime));
@@ -4191,17 +4237,27 @@ void infoSelectionForEachCb(void **data, HtArgType arg1, HtArgType arg2, HtArgTy
   if (ht->sld)
   {
     host_runtime_meta_type *meta = hostRuntimeMeta(ht, false);
-    char sensorBuf[8];
+    char ipBuf[16], nameBuf[25], anomalyBuf[8], typeBuf[8], lockBuf[5], sensorBuf[12], discoveryBuf[25];
+    auto tableCell = [](char *dst, size_t dstsz, const char *src, size_t width)
+    {
+      size_t len;
+      if (!dst || !dstsz || !width) return;
+      if (!src || !*src) src = "-";
+      len = strlen(src);
+      if (len <= width) snprintf(dst, dstsz, "%s", src);
+      else if (width > 3) snprintf(dst, dstsz, "%.*s...", (int)(width - 3), src);
+      else snprintf(dst, dstsz, "%.*s", (int)width, src);
+    };
+    tableCell(ipBuf, sizeof(ipBuf), ht->htip, 15);
+    tableCell(nameBuf, sizeof(nameBuf), (*ht->htnm ? ht->htnm : "-"), 24);
+    tableCell(anomalyBuf, sizeof(anomalyBuf), (ht->anm ? "Yes" : "No"), 7);
+    tableCell(typeBuf, sizeof(typeBuf), (hostIsDynamic(ht) ? "Dynamic" : "Static"), 7);
+    tableCell(lockBuf, sizeof(lockBuf), (ht->lck ? "On" : "Off"), 4);
     if (ht->lsn) snprintf(sensorBuf, sizeof(sensorBuf), "%u", ht->lsn);
     else strcpy(sensorBuf, "-");
-    fprintf(fp, "\n%-15s  %-24s  %-7s  %-7s  %-4s  %-11s  %s",
-            ht->htip,
-            (*ht->htnm ? ht->htnm : "-"),
-            (ht->anm ? "Yes" : "No"),
-            (hostIsDynamic(ht) ? "Dynamic" : "Static"),
-            (ht->lck ? "On" : "Off"),
-            sensorBuf,
-            ((meta && *meta->dnm) ? meta->dnm : "-"));
+    tableCell(discoveryBuf, sizeof(discoveryBuf), ((meta && *meta->dnm) ? meta->dnm : "-"), 24);
+    fprintf(fp, "\n%-15.15s  %-24.24s  %-7.7s  %-7.7s  %-4.4s  %-11.11s  %-24.24s",
+            ipBuf, nameBuf, anomalyBuf, typeBuf, lockBuf, sensorBuf, discoveryBuf);
   }
 }
 
@@ -4701,13 +4757,13 @@ void GLFWCALL keyboardGL(int key, int action)
       case kaShowHostInformation:  //2D GUI selected host info
         if (!seltd) break;
         infoHost();
-        GLWin.CreateWin(INFO_VIEW_WIN_LEFT, INFO_VIEW_WIN_TOP, INFO_VIEW_WIN_W, INFO_VIEW_WIN_H, "HOST INFORMATION", true, true);
+        GLWin.CreateWin(INFO_VIEW_WIN_LEFT, INFO_VIEW_WIN_TOP, infoViewWidthForFile(hsddata("tmp-hinfo-hsd")), INFO_VIEW_WIN_H, "HOST INFORMATION", true, true);
         GLWin.AddView(10, 10, 10, 10, 10, hsddata("tmp-hinfo-hsd"));
         GLResult[0] = HSD_HSTINFO;
         break;
       case kaShowSelectionInformation:  //2D GUI selection info
         infoSelection();
-        GLWin.CreateWin(INFO_VIEW_WIN_LEFT, INFO_VIEW_WIN_TOP, INFO_VIEW_WIN_W, INFO_VIEW_WIN_H, "SELECTION INFORMATION", true, true);
+        GLWin.CreateWin(INFO_VIEW_WIN_LEFT, INFO_VIEW_WIN_TOP, infoViewWidthForFile(hsddata("tmp-hinfo-hsd")), INFO_VIEW_WIN_H, "SELECTION INFORMATION", true, true);
         GLWin.AddButton(10, 6, GLWIN_MISC1, "Selection");
         GLWin.AddButton(104, 6, GLWIN_MISC2, "General");
         GLWin.AddView(10, 42, 10, 10, 17, hsddata("tmp-hinfo-hsd"));

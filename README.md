@@ -447,6 +447,19 @@ The running UI is authoritative: menu items now show direct shortcuts in parenth
 |---|---|
 | `MAIN` | `Selected Host` (if a host is selected), `Selection of Hosts`, `Host Lines`, `Anomalies`, `Host Labels`, `Packet Filters`, `Packet Display On/Off`, `Pause/Resume Packet Animation`, `Packet Capture & Replay`, `On Activity`, `View`, `Net Layout`, `Net Positions Editor`, `Create Host...`, `Select Inactive Hosts`, `Find Hosts...`, `Show OSD / Hide OSD`, `Help`, `About Hosts3D`, `Configure Local Sensors (hsen)`, `Exit` |
 
+### Menu Orientation
+Use this as a quick guide for where to look first in day-to-day work.
+
+- `[Frequently Used]` `Selected Host`, `Selection of Hosts`, `Host Labels`, `Packet Filters`, `Packet Display On/Off`, `Pause/Resume Packet Animation`, `View`, `Find Hosts...`
+- `[Occasional]` `Anomalies`, `On Activity`, `Net Layout`, `Select Inactive Hosts`, `Show OSD / Hide OSD`, `Help`, `About Hosts3D`
+- `[Advanced]` `Host Lines`, `Packet Capture & Replay`, `Net Positions Editor`, `Create Host...`, `Configure Local Sensors (hsen)`
+
+The intent is:
+- start with `Selection of Hosts` for most host workflows
+- use `Packet Filters` plus `Packet Display` / `Packet Animation` for packet visibility work
+- treat `Host Lines`, `Packet Capture & Replay`, `Net Positions Editor`, and local sensor configuration as advanced workflows
+- keep `View` and `Find Hosts...` as fast everyday navigation tools
+
 ### `Selected Host`
 | Item |
 |---|
