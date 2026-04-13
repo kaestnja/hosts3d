@@ -19,6 +19,7 @@ Use this file to recover:
 - Current Windows target in daily use: `Release/windows/x86`
 - Build toolchains now available on Windows: `MSYS2/MinGW32` and `MSYS2/MinGW64`
 - The project is already in productive use; changes should stay pragmatic and low-risk
+- The `port/glfw3` worktree is the active GLFW 3 migration branch for `Hosts3D`
 
 ## Existing Reference Files
 
@@ -62,8 +63,8 @@ Build safety note:
 The current working machine/repo state is:
 
 - `C:\msys64\mingw32\bin\g++.exe`
-- `third_party\glfw2\include`
-- `third_party\glfw2\lib\windows\x86`
+- `C:\msys64\mingw32\include\GLFW\glfw3.h`
+- `C:\msys64\mingw32\lib\libglfw3.a`
 - `third_party\wpcap\include`
 - `third_party\wpcap\lib\windows\x86`
 
@@ -71,13 +72,22 @@ Important x64 note:
 
 - the current machine now has both the MinGW32 and MinGW64 compilers installed
 - the verified x64 compiler path is `C:\msys64\mingw64\bin\g++.exe`
-- `third_party\glfw2\lib\windows\x64` and `third_party\glfw2\bin\windows\x64` are now populated from the official `glfw-2.7.9.bin.WIN64.zip` SourceForge package
+- the matching GLFW 3 MSYS2 packages are installed for both `mingw32` and `mingw64`
 - `third_party\wpcap\lib\windows\x64` is already populated
 - `Release/windows/x64/Hosts3D.exe` and `Release/windows/x64/hsen.exe` now build successfully
 - the required code fix was changing the legacy hashtable callback arg type from `long` to pointer-safe `HtArgType` (`intptr_t`) for Windows x64
 - `Release/windows/x64/Hosts3D.exe` has been smoke-tested: it starts and creates `hsd-data` in the x64 runtime dir
 - `Release/windows/x64/hsen.exe -l` works and lists interfaces
 - `package-release-windows.bat Release x64` now produces `Release/dist/hosts3d-1.17-windows-x64.zip`
+- `compile-hosts3d.bat` now links `Hosts3D` against GLFW 3 and copies `glfw3.dll` from the selected MSYS2 toolchain into the runtime output
+
+### GLFW 3 migration status
+
+- `Hosts3D` now includes `src/glfw_compat.h`, which pulls in `GLFW/glfw3.h` with `GLU`
+- the old GLFW 2 threading API has been removed from the app code and replaced by `std::thread`, `std::mutex`, and `std::condition_variable`
+- the main window/event loop now uses `GLFWwindow*`, `glfwCreateWindow`, `glfwSetScrollCallback`, `glfwSetCursorPosCallback`, `glfwSetCharCallback`, `glfwWindowShouldClose`, and `glfwSwapBuffers(window)`
+- text entry in `MyGLWin` no longer depends on GLFW 2 ASCII-style key callbacks; printable text now enters via the GLFW 3 character callback
+- remaining follow-up risk is mostly runtime behavior verification, not basic compile portability
 
 ### Main runtime output
 

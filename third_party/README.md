@@ -1,17 +1,14 @@
 # Third-Party Layout (Local, No Global SDK Paths)
 
 This project can be built on Windows using local dependencies in this `third_party` tree.
+In the `port/glfw3` branch, `Hosts3D.exe` no longer uses the legacy `third_party/glfw2` tree for GLFW.
+It now links against the GLFW 3 package installed in the active MSYS2 MinGW toolchain and copies `glfw3.dll` from that toolchain into the runtime output.
 
 ## Expected folder layout
 
 ```text
 third_party/
-  glfw2/
-    include/GL/glfw.h
-    lib/windows/x86/libglfw.a        (or libglfwdll.a)
-    lib/windows/x64/libglfw.a        (or libglfwdll.a)
-    bin/windows/x86/glfw.dll         (optional but recommended)
-    bin/windows/x64/glfw.dll         (optional but recommended)
+  glfw2/                             (legacy, no longer used by the GLFW 3 port branch)
   wpcap/
     include/pcap.h                   (and related headers from SDK include folder)
     lib/windows/x86/libwpcap.a       (or wpcap.lib)
@@ -24,27 +21,14 @@ third_party/
 
 ## What to search/copy from old folders
 
-### GLFW 2.x (for `Hosts3D.exe`)
+### GLFW 3 (for `Hosts3D.exe`)
 
-Search for:
-- `glfw.h` (must be GLFW 2 header under `GL\glfw.h`)
-- `libglfw.a` or `libglfwdll.a` (MinGW import/static lib)
-- `glfw.dll` (runtime DLL)
+Install the matching MSYS2 package for the selected MinGW toolchain:
 
-Copy to:
-- `glfw.h` -> `third_party/glfw2/include/GL/glfw.h`
-- `libglfw.a` or `libglfwdll.a` -> `third_party/glfw2/lib/windows/<x86|x64>/`
-- `glfw.dll` -> `third_party/glfw2/bin/windows/<x86|x64>/`
+- `mingw-w64-i686-glfw`
+- `mingw-w64-x86_64-glfw`
 
-For your current MinGW32 build, use `x86`.
-
-Current repository state:
-- `third_party/glfw2/lib/windows/x86/` is populated
-- `third_party/glfw2/bin/windows/x86/` is populated
-- `third_party/glfw2/lib/windows/x64/` is populated
-- `third_party/glfw2/bin/windows/x64/` is populated
-
-Windows x64 builds still additionally require an installed x64 MinGW toolchain.
+The Windows `Hosts3D` build script resolves headers, libraries and `glfw3.dll` from the active toolchain root.
 
 ### WinPcap/Npcap SDK files (for `hsen.exe`)
 
@@ -64,7 +48,7 @@ Windows scripts place binaries in:
 - `Release/windows/<arch>/`
 - `Debug/windows/<arch>/`
 
-`compile-hosts3d.bat` also copies `glfw.dll` from `third_party` into the output dir when found.
+`compile-hosts3d.bat` also copies `glfw3.dll` from the active MSYS2 MinGW toolchain into the output dir when found.
 
 `compile-hsen.bat` also copies `wpcap.dll` and `Packet.dll` from `third_party` into the output dir when found.
 
@@ -76,7 +60,7 @@ Both Windows build scripts also copy `libwinpthread-1.dll` from the active MinGW
 - `compile-hsen.bat Release x86`
 - `compile-hsen.bat Release x64`
 
-If the requested toolchain or third-party files are missing, the scripts now stop with a targeted error instead of silently selecting the wrong compiler.
+If the requested toolchain or required GLFW 3 / WinPcap files are missing, the scripts stop with a targeted error instead of silently selecting the wrong compiler or dependency set.
 
 For `hsen.exe`, if `third_party/wpcap/bin/windows/<arch>/` does not contain these DLLs, `compile-hsen.bat` falls back to installed Npcap system paths:
 - x86: `%SystemRoot%\SysWOW64\Npcap` and `%SystemRoot%\SysWOW64`

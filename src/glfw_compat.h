@@ -1,0 +1,36 @@
+#pragma once
+
+#define GLFW_INCLUDE_GLU
+#include <GLFW/glfw3.h>
+
+#ifndef GLFW_KEY_ESC
+#define GLFW_KEY_ESC GLFW_KEY_ESCAPE
+#endif
+
+#ifndef GLFW_KEY_DEL
+#define GLFW_KEY_DEL GLFW_KEY_DELETE
+#endif
+
+#ifndef GLFW_KEY_PAGEUP
+#define GLFW_KEY_PAGEUP GLFW_KEY_PAGE_UP
+#endif
+
+#ifndef GLFW_KEY_PAGEDOWN
+#define GLFW_KEY_PAGEDOWN GLFW_KEY_PAGE_DOWN
+#endif
+
+#ifndef GLFW_KEY_LCTRL
+#define GLFW_KEY_LCTRL GLFW_KEY_LEFT_CONTROL
+#endif
+
+#ifndef GLFW_KEY_RCTRL
+#define GLFW_KEY_RCTRL GLFW_KEY_RIGHT_CONTROL
+#endif
+
+#ifndef GLFW_KEY_LSHIFT
+#define GLFW_KEY_LSHIFT GLFW_KEY_LEFT_SHIFT
+#endif
+
+#ifndef GLFW_KEY_RSHIFT
+#define GLFW_KEY_RSHIFT GLFW_KEY_RIGHT_SHIFT
+#endif

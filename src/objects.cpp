@@ -14,7 +14,7 @@
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details. */
 
-#include <GL/glfw.h>
+#include "glfw_compat.h"
 #include <ctype.h>
 #include <math.h>
 #include <stdio.h>

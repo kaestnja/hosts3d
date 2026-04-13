@@ -52,10 +52,10 @@ Use the platform-specific subsection that matches the machine you are building o
 ### Software By Platform
 | Platform | Runtime | Build Toolchain |
 |---|---|---|
-| Linux | `libglfw`, `libpcap` | `g++`, `libglfw-dev`, `libpcap-dev` |
-| macOS | GLFW | GCC/Clang + GLFW |
+| Linux | `glfw3`, `libpcap` | `g++`, `libglfw3-dev`, `libpcap-dev`, `pkg-config` |
+| macOS | GLFW 3 | GCC/Clang + GLFW 3 + `pkg-config` |
 | FreeBSD | `hsen` supported | standard C/C++ toolchain |
-| Windows | Npcap/WinPcap-compatible runtime | MinGW (MSYS2) + GLFW + Wpcap/Npcap SDK files |
+| Windows | Npcap/WinPcap-compatible runtime | MinGW (MSYS2) + GLFW 3 + Wpcap/Npcap SDK files |
 
 ## Build
 
@@ -94,7 +94,7 @@ Alternative manual build commands:
 ```powershell
 winget install -e --id MSYS2.MSYS2
 C:\msys64\usr\bin\bash -lc "pacman -Syu --noconfirm"
-C:\msys64\usr\bin\bash -lc "pacman -S --needed --noconfirm mingw-w64-i686-gcc mingw-w64-i686-binutils make"
+C:\msys64\usr\bin\bash -lc "pacman -S --needed --noconfirm mingw-w64-i686-gcc mingw-w64-i686-binutils mingw-w64-i686-glfw make"
 ```
 
 ```powershell
@@ -122,10 +122,15 @@ For a 64-bit build, request `x64` explicitly:
 .\compile-hsen.bat Release x64
 ```
 
-Windows x64 currently also requires:
+Windows x64 also requires:
 - an installed x64 MinGW toolchain (`mingw64` or `ucrt64`)
+- the matching GLFW 3 package, for example:
 
-The repository now already contains the required GLFW 2.x x64 import/static libraries and `glfw.dll` under `third_party/glfw2/.../x64`.
+```powershell
+C:\msys64\usr\bin\bash -lc "pacman -S --needed --noconfirm mingw-w64-x86_64-gcc mingw-w64-x86_64-binutils mingw-w64-x86_64-glfw make"
+```
+
+The Windows `Hosts3D` build script now uses the GLFW 3 package installed under the selected MSYS2 MinGW toolchain root and copies `glfw3.dll` into the runtime output.
 
 Verified current compiler path:
 - `C:\msys64\mingw64\bin\g++.exe`

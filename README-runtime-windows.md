@@ -5,7 +5,7 @@ This package contains the Windows runtime files for `Hosts3D` and `hsen`.
 ## Included Files
 - `Hosts3D.exe`
 - `hsen.exe`
-- `glfw.dll`
+- `glfw3.dll`
 - `libwinpthread-1.dll`
 - `COPYING`
 

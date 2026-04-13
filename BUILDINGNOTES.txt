@@ -3,7 +3,7 @@ Purpose
     This file summarizes the expected dependencies, helper scripts, and output layout.
 
 To compile you need the following libraries installed
-    libglfw-dev 
+    libglfw3-dev
     libpcap-dev
 
 Project status
@@ -37,7 +37,10 @@ Windows local third-party layout:
 
 Windows x64 note:
     x64 builds need an x64 MinGW compiler.
-    The repository now contains GLFW 2.x files for both x86 and x64 under third_party\glfw2.
+    The GLFW 3 package must be installed in the matching MSYS2 MinGW toolchain root.
+    Example packages:
+        mingw-w64-i686-glfw
+        mingw-w64-x86_64-glfw
     On the current machine, the verified x64 compiler path is:
         C:\msys64\mingw64\bin\g++.exe
 

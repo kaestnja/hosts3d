@@ -1622,11 +1622,42 @@ int MyGLWin::Select(bool btnup)
   return sel;
 }
 
+//character input
+void MyGLWin::Char(unsigned int codepoint)
+{
+  if (!currInput || (codepoint < 32) || (codepoint > 126)) return;
+  glin_obj *in;
+  unsigned char *tp;
+  GLWinLL.Start(1);
+  while ((tp = (unsigned char *)GLWinLL.Read(1)))
+  {
+    if (*tp == GLWIN_INPUT)
+    {
+      in = (glin_obj *)tp;
+      if (in->name == currInput)
+      {
+        unsigned int cnt;
+        unsigned int textLen = (unsigned int)strlen(in->text);
+        char ch = (char)codepoint;
+        if (textLen >= in->max) break;
+        if (in->lower) ch = (char)tolower((unsigned char)ch);
+        for (cnt = textLen + 1; cnt > in->cursor; cnt--) in->text[cnt] = in->text[cnt - 1];
+        in->text[in->cursor] = ch;
+        in->cursor++;
+        if ((in->cursor - in->first) > in->cwidth) in->first++;
+        break;
+      }
+    }
+    GLWinLL.Next(1);
+  }
+}
+
 //keyboard input
 void MyGLWin::Key(int key, bool shift)
 {
+  (void)shift;
   if (!currInput) return;
-  if ((key == GLFW_KEY_TAB) || (key == 805)) TabInput((key == GLFW_KEY_TAB));
+  if (key == GLFW_KEY_TAB) TabInput(!shift);
   else
   {
     unsigned int cnt;
@@ -1671,28 +1702,7 @@ void MyGLWin::Key(int key, bool shift)
                 if (in->first && ((in->cursor - in->first) < in->cwidth)) in->first--;
               }
               break;
-            default:
-              if ((key >= GLFW_KEY_SPACE) && (key <= 126) && (strlen(in->text) < in->max))  //~
-              {
-                if (shift)
-                {
-                  int nonan[42] = {96, 126, 49, 33, 50, 64, 51, 35, 52, 36, 53, 37, 54, 94, 55, 38, 56, 42, 57, 40
-                    , 48, 41, 45, 95, 61, 43, 91, 123, 93, 125, 92, 124, 59, 58, 39, 34, 44, 60, 46, 62, 47, 63};  //non-alphanumeric
-                  for (cnt = 0; cnt < 42; cnt += 2)
-                  {
-                    if (nonan[cnt] == key)
-                    {
-                      key = nonan[cnt + 1];
-                      break;
-                    }
-                  }
-                }
-                else key = tolower(key);
-                for (cnt = strlen(in->text) + 1; cnt > in->cursor; cnt--) in->text[cnt] = in->text[cnt - 1];
-                in->text[in->cursor] = (in->lower ? tolower(key) : key);
-                in->cursor++;
-                if ((in->cursor - in->first) > in->cwidth) in->first++;
-              }
+            default: break;
           }
           break;
         }

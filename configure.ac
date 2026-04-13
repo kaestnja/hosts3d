@@ -10,9 +10,11 @@ AC_CONFIG_HEADERS([config.h])
 # Checks for programs.
 AC_PROG_CXX
 AC_PROG_CC
+PKG_PROG_PKG_CONFIG
+PKG_CHECK_MODULES([GLFW], [glfw3])
 
 # Checks for header files.
-AC_CHECK_HEADERS([arpa/inet.h fcntl.h GL/glfw.h netinet/in.h pcap.h stdlib.h string.h sys/socket.h sys/time.h syslog.h unistd.h])
+AC_CHECK_HEADERS([arpa/inet.h fcntl.h GLFW/glfw3.h netinet/in.h pcap.h stdlib.h string.h sys/socket.h sys/time.h syslog.h unistd.h])
 
 # Checks for typedefs, structures, and compiler characteristics.
 AC_HEADER_STDBOOL

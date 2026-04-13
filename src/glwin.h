@@ -14,7 +14,7 @@
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details. */
 
-#include <GL/glfw.h>  //GLenum
+#include "glfw_compat.h"
 
 #include "llist.h"
 
@@ -176,6 +176,7 @@ class MyGLWin
     void Motion(int x, int y);
     void Scroll(int gs = GLWIN_START, bool one = false);
     void Close(bool all = true);
+    void Char(unsigned int codepoint);
     int Select(bool btnup);
     void Key(int key, bool shift);
 };

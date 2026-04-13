@@ -23,11 +23,14 @@
 #include <signal.h>  //signal()
 #include <stdio.h>
 #include <stdlib.h>  //abs(), atoi(), system()
+#include <thread>
 #include <string>
 #include <string.h>
+#include <mutex>
 #include <sys/stat.h>  //mkdir()
 #include <time.h>
 #include <vector>
+#include <condition_variable>
 #ifdef __MINGW32__
 #include <getopt.h>  //getopt()
 #include <winsock2.h>
@@ -164,6 +167,7 @@ MyHT hstsByPos; // data struct that arranges hosts by (x, y, z) co-ordinates
 std::map<unsigned long, bool> hostDynamicStateByIp;  //true = dynamic, false = static
 GLuint objsDraw;  //GL compiled objects
 MyGLWin GLWin;  //2D GUI
+GLFWwindow *mainWindow = 0;
 bool useIpAddrForGlName; // if true, use the host's IP address as the 'name' for host GL objects. Otherwise use the host_type pointer.
 bool dynamicHostsEnabled = true;
 unsigned int dynamicHostTtlSeconds = DEFAULT_DYNAMIC_HOST_TTL_SECONDS;
@@ -171,6 +175,7 @@ unsigned int dynamicHostCleanupIntervalSeconds = DEFAULT_DYNAMIC_HOST_CLEANUP_IN
 time_t dynamicHostLastCleanup = 0;
 bool guiReadyForDialogs = false;
 bool packetThreadStarted = false;
+std::thread packetThread;
 bool helpOverlayVisible = false;
 unsigned int helpOverlayLineCount = 0, helpOverlayScroll = 0;
 char layoutCompatWarningFile[128] = "";
@@ -349,9 +354,10 @@ int localHsenUiIfaceSensors[LOCAL_HSEN_MAX_INTERFACES];
 std::vector<hostname_resolve_request_type> hostnameResolveQueue;
 std::vector<hostname_resolve_result_type> hostnameResolveResults;
 std::map<unsigned long, bool> hostnameResolvePendingByIp;
-GLFWthread hostnameResolveThreads[HOSTNAME_RESOLVE_THREAD_COUNT] = {0};
-GLFWmutex hostnameResolveMutex = 0;
-GLFWcond hostnameResolveCond = 0;
+std::thread hostnameResolveThreads[HOSTNAME_RESOLVE_THREAD_COUNT];
+std::mutex hostnameResolveMutex;
+std::condition_variable hostnameResolveCond;
+bool hostnameResolveStarted = false;
 unsigned int hostnameResolveInFlight = 0;
 bool hostnameResolveShutdown = false;
 bool hostnameResolveStatusActive = false;
@@ -536,7 +542,7 @@ static const char *hostLabelText(host_type *ht);
 static bool hostResolveNameText(in_addr ip, char *buf, size_t bufsz);
 static void hostRuntimeNotePacket(host_type *ht, const pkex_type *pkex, unsigned short port);
 static void hostRuntimeNoteDiscoveryName(host_type *ht, const char *name);
-static void GLFWCALL hostnameResolveWorker(void *arg);
+static void hostnameResolveWorker();
 static bool hostnameResolveInit();
 static void hostnameResolveShutdownAll();
 static void hostnameResolveStatusReset();
@@ -1005,12 +1011,11 @@ static void netposExactHostsSync()
     if (!*ht->htnm && !meta->netposResolveTried && hostnameResolveInit())
     {
       queuedResolve = hostnameResolveQueueHost(ht->hip);
-      if (!queuedResolve && hostnameResolveMutex)
+      if (!queuedResolve && hostnameResolveStarted)
       {
         unsigned long key = hostDynamicStateKey(ht->hip);
-        glfwLockMutex(hostnameResolveMutex);
+        std::lock_guard<std::mutex> lock(hostnameResolveMutex);
         queuedResolve = (hostnameResolvePendingByIp.find(key) != hostnameResolvePendingByIp.end());
-        glfwUnlockMutex(hostnameResolveMutex);
       }
       if (queuedResolve)
       {
@@ -1079,9 +1084,8 @@ static bool hostnameResolveIdleLocked()
   return (hostnameResolveQueue.empty() && hostnameResolveResults.empty() && !hostnameResolveInFlight);
 }
 
-static void GLFWCALL hostnameResolveWorker(void *arg)
+static void hostnameResolveWorker()
 {
-  (void)arg;
   while (true)
   {
     hostname_resolve_request_type req;
@@ -1089,74 +1093,50 @@ static void GLFWCALL hostnameResolveWorker(void *arg)
     memset(&req, 0, sizeof(req));
     memset(&result, 0, sizeof(result));
 
-    glfwLockMutex(hostnameResolveMutex);
+    std::unique_lock<std::mutex> lock(hostnameResolveMutex);
     while (!hostnameResolveShutdown && hostnameResolveQueue.empty())
-      glfwWaitCond(hostnameResolveCond, hostnameResolveMutex, GLFW_INFINITY);
+      hostnameResolveCond.wait(lock);
     if (hostnameResolveShutdown)
-    {
-      glfwUnlockMutex(hostnameResolveMutex);
       break;
-    }
     req = hostnameResolveQueue.back();
     hostnameResolveQueue.pop_back();
     hostnameResolveInFlight++;
-    glfwUnlockMutex(hostnameResolveMutex);
+    lock.unlock();
 
     result.ip = req.ip;
     result.success = hostResolveNameText(req.ip, result.name, sizeof(result.name));
 
-    glfwLockMutex(hostnameResolveMutex);
+    lock.lock();
     hostnameResolveResults.push_back(result);
     hostnameResolvePendingByIp.erase(hostDynamicStateKey(req.ip));
     if (hostnameResolveInFlight) hostnameResolveInFlight--;
-    glfwUnlockMutex(hostnameResolveMutex);
   }
 }
 
 static bool hostnameResolveInit()
 {
-  unsigned char started = 0;
-  if (hostnameResolveMutex && hostnameResolveCond) return true;
-  hostnameResolveMutex = glfwCreateMutex();
-  if (!hostnameResolveMutex) return false;
-  hostnameResolveCond = glfwCreateCond();
-  if (!hostnameResolveCond)
-  {
-    glfwDestroyMutex(hostnameResolveMutex);
-    hostnameResolveMutex = 0;
-    return false;
-  }
+  if (hostnameResolveStarted) return true;
   hostnameResolveShutdown = false;
   hostnameResolveInFlight = 0;
+  hostnameResolveStarted = true;
   for (unsigned char cnt = 0; cnt < HOSTNAME_RESOLVE_THREAD_COUNT; cnt++)
-  {
-    hostnameResolveThreads[cnt] = glfwCreateThread(hostnameResolveWorker, 0);
-    if (hostnameResolveThreads[cnt]) started++;
-  }
-  if (started) return true;
-  glfwDestroyCond(hostnameResolveCond);
-  glfwDestroyMutex(hostnameResolveMutex);
-  hostnameResolveCond = 0;
-  hostnameResolveMutex = 0;
-  return false;
+    hostnameResolveThreads[cnt] = std::thread(hostnameResolveWorker);
+  return true;
 }
 
 static void hostnameResolveShutdownAll()
 {
-  if (!hostnameResolveMutex) return;
-  glfwLockMutex(hostnameResolveMutex);
-  hostnameResolveShutdown = true;
-  if (hostnameResolveCond) glfwBroadcastCond(hostnameResolveCond);
-  glfwUnlockMutex(hostnameResolveMutex);
+  if (!hostnameResolveStarted) return;
+  {
+    std::lock_guard<std::mutex> lock(hostnameResolveMutex);
+    hostnameResolveShutdown = true;
+  }
+  hostnameResolveCond.notify_all();
   for (unsigned char cnt = 0; cnt < HOSTNAME_RESOLVE_THREAD_COUNT; cnt++)
   {
-    if (hostnameResolveThreads[cnt]) glfwWaitThread(hostnameResolveThreads[cnt], GLFW_WAIT);
-    hostnameResolveThreads[cnt] = 0;
+    if (hostnameResolveThreads[cnt].joinable()) hostnameResolveThreads[cnt].join();
   }
-  if (hostnameResolveCond) glfwDestroyCond(hostnameResolveCond);
-  if (hostnameResolveMutex) glfwDestroyMutex(hostnameResolveMutex);
-  hostnameResolveCond = 0;
-  hostnameResolveMutex = 0;
+  hostnameResolveStarted = false;
   hostnameResolveQueue.clear();
   hostnameResolveResults.clear();
   hostnameResolvePendingByIp.clear();
@@ -1177,19 +1157,15 @@ static bool hostnameResolveQueueHost(in_addr ip)
 {
   unsigned long key;
   hostname_resolve_request_type req;
-  if (!hostnameResolveMutex) return false;
+  if (!hostnameResolveStarted) return false;
   key = hostDynamicStateKey(ip);
-  glfwLockMutex(hostnameResolveMutex);
+  std::lock_guard<std::mutex> lock(hostnameResolveMutex);
   if (hostnameResolvePendingByIp.find(key) != hostnameResolvePendingByIp.end())
-  {
-    glfwUnlockMutex(hostnameResolveMutex);
     return false;
-  }
   req.ip = ip;
   hostnameResolvePendingByIp[key] = true;
   hostnameResolveQueue.push_back(req);
-  if (hostnameResolveCond) glfwSignalCond(hostnameResolveCond);
-  glfwUnlockMutex(hostnameResolveMutex);
+  hostnameResolveCond.notify_one();
   return true;
 }
 
@@ -1197,7 +1173,7 @@ static void hostnameResolvePumpResults()
 {
   bool changed = false, statusChanged = false, pausedHosts = false, idle = false;
   std::vector<hostname_resolve_result_type> results;
-  if (!hostnameResolveMutex) return;
+  if (!hostnameResolveStarted) return;
 
   if (!hostnameResolveStatusActive && hostnameResolveStatusFinishedAt && (time(0) > hostnameResolveStatusFinishedAt))
   {
@@ -1205,10 +1181,11 @@ static void hostnameResolvePumpResults()
     statusChanged = true;
   }
 
-  glfwLockMutex(hostnameResolveMutex);
-  if (!hostnameResolveResults.empty()) results.swap(hostnameResolveResults);
-  idle = hostnameResolveIdleLocked();
-  glfwUnlockMutex(hostnameResolveMutex);
+  {
+    std::lock_guard<std::mutex> lock(hostnameResolveMutex);
+    if (!hostnameResolveResults.empty()) results.swap(hostnameResolveResults);
+    idle = hostnameResolveIdleLocked();
+  }
 
   if (!results.empty())
   {
@@ -1258,11 +1235,10 @@ static bool hostnameResolveStatusValue(char *buf, size_t bufsz, osd_color_type *
   unsigned int done, pending = 0, total;
   if (!buf || !bufsz) return false;
   buf[0] = '\0';
-  if (hostnameResolveMutex)
+  if (hostnameResolveStarted)
   {
-    glfwLockMutex(hostnameResolveMutex);
+    std::lock_guard<std::mutex> lock(hostnameResolveMutex);
     pending = (unsigned int)hostnameResolvePendingByIp.size();
-    glfwUnlockMutex(hostnameResolveMutex);
   }
   done = hostnameResolveStatusExisting + hostnameResolveStatusResolved + hostnameResolveStatusFailed;
   total = done + pending;
@@ -3137,18 +3113,20 @@ void displayGL()
   if (pktsLL.Num()) pcktsDraw();
   if (setts.osd || seltd || mMove || (ptrc > hlt) || GLWin.On() || helpOverlayVisible) draw2D();
   animate = false;
-  glfwSwapBuffers();
+  glfwSwapBuffers(mainWindow);
 }
 
 //glfwSetWindowRefreshCallback
-void GLFWCALL refreshGL()
+void refreshGL(GLFWwindow *window)
 {
+  (void)window;
   refresh = true;
 }
 
 //glfwSetWindowSizeCallback
-void GLFWCALL resizeGL(int w, int h)
+void resizeGL(GLFWwindow *window, int w, int h)
 {
+  (void)window;
   wWin = w;
   hWin = h;
   goSize = ((wWin >= OSD_MIN_W) && (hWin >= OSD_MIN_H));  //don't draw OSD if window too small for the legend and status text
@@ -3916,7 +3894,7 @@ void btnProcess(int gs)
 
           seltd = 0;
 
-          if (!glfwGetKey(GLFW_KEY_LCTRL) && !glfwGetKey(GLFW_KEY_RCTRL))
+          if ((glfwGetKey(mainWindow, GLFW_KEY_LCTRL) != GLFW_PRESS) && (glfwGetKey(mainWindow, GLFW_KEY_RCTRL) != GLFW_PRESS))
 	    hostsSet(0, 0);  //ht->sld
 
 	  findhostscbdata.gi1 = gi1;
@@ -4392,12 +4370,14 @@ void keyboardForEachCb(void **data, HtArgType arg1, HtArgType arg2, HtArgType ar
 }
 
 //glfwSetKeyCallback
-void GLFWCALL keyboardGL(int key, int action)
+void keyboardGL(GLFWwindow *window, int key, int scancode, int action, int mods)
 {
-  bool ctrlDown = (glfwGetKey(GLFW_KEY_LCTRL) || glfwGetKey(GLFW_KEY_RCTRL));
-  bool shiftDown = (glfwGetKey(GLFW_KEY_LSHIFT) || glfwGetKey(GLFW_KEY_RSHIFT));
+  (void)window;
+  (void)scancode;
+  bool ctrlDown = ((mods & GLFW_MOD_CONTROL) != 0);
+  bool shiftDown = ((mods & GLFW_MOD_SHIFT) != 0);
   int rawkey = key, actionKey = key;
-  if (!action) return;
+  if (action == GLFW_RELEASE) return;
   if (ctrlDown && shiftDown && (key != GLFW_KEY_LCTRL) && (key != GLFW_KEY_RCTRL) && (key != GLFW_KEY_LSHIFT) && (key != GLFW_KEY_RSHIFT)) actionKey = CTRLSHIFTKEY(key);
   else if (ctrlDown && (key != GLFW_KEY_LCTRL) && (key != GLFW_KEY_RCTRL)) actionKey = CTRLKEY(key);
   else if (shiftDown && (key != GLFW_KEY_LSHIFT) && (key != GLFW_KEY_RSHIFT)) actionKey = SHIFTKEY(key);
@@ -4436,10 +4416,11 @@ void GLFWCALL keyboardGL(int key, int action)
       case 598: GLWin.PutInput(setts.clip); break;  //paste input text from clipboard, ctrl+v
       case GLFW_KEY_ENTER: btnProcess(GLWin.DefaultButton()); break;  //process 2D GUI default button
       case GLFW_KEY_ESC: GLWin.Close(false); break;  //close focused 2D GUI window
-      case GLFW_KEY_TAB: case 805:  //select next/prev host in selection, update host info
+      case GLFW_KEY_TAB:
+      case SHIFTKEY(GLFW_KEY_TAB):  //select next/prev host in selection, update host info
         if ((GLResult[0] % 100) == HSD_HSTINFO)
         {
-          hostTab((actionKey == GLFW_KEY_TAB));
+          hostTab(!shiftDown);
           if (seltd)
           {
             GLWin.Scroll();  //start
@@ -4815,9 +4796,34 @@ void GLFWCALL keyboardGL(int key, int action)
   refresh = true;
 }
 
+//glfwSetCharCallback
+void charGL(GLFWwindow *window, unsigned int codepoint)
+{
+  (void)window;
+  if (GLWin.On()) GLWin.Char(codepoint);
+  refresh = true;
+}
+
 static void triggerKeyAction(keyact_type action)
 {
-  if (keybinds[action].key) keyboardGL(keybinds[action].key, 2);
+  int encoded = keybinds[action].key, key = encoded, mods = 0;
+  if (!encoded) return;
+  if (encoded >= 1536)
+  {
+    key -= 1536;
+    mods = GLFW_MOD_CONTROL | GLFW_MOD_SHIFT;
+  }
+  else if (encoded >= 1024)
+  {
+    key -= 1024;
+    mods = GLFW_MOD_SHIFT;
+  }
+  else if (encoded >= 512)
+  {
+    key -= 512;
+    mods = GLFW_MOD_CONTROL;
+  }
+  keyboardGL(mainWindow, key, 0, GLFW_PRESS, mods);
 }
 
 static keyact_type menuActionForValue(int value)
@@ -5504,9 +5510,8 @@ void mnuProcess(int m)
         }
         if (hostnameResolveStatusActive || hostnameResolveStatusFinishedAt)
         {
-          glfwLockMutex(hostnameResolveMutex);
+          std::lock_guard<std::mutex> lock(hostnameResolveMutex);
           if (hostnameResolveIdleLocked()) hostnameResolveStatusReset();
-          glfwUnlockMutex(hostnameResolveMutex);
         }
         else hostnameResolveStatusReset();
         hstsByIp.forEach(1, &queueSelectedHostnamesCb, htArgFromPtr(&rd), 0, 0, 0);
@@ -5979,9 +5984,13 @@ static inline host_type * hostTypeFromName (GLuint name)
 }
 
 //glfwSetMouseButtonCallback
-void GLFWCALL clickGL(int button, int action)
+void clickGL(GLFWwindow *window, int button, int action, int mods)
 {
-  glfwGetMousePos(&mPsx, &mPsy);
+  double x = 0.0, y = 0.0;
+  (void)mods;
+  glfwGetCursorPos(window, &x, &y);
+  mPsx = (int)x;
+  mPsy = (int)y;
   GLWin.MousePos(mPsx, hWin - mPsy);
   if (button == GLFW_MOUSE_BUTTON_LEFT)
   {
@@ -6026,7 +6035,7 @@ void GLFWCALL clickGL(int button, int action)
       if (hstsByIp.Num())
       {
         int left, right, bottom, top;
-        if (!glfwGetKey(GLFW_KEY_LCTRL) && !glfwGetKey(GLFW_KEY_RCTRL)) hostsSet(0, 0);  //ht->sld
+        if ((mods & GLFW_MOD_CONTROL) == 0) hostsSet(0, 0);  //ht->sld
         mPsy = hWin - mPsy;
         left = (mBxx < mPsx ? mBxx : mPsx);
         right = (mBxx > mPsx ? mBxx : mPsx);
@@ -6139,22 +6148,26 @@ void GLFWCALL clickGL(int button, int action)
 }
 
 //glfwSetMouseWheelCallback
-void GLFWCALL wheelGL(int pos)
+void wheelGL(GLFWwindow *window, double xoffset, double yoffset)
 {
-  if (GLWin.On()) GLWin.Scroll((pos > mWhl ? GLWIN_UP : GLWIN_DOWN), false);  //scroll text in 2D GUI
-  else if (helpOverlayMouseOver()) helpOverlayScrollDelta((pos > mWhl ? -1 : 1));
+  (void)window;
+  (void)xoffset;
+  if (!yoffset) return;
+  if (GLWin.On()) GLWin.Scroll((yoffset > 0.0 ? GLWIN_UP : GLWIN_DOWN), false);  //scroll text in 2D GUI
+  else if (helpOverlayMouseOver()) helpOverlayScrollDelta((yoffset > 0.0 ? -1 : 1));
   else  //move view up/down
   {
-    setts.vws[0].ee.y += (pos > mWhl ? 1 : -1) * MOV;
-    setts.vws[0].dr.y += (pos > mWhl ? 1 : -1) * MOV;
+    setts.vws[0].ee.y += (yoffset > 0.0 ? 1 : -1) * MOV;
+    setts.vws[0].dr.y += (yoffset > 0.0 ? 1 : -1) * MOV;
   }
-  mWhl = pos;
   refresh = true;
 }
 
 //glfwSetMousePosCallback
-void GLFWCALL motionGL(int x, int y)
+void motionGL(GLFWwindow *window, double xpos, double ypos)
 {
+  int x = (int)xpos, y = (int)ypos;
+  (void)window;
   int gy = hWin - y;
   GLWin.MousePos(x, gy);
   if (mMove)
@@ -7253,8 +7266,21 @@ static void compactBindingToken(const char *src, char *dst, size_t dstsz)
 static int keyCodeFromToken(const char *token)
 {
   if (!token || !*token) return 0;
-  if ((strlen(token) == 1) && strchr("ABCDEFGHIJKLMNOPQRSTUVWXYZ[]=-,.", token[0])) return token[0];
-  if ((strlen(token) == 1) && isdigit((unsigned char)token[0])) return token[0];
+  if (strlen(token) == 1)
+  {
+    unsigned char ch = (unsigned char)token[0];
+    if ((ch >= 'A') && (ch <= 'Z')) return GLFW_KEY_A + (ch - 'A');
+    if (isdigit(ch)) return GLFW_KEY_0 + (ch - '0');
+    switch (ch)
+    {
+    case '[': return GLFW_KEY_LEFT_BRACKET;
+    case ']': return GLFW_KEY_RIGHT_BRACKET;
+    case '=': return GLFW_KEY_EQUAL;
+    case '-': return GLFW_KEY_MINUS;
+    case ',': return GLFW_KEY_COMMA;
+    case '.': return GLFW_KEY_PERIOD;
+    }
+  }
   if (!strcmp(token, "UP")) return GLFW_KEY_UP;
   if (!strcmp(token, "DOWN")) return GLFW_KEY_DOWN;
   if (!strcmp(token, "LEFT")) return GLFW_KEY_LEFT;
@@ -7267,12 +7293,12 @@ static int keyCodeFromToken(const char *token)
   if (!strcmp(token, "END")) return GLFW_KEY_END;
   if (!strcmp(token, "PAGEUP") || !strcmp(token, "PGUP")) return GLFW_KEY_PAGEUP;
   if (!strcmp(token, "PAGEDOWN") || !strcmp(token, "PGDOWN") || !strcmp(token, "PGDN")) return GLFW_KEY_PAGEDOWN;
-  if (!strcmp(token, "PLUS") || !strcmp(token, "EQUAL") || !strcmp(token, "EQUALS")) return '=';
-  if (!strcmp(token, "MINUS") || !strcmp(token, "DASH")) return '-';
-  if (!strcmp(token, "COMMA")) return ',';
-  if (!strcmp(token, "PERIOD") || !strcmp(token, "DOT") || !strcmp(token, "FULLSTOP")) return '.';
-  if (!strcmp(token, "LEFTBRACKET") || !strcmp(token, "OPENBRACKET")) return '[';
-  if (!strcmp(token, "RIGHTBRACKET") || !strcmp(token, "CLOSEBRACKET")) return ']';
+  if (!strcmp(token, "PLUS") || !strcmp(token, "EQUAL") || !strcmp(token, "EQUALS")) return GLFW_KEY_EQUAL;
+  if (!strcmp(token, "MINUS") || !strcmp(token, "DASH")) return GLFW_KEY_MINUS;
+  if (!strcmp(token, "COMMA")) return GLFW_KEY_COMMA;
+  if (!strcmp(token, "PERIOD") || !strcmp(token, "DOT") || !strcmp(token, "FULLSTOP")) return GLFW_KEY_PERIOD;
+  if (!strcmp(token, "LEFTBRACKET") || !strcmp(token, "OPENBRACKET")) return GLFW_KEY_LEFT_BRACKET;
+  if (!strcmp(token, "RIGHTBRACKET") || !strcmp(token, "CLOSEBRACKET")) return GLFW_KEY_RIGHT_BRACKET;
   if ((token[0] == 'F') && isdigit((unsigned char)token[1]))
   {
     char *end = 0;
@@ -7359,16 +7385,17 @@ static const char *keyCodeName(int key)
   case GLFW_KEY_F10: return "F10";
   case GLFW_KEY_F11: return "F11";
   case GLFW_KEY_F12: return "F12";
-  case ',': return "Comma";
-  case '.': return "Period";
-  case '[': return "[";
-  case ']': return "]";
-  case '-': return "Minus";
-  case '=': return "Plus";
+  case GLFW_KEY_COMMA: return "Comma";
+  case GLFW_KEY_PERIOD: return "Period";
+  case GLFW_KEY_LEFT_BRACKET: return "[";
+  case GLFW_KEY_RIGHT_BRACKET: return "]";
+  case GLFW_KEY_MINUS: return "Minus";
+  case GLFW_KEY_EQUAL: return "Plus";
   default:
-    if (((key >= 'A') && (key <= 'Z')) || ((key >= '0') && (key <= '9')))
+    if (((key >= GLFW_KEY_A) && (key <= GLFW_KEY_Z)) || ((key >= GLFW_KEY_0) && (key <= GLFW_KEY_9)))
     {
-      single[0] = (char) key;
+      if (key >= GLFW_KEY_A) single[0] = (char)('A' + (key - GLFW_KEY_A));
+      else single[0] = (char)('0' + (key - GLFW_KEY_0));
       single[1] = '\0';
       return single;
     }
@@ -8158,8 +8185,8 @@ void pktProcessCb(void **data, HtArgType arg1, HtArgType arg2, HtArgType arg3, H
     pcktCreate(pkex, sh, dh, false);
 }
 
-//glfwCreateThread
-void GLFWCALL pktProcess(void *arg)
+//packet gatherer thread
+void pktProcess()
 {
 #ifdef __MINGW32__
   WORD wVersionRequested = MAKEWORD(2, 0);  //WSAStartup parameter
@@ -8375,20 +8402,27 @@ int main(int argc, char *argv[])
   }
   if (fullscn)
   {
-    GLFWvidmode vid;
-    glfwGetDesktopMode(&vid);
-    wWin = vid.Width;
-    hWin = vid.Height;
+    GLFWmonitor *monitor = glfwGetPrimaryMonitor();
+    const GLFWvidmode *vid = glfwGetVideoMode(monitor);
+    if (vid)
+    {
+      wWin = vid->width;
+      hWin = vid->height;
+    }
   }
-  if (!glfwOpenWindow(wWin, hWin, 0, 0, 0, 0, 24, 0, (fullscn ? GLFW_FULLSCREEN : GLFW_WINDOW)))
+  glfwDefaultWindowHints();
+  glfwWindowHint(GLFW_DEPTH_BITS, 24);
+  mainWindow = glfwCreateWindow(wWin, hWin, "Hosts3D", (fullscn ? glfwGetPrimaryMonitor() : 0), 0);
+  if (!mainWindow)
   {
-    fprintf(stderr, "hosts3d error: glfwOpenWindow() failed\n");
+    fprintf(stderr, "hosts3d error: glfwCreateWindow() failed\n");
 #ifndef __MINGW32__
-    syslog(LOG_ERR, "glfwOpenWindow() failed\n");
+    syslog(LOG_ERR, "glfwCreateWindow() failed\n");
 #endif
     glfwTerminate();
     return 1;
   }
+  glfwMakeContextCurrent(mainWindow);
   settsLoad();  //load settings
   checkControls();  //write controls file from current settings
   helpOverlayLoad();
@@ -8398,24 +8432,24 @@ int main(int argc, char *argv[])
   netLoad(hsddata("0network.hnl"));  //load network layout 0
   netposExactHostsSync();
   if (goHosts) goHosts = 0;
-  glfwSetWindowTitle("Hosts3D");  //window title
-  glfwSetWindowRefreshCallback(refreshGL);
-  glfwSetWindowSizeCallback(resizeGL);
-  glfwSetKeyCallback(keyboardGL);
-  glfwSetMouseButtonCallback(clickGL);
-  glfwSetMouseWheelCallback(wheelGL);
-  glfwSetMousePosCallback(motionGL);
-  glfwDisable(GLFW_AUTO_POLL_EVENTS);
-  glfwEnable(GLFW_KEY_REPEAT);
-  glfwEnable(GLFW_MOUSE_CURSOR);
+  glfwSetWindowTitle(mainWindow, "Hosts3D");  //window title
+  glfwSetWindowRefreshCallback(mainWindow, refreshGL);
+  glfwSetWindowSizeCallback(mainWindow, resizeGL);
+  glfwSetKeyCallback(mainWindow, keyboardGL);
+  glfwSetCharCallback(mainWindow, charGL);
+  glfwSetMouseButtonCallback(mainWindow, clickGL);
+  glfwSetScrollCallback(mainWindow, wheelGL);
+  glfwSetCursorPosCallback(mainWindow, motionGL);
+  glfwSetInputMode(mainWindow, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+  resizeGL(mainWindow, wWin, hWin);
   glEnable(GL_DEPTH_TEST);
   glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
   initObjsGL();
   GLWin.InitFont();
   guiReadyForDialogs = true;
   layoutWarnShowPending();
-  GLFWthread gthrd = glfwCreateThread(pktProcess, 0);  //packet gatherer
-  if (gthrd) packetThreadStarted = true;
+  packetThread = std::thread(pktProcess);  //packet gatherer
+  packetThreadStarted = true;
   localHsenAutostartMaybe();
   signal(SIGINT, hsdStop);  //capture ctrl+c
   signal(SIGTERM, hsdStop);  //capture kill
@@ -8438,20 +8472,22 @@ int main(int argc, char *argv[])
     if (refresh || animate) displayGL();
     else usleep(10000);
     glfwPollEvents();
-    goRun = (goRun && glfwGetWindowParam(GLFW_OPENED));
+    goRun = (goRun && !glfwWindowShouldClose(mainWindow));
   }
 #ifndef __MINGW32__
   syslog(LOG_INFO, "stopping...\n");
 #endif
   localHsenStopManaged();
   goHosts = 2;
-  glfwWaitThread(gthrd, GLFW_WAIT);
+  if (packetThread.joinable()) packetThread.join();
   hostnameResolveShutdownAll();
   settsSave();  //save settings
   netSave(hsddata("0network.hnl"));  //save network layout 0
   allDestroy();
   netpsDestroy();
   glDeleteLists(objsDraw, OBJ_LIST_COUNT);
+  if (mainWindow) glfwDestroyWindow(mainWindow);
+  mainWindow = 0;
   glfwTerminate();
 #ifndef __MINGW32__
   syslog(LOG_INFO, "stopped\n");

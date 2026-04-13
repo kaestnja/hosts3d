@@ -58,7 +58,7 @@ if exist "%HASHPATH%" del /Q "%HASHPATH%"
 
 mkdir "%STAGEDIR%"
 
-for %%f in (Hosts3D.exe hsen.exe glfw.dll libwinpthread-1.dll) do (
+for %%f in (Hosts3D.exe hsen.exe glfw3.dll libwinpthread-1.dll) do (
   if not exist "%RUNDIR%\%%f" (
     echo Missing "%RUNDIR%\%%f"
     goto :fail
