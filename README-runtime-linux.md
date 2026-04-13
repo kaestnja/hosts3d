@@ -74,3 +74,4 @@ Replace `127.0.0.1` with the target Hosts3D receiver when needed.
 
 ## License
 Hosts3D is distributed under the GNU General Public License. See `COPYING`.
+This package is provided without warranty. Current project page: <https://github.com/kaestnja/hosts3d>.

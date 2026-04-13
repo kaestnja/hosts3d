@@ -417,6 +417,7 @@ Recent behavior decisions that future sessions should preserve unless intentiona
 - on Linux, the Hosts3D UDP receive socket must stay `FD_CLOEXEC`; otherwise local `hsen` children inherit port `10111`, and later Hosts3D starts can fail to bind the receive socket and silently lose all packet reception
 - menu confirm submenus for `Selection -> Delete` and `Net Layout -> Clear Current Layout` were intentionally removed; these actions now trigger immediately
 - flattened grouped menus should use a visible fixed text indent for child entries; `View`, `Select Inactive Hosts`, `Net Layout`, and `Anomalies` now use this pattern, and `Net Positions Editor`, `Find Hosts`, `Help`, and `About` were intentionally moved into the top-level main menu
+- `About Hosts3D` should point users to the GitHub continuation project, not to the defunct old SourceForge homepage, and should keep a short GPL / no-warranty reminder without turning the dialog into a license dump
 - `Selection of Hosts -> Set Host Colour` is now a direct inline colour strip with clickable coloured boxes, not a separate submenu
 - `Selection of Hosts` now starts with a grouped `SELECTION TOOLS` block for `Select All Hosts`, `Invert Current Selection`, `Select All Named Hosts`, `Show Packets for Selection`, `Stop Showing Packets for Selection`, and `Export Selection Details in CSV File As...`
 - `Selection of Hosts -> SELECTION TOOLS` also includes `Persistent Host Labels for Selection`, and `Reset` now only covers traffic counters and services

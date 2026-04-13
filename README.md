@@ -744,6 +744,8 @@ Conditional by active on-active mode.
 |---|
 | `About Hosts3D` |
 
+The `About Hosts3D` window shows the current version, continuation status, the GitHub project path, and a short GPL / no-warranty reminder.
+
 ### `Configure Local Sensors (hsen)`
 - discovers interfaces via `hsen -l`
 - shows Ethernet/WLAN/Other adapters in a selection dialog

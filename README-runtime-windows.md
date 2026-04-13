@@ -37,3 +37,4 @@ Private/local test packages may additionally include:
 
 ## License
 Hosts3D is distributed under the GNU General Public License. See `COPYING`.
+This package is provided without warranty. Current project page: <https://github.com/kaestnja/hosts3d>.
