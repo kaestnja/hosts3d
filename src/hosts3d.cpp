@@ -7843,6 +7843,8 @@ static bool demoResolveScriptPath(const char *name, char *path, size_t pathsz)
   if (!name || !*name || !path || !pathsz) return false;
   if (selfExecutableDir(base, sizeof(base)))
   {
+    if (pathJoin(path, pathsz, base, name) &&
+        fileExists(path)) return true;
     if (pathJoin(candidate, sizeof(candidate), base, "testing") &&
         pathJoin(path, pathsz, candidate, name) &&
         fileExists(path)) return true;
@@ -7915,7 +7917,7 @@ static bool demoLaunch(bool pythonDemo, char *errbuf, size_t errbufsz)
   if (errbuf && errbufsz) *errbuf = '\0';
   if (!demoResolveScriptPath(scriptName, scriptPath, sizeof(scriptPath)))
   {
-    if (errbuf && errbufsz) snprintf(errbuf, errbufsz, "Unable to locate testing\\%s.", scriptName);
+    if (errbuf && errbufsz) snprintf(errbuf, errbufsz, "Unable to locate %s beside the executable or under a testing folder.", scriptName);
     return false;
   }
   if (!selfExecutableDir(workdir, sizeof(workdir))) *workdir = '\0';

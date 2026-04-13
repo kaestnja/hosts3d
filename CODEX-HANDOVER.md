@@ -128,6 +128,10 @@ The Windows build/package flow now keeps the runtime README visible automaticall
 - `package-release-linux` creates `Release/dist/hosts3d-<version>-linux-<arch>.tar.gz` plus SHA256 from the already-built Linux runtime
 - runtime binaries under `Release/` and `Debug/` are now treated as local build outputs, not as Git-tracked release artifacts
 - use `with-npcap` only for private/local test packages when you explicitly want those DLLs carried in the ZIP
+- staged Windows and Linux release packages now keep their files flat in the package root instead of under a nested `testing/` folder
+- flat release packages now include `README-testing.md` plus `sim-hsen.*` and `demo-hsen.*` beside the main binaries
+- the runtime still accepts the older `testing/` layout as a fallback, but packaged releases should prefer the flat root layout
+- `testing/README.md` is now intentionally written so it still reads correctly after being renamed to `README-testing.md` in a flat release package
 
 ### VS Code support
 
@@ -253,7 +257,7 @@ Recommended order:
   - `./compile-hosts3d Release`
   - `./compile-hsen Release`
   - `./package-release-linux Release arm64`
-- keep the bundled `testing/` helpers in the staged release assets; the runtime OSD demo buttons depend on them
+- keep the bundled synthetic helper scripts and `README-testing.md` in the staged release assets; the runtime OSD demo buttons depend on them
 - tag the release (`v1.xx`) and push the tag
 - create the GitHub release and upload the generated assets manually
 
@@ -270,6 +274,7 @@ Important policy:
 
 - runtime binaries under `Release/` and `Debug/` are local build outputs
 - release-ready binaries belong in packaged archives/assets, not as tracked Git artifacts
+- package staging/output directories and machine-local runtime data directories should stay ignored in Git
 - if packaging behavior changes, update `README.md`, `BUILDINGNOTES.txt`, `README-runtime-windows.md`, `README-runtime-linux.md`, and this handover in the same session
 
 ### Mandatory propagation sweep after non-trivial changes
@@ -355,12 +360,17 @@ Completion rule:
 
 The following are machine-local/runtime artifacts and should stay out of version control:
 
+- `Release/`, `Debug/`, and `build/` outputs
+- package staging/output under `Release/dist/`
+- full `hsd-data/` runtime folders
+- full `.hosts3d/` runtime folders
 - `hsd-data/settings.ini`
 - `hsd-data/controls.txt`
 - `hsd-data/0network.hnl` to `4network.hnl`
 - `hsd-data/traffic*.hpt`
 - temp files in `hsd-data`
 - local `hsen` state files
+- test-run outputs such as `testing/demo-*-last.txt` and `testing/demo-*.state`
 
 Keep in mind:
 

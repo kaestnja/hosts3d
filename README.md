@@ -188,11 +188,8 @@ This creates:
 - `Release/dist/hosts3d-<version>-linux-arm64.tar.gz`
 - `Release/dist/hosts3d-<version>-linux-arm64-SHA256.txt`
 
-The Linux package includes:
-- `hosts3d`
-- `hsen`
-- `COPYING`
-- `README-runtime-linux.md`
+The release packages now keep their runtime files flat in the package root.
+That includes the platform runtime README as `README.md`, the platform-specific copy (`README-runtime-*.md`), `README-testing.md`, and the four bundled synthetic helper scripts beside the main binaries.
 
 ## Manual Start Helpers (Windows, Optional)
 ```powershell
@@ -380,7 +377,7 @@ Runtime behavior not explicitly listed in `controls.txt`:
 - The top-right OSD now spells out current filters and toggles using the same naming style as the menu and in-app help, for example `Display Mode`, `Display Scope`, `On Activity`, and `Packet Limit`.
 - Most mode/toggle rows in the top-right OSD can now be clicked directly to cycle them, so you do not have to remember the corresponding keyboard shortcut first.
 - The `RUNTIME` part of the OSD now also includes two small quick-launch buttons: `PS Demo` and `Py Demo`.
-- These start the bundled short synthetic demo scripts and prefer the first selected local sensor IPv4 as the demo's central host when available.
+- These start the bundled short synthetic demo scripts, first looking beside the runtime binary and then under `testing/`, and prefer the first selected local sensor IPv4 as the demo's central host when available.
 - While one of those demos is running, its button is tinted to show the active state and returns to the normal colour when the demo ends.
 - Expected demo artifact lifetime: packet and alert objects vanish again after their short animation completes; any dynamic demo hosts that were created then age out after the normal `dynamic_host_ttl_seconds` inactivity timeout, which defaults to `300` seconds (`5` minutes).
 - The OSD is grouped into `FILTERS`, `LABELS`, `PACKETS`, and `RUNTIME`, with grey labels, white values, yellow highlights for active deviations, and red alerts for important attention states.

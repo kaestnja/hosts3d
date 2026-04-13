@@ -75,7 +75,15 @@ Windows packaging note:
     Use:
         package-release-windows.bat Release x64 with-npcap
     when you want a private/local test ZIP that carries the Npcap runtime DLLs.
+    The staged release package now keeps its files flat in the package root:
+        README.md
+        README-runtime-windows.md
+        README-testing.md
+        Hosts3D.exe / hsen.exe / runtime DLLs
+        sim-hsen.* / demo-hsen.*
 
 Linux packaging note:
     package-release-linux creates a tar.gz plus SHA256 file from Release/linux/<arch>.
     For Raspberry Pi 5 the expected arch is usually arm64.
+    The staged Linux package uses the same flat layout with README-testing.md and
+    the bundled synthetic demo/test scripts beside the runtime binaries.

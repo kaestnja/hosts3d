@@ -107,9 +107,12 @@ function Invoke-DemoStage {
   return $estimate, $sw.Elapsed.TotalSeconds
 }
 
-$senderPath = Join-Path $PSScriptRoot 'sim-hsen.ps1'
-if (-not (Test-Path -LiteralPath $senderPath)) {
-  throw "Missing sender script: $senderPath"
+$senderPath = @(
+  (Join-Path $PSScriptRoot 'sim-hsen.ps1'),
+  (Join-Path (Join-Path $PSScriptRoot 'testing') 'sim-hsen.ps1')
+) | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+if (-not $senderPath) {
+  throw "Missing sender script near demo-hsen.ps1 (expected sim-hsen.ps1 beside it or under .\testing\)."
 }
 
 try {

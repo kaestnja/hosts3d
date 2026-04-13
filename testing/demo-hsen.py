@@ -99,9 +99,17 @@ def main() -> None:
     parser.add_argument("--state", default="")
     args = parser.parse_args()
 
-    sender_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sim-hsen.py")
-    if not os.path.isfile(sender_path):
-        raise SystemExit(f"Missing sender script: {sender_path}")
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    sender_candidates = (
+        os.path.join(script_dir, "sim-hsen.py"),
+        os.path.join(script_dir, "testing", "sim-hsen.py"),
+    )
+    sender_path = next((path for path in sender_candidates if os.path.isfile(path)), "")
+    if not sender_path:
+        raise SystemExit(
+            "Missing sender script near demo-hsen.py "
+            "(expected sim-hsen.py beside it or under ./testing/)."
+        )
 
     if args.log:
         with open(args.log, "w", encoding="utf-8") as handle:

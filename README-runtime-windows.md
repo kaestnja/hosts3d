@@ -3,15 +3,18 @@
 This package contains the Windows runtime files for `Hosts3D` and `hsen`.
 
 ## Included Files
+- `README.md`
+- `README-runtime-windows.md`
+- `README-testing.md`
 - `Hosts3D.exe`
 - `hsen.exe`
 - `glfw3.dll`
 - `libwinpthread-1.dll`
 - `COPYING`
-- `testing\sim-hsen.ps1`
-- `testing\sim-hsen.py`
-- `testing\demo-hsen.ps1`
-- `testing\demo-hsen.py`
+- `sim-hsen.ps1`
+- `sim-hsen.py`
+- `demo-hsen.ps1`
+- `demo-hsen.py`
 
 Private/local test packages may additionally include:
 - `Packet.dll`
@@ -35,7 +38,7 @@ You can also trigger the bundled synthetic visualization demos from the top-righ
 
 While a demo is active, the matching OSD button stays tinted until the demo finishes.
 
-These launch the matching script from `testing\` and write the latest timing summary to:
+This package keeps the quick demo scripts beside `Hosts3D.exe`. The runtime still also accepts the older `testing\` layout and the usual development layout as fallbacks. The latest timing summary is written to:
 - `hsd-data\demo-powershell-last.txt`
 - `hsd-data\demo-python-last.txt`
 
@@ -53,6 +56,7 @@ Expected demo artifact lifetime:
 - `traffic.hpt` is Hosts3D's own record/replay format, not a Wireshark capture file.
 - `Stop` and normal `Exit` re-scan for matching bundled `hsen.exe` processes from the same installation path, so stale local sensor processes can be cleaned up even if the saved PID state was lost or outdated.
 - The quick demo scripts stay below one minute and currently run for roughly 23-25 seconds on a normal machine.
+- `README-testing.md` documents the bundled synthetic sender/demo scripts and their example invocations.
 - When a local sensor interface is selected, the demo prefers the first selected local adapter IPv4 as its central demo host and uses that interface's sensor ID.
 - The PowerShell demo works with bundled Windows PowerShell or PowerShell 7.
 - The Python demo requires Python 3 or the `py` launcher to be installed.

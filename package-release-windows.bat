@@ -57,7 +57,6 @@ if exist "%ZIPPATH%" del /Q "%ZIPPATH%"
 if exist "%HASHPATH%" del /Q "%HASHPATH%"
 
 mkdir "%STAGEDIR%"
-mkdir "%STAGEDIR%\testing"
 
 for %%f in (Hosts3D.exe hsen.exe glfw3.dll libwinpthread-1.dll) do (
   if not exist "%RUNDIR%\%%f" (
@@ -80,8 +79,9 @@ if "%INCLUDE_NPCAP%"=="1" (
 copy /Y "COPYING" "%STAGEDIR%\COPYING" >NUL
 copy /Y "README-runtime-windows.md" "%STAGEDIR%\README-runtime-windows.md" >NUL
 copy /Y "README-runtime-windows.md" "%STAGEDIR%\README.md" >NUL
-for %%f in (sim-hsen.ps1 sim-hsen.py demo-hsen.ps1 demo-hsen.py README.md) do (
-  copy /Y "testing\%%f" "%STAGEDIR%\testing\%%f" >NUL
+copy /Y "testing\README.md" "%STAGEDIR%\README-testing.md" >NUL
+for %%f in (sim-hsen.ps1 sim-hsen.py demo-hsen.ps1 demo-hsen.py) do (
+  copy /Y "testing\%%f" "%STAGEDIR%\%%f" >NUL
 )
 
 powershell -NoProfile -Command "Add-Type -AssemblyName System.IO.Compression.FileSystem; if (Test-Path '%ZIPPATH%') { Remove-Item '%ZIPPATH%' -Force }; [System.IO.Compression.ZipFile]::CreateFromDirectory('%STAGEDIR%', '%ZIPPATH%')"

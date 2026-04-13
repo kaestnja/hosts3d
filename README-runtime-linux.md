@@ -3,13 +3,16 @@
 This package contains the Linux runtime files for `Hosts3D` and `hsen`.
 
 ## Included Files
+- `README.md`
+- `README-runtime-linux.md`
+- `README-testing.md`
 - `hosts3d`
 - `hsen`
 - `COPYING`
-- `testing/sim-hsen.ps1`
-- `testing/sim-hsen.py`
-- `testing/demo-hsen.ps1`
-- `testing/demo-hsen.py`
+- `sim-hsen.ps1`
+- `sim-hsen.py`
+- `demo-hsen.ps1`
+- `demo-hsen.py`
 
 ## Runtime Requirements
 Install the runtime libraries once on the target machine.
@@ -63,6 +66,7 @@ Hosts3D also marks its UDP receive socket close-on-exec and retries the packet-s
 
 The top-right OSD also includes `PS Demo` and `Py Demo` quick-launch buttons for the bundled synthetic visualization demos.
 While a demo is active, the matching OSD button stays tinted until the demo finishes.
+This package keeps the quick demo scripts beside the `hosts3d` binary. The runtime still also accepts the older `testing/` layout and the usual development layout as fallbacks.
 Their latest timing summaries are written to:
 - `.hosts3d/demo-powershell-last.txt`
 - `.hosts3d/demo-python-last.txt`
@@ -87,6 +91,7 @@ Replace `127.0.0.1` with the target Hosts3D receiver when needed.
 - On Linux/macOS, runtime data is stored in `.hosts3d/`.
 - `traffic.hpt` is Hosts3D's own record/replay format, not a Wireshark capture file.
 - The quick demo scripts stay below one minute and currently run for roughly 23-25 seconds on a normal machine.
+- `README-testing.md` documents the bundled synthetic sender/demo scripts and their example invocations.
 - When a local sensor interface is selected, the demo prefers the first selected local adapter IPv4 as its central demo host and uses that interface's sensor ID.
 - The Python demo requires Python 3.
 - The PowerShell demo requires `pwsh` if you want to use that button on Linux.
