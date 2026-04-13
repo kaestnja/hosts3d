@@ -37,9 +37,13 @@ These files already existed before this handover and remain important:
 - `README-runtime-linux.md`
   - packaging/runtime handoff for Linux release output
 - `testing/sim-hsen.ps1`
-  - preferred synthetic packet sender for Windows visualization tests
+  - preferred synthetic packet sender for Windows visualization tests; now includes focused TCP/ICMP/ARP/discovery modes, optional wide host spread, and `CenterIp`
 - `testing/sim-hsen.py`
-  - small Python 3 variant derived from the historical upstream helper
+  - Python 3 variant of the same synthetic visualization sender for environments where Python is available
+- `testing/demo-hsen.ps1`
+  - short deterministic PowerShell quick-demo wrapper with estimated/actual stage timings
+- `testing/demo-hsen.py`
+  - Python 3 quick-demo wrapper with the same short deterministic stage plan
 - `.markdownlint.json`
   - repo-local markdown lint relaxations
 - `.vscode/c_cpp_properties.json`
@@ -249,6 +253,7 @@ Recommended order:
   - `./compile-hosts3d Release`
   - `./compile-hsen Release`
   - `./package-release-linux Release arm64`
+- keep the bundled `testing/` helpers in the staged release assets; the runtime OSD demo buttons depend on them
 - tag the release (`v1.xx`) and push the tag
 - create the GitHub release and upload the generated assets manually
 
@@ -335,6 +340,10 @@ Completion rule:
 - OSD legend items are part of the interaction model now, not just decoration
 - if host-visibility behavior gains exceptions, reflect that explicitly in the OSD instead of leaving `Display Scope` or `On Activity` misleading
 - most mode/toggle rows in the top-right OSD are now clickable and should stay consistent with both the visible value and the corresponding keyboard/menu behavior
+- the `RUNTIME` OSD strip now also contains two small quick-launch buttons: `PS Demo` and `Py Demo`
+- those demo buttons should stay non-blocking, should write their timing summaries into `hsd-data`, and should prefer the first selected local sensor IPv4 plus sensor ID as the demo's central host when available
+- README/runtime docs for the demo scripts and OSD demo buttons should continue to mention expected artifact lifetime: packets/alerts fade within seconds, while dynamic demo hosts follow the normal `dynamic_host_ttl_seconds` timeout (default `300` seconds / `5` minutes)
+- while a demo is running, the matching OSD button should visibly tint to the active state and clear again when the state file disappears
 
 ### Packet filter rules
 

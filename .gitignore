@@ -18,9 +18,12 @@ Tools/Wireshark/WiresharkPortable64_4.6.4.paf.exe
 **/hsd-data/netpos*
 **/hsd-data/settings*
 **/hsd-data/traffic*.hpt
+**/hsd-data/demo-*.txt
+**/hsd-data/demo-*.state
 **/hsd-data/tmp*
 **/hsd-data/local-hsen-windows.state
 **/hsd-data/local-hsen.state
+testing/demo-*-last.txt
 Release/dist/
 Release/linux/
 Debug/linux/

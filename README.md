@@ -351,8 +351,12 @@ Notes:
 ### Synthetic test sender
 - `testing/sim-hsen.ps1` sends synthetic `hsen`-compatible UDP packet metadata directly to `Hosts3D`.
 - It is intended for visualization checks, OSD/menu checks, and quick regression demos without a live capture adapter.
+- The PowerShell sender now includes focused modes such as `TcpAck`, `TcpReset`, `IcmpEcho`, `IcmpBurst`, `Arp`, and `Discovery` with selectable `Dns` / `mDns` / `Llmnr` / `NetBIOS` styles, plus an optional wide host spread mode.
+- Both senders now also support a central demo host IP so one selected adapter address can stay visually present as sender, receiver, or mixed hub during the demo.
 - On normal Windows test machines, this PowerShell variant is the preferred helper because it does not require Python.
-- `testing/sim-hsen.py` is a small Python 3 variant derived from the historical 2009 script.
+- `testing/sim-hsen.py` is a Python 3 variant of the same synthetic sender for environments where Python is available.
+- `testing/demo-hsen.ps1` and `testing/demo-hsen.py` run a short deterministic showcase across all currently available synthetic mode families, report estimated and actual runtime per step, and currently stay around 23-25 seconds overall.
+- Expected artifact lifetime for the demo tests: flying packet objects and activity alerts usually disappear again within seconds through their normal animation lifecycle; dynamically created demo hosts remain until `dynamic_host_ttl_seconds` expires after inactivity, which defaults to `300` seconds (`5` minutes), unless they are kept alive by new traffic, selection, or locking.
 
 ## Controls and Interaction
 This is the main usage section for moving around the scene and operating the UI.
@@ -375,6 +379,10 @@ Runtime behavior not explicitly listed in `controls.txt`:
 - Menus now show state markers directly: `[X]/[ ]` for toggles, `(*)/( )` for current mode choices.
 - The top-right OSD now spells out current filters and toggles using the same naming style as the menu and in-app help, for example `Display Mode`, `Display Scope`, `On Activity`, and `Packet Limit`.
 - Most mode/toggle rows in the top-right OSD can now be clicked directly to cycle them, so you do not have to remember the corresponding keyboard shortcut first.
+- The `RUNTIME` part of the OSD now also includes two small quick-launch buttons: `PS Demo` and `Py Demo`.
+- These start the bundled short synthetic demo scripts and prefer the first selected local sensor IPv4 as the demo's central host when available.
+- While one of those demos is running, its button is tinted to show the active state and returns to the normal colour when the demo ends.
+- Expected demo artifact lifetime: packet and alert objects vanish again after their short animation completes; any dynamic demo hosts that were created then age out after the normal `dynamic_host_ttl_seconds` inactivity timeout, which defaults to `300` seconds (`5` minutes).
 - The OSD is grouped into `FILTERS`, `LABELS`, `PACKETS`, and `RUNTIME`, with grey labels, white values, yellow highlights for active deviations, and red alerts for important attention states.
 - The `LABELS` group now also shows `Known NetPos Exact`, so it stays obvious when exact host rules from `netpos.txt` are being kept visible and labelled independently of the normal on-active host mode.
 - The packet legend inside the OSD now renders actual miniature 3D packet examples at an angled view instead of flat markers, using the same shapes as the live animated packet objects.
@@ -397,6 +405,7 @@ Left Mouse Button	Select Host
 Middle Mouse Button	Click-and-Drag to Change View
 Right Mouse Button	Show Menu
 Left Mouse Button on OSD Row	Cycle Clicked OSD Setting or Toggle
+Left Mouse Button on PS Demo / Py Demo	Start Matching Synthetic Demo Script
 Left Mouse Button on OSD Packet Example	Apply Matching Packet Filter
 Esc	Close Open Menu or Dialog
 	Menu state markers: [X]/[ ] = toggle, (*)/( ) = current mode

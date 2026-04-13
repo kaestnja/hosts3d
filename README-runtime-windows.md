@@ -8,6 +8,10 @@ This package contains the Windows runtime files for `Hosts3D` and `hsen`.
 - `glfw3.dll`
 - `libwinpthread-1.dll`
 - `COPYING`
+- `testing\sim-hsen.ps1`
+- `testing\sim-hsen.py`
+- `testing\demo-hsen.ps1`
+- `testing\demo-hsen.py`
 
 Private/local test packages may additionally include:
 - `Packet.dll`
@@ -25,6 +29,21 @@ Private/local test packages may additionally include:
 - `hsd-data\netpos.txt`
 - `hsd-data\0network.hnl`
 
+You can also trigger the bundled synthetic visualization demos from the top-right OSD:
+- `PS Demo`
+- `Py Demo`
+
+While a demo is active, the matching OSD button stays tinted until the demo finishes.
+
+These launch the matching script from `testing\` and write the latest timing summary to:
+- `hsd-data\demo-powershell-last.txt`
+- `hsd-data\demo-python-last.txt`
+
+Expected demo artifact lifetime:
+- packet and alert objects usually disappear again within seconds
+- dynamic demo hosts age out after normal inactivity cleanup, controlled by `dynamic_host_ttl_seconds`
+- the default `dynamic_host_ttl_seconds` is `300` seconds (`5` minutes`)
+
 ## Notes
 - `settings.ini` is plain text and can be edited with Hosts3D closed.
 - `controls.txt` is generated from the active keybindings.
@@ -33,6 +52,10 @@ Private/local test packages may additionally include:
 - If an older incompatible `0network.hnl` is found after replacing the EXE, Hosts3D now skips it with a warning and writes a new compatible layout on exit.
 - `traffic.hpt` is Hosts3D's own record/replay format, not a Wireshark capture file.
 - `Stop` and normal `Exit` re-scan for matching bundled `hsen.exe` processes from the same installation path, so stale local sensor processes can be cleaned up even if the saved PID state was lost or outdated.
+- The quick demo scripts stay below one minute and currently run for roughly 23-25 seconds on a normal machine.
+- When a local sensor interface is selected, the demo prefers the first selected local adapter IPv4 as its central demo host and uses that interface's sensor ID.
+- The PowerShell demo works with bundled Windows PowerShell or PowerShell 7.
+- The Python demo requires Python 3 or the `py` launcher to be installed.
 - Public release ZIPs may omit `wpcap.dll` and `Packet.dll`. In that case, install Npcap on the target machine before using `hsen` or `Configure Local Sensors (hsen)`.
 
 ## License

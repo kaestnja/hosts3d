@@ -90,7 +90,7 @@ static const int HELP_OVERLAY_HEADER_H = 28;
 static const int HELP_OVERLAY_FOOTER_H = 18;
 static const int HELP_OVERLAY_KEY_COL_W = 118;
 static const int OSD_MIN_W = 420;
-static const int OSD_MIN_H = 380;
+static const int OSD_MIN_H = 404;
 static const int OSD_LINE_H = 13;
 static const int OSD_ROW_TEXT_Y = 0;
 // The OSD font is drawn from the raster baseline upward (5x10 bitmap font).
@@ -122,6 +122,10 @@ static const int OSD_LABEL_COL_CHARS = 29;
 static const int OSD_VALUE_COL_CHARS = 16;
 static const int OSD_BOX_W = (OSD_BOX_PAD_X * 2) + ((OSD_LABEL_COL_CHARS + OSD_VALUE_COL_CHARS) * OSD_CHAR_W);
 static const int OSD_VALUE_X = OSD_BOX_PAD_X + (OSD_LABEL_COL_CHARS * OSD_CHAR_W);
+static const int OSD_DEMO_STRIP_H = 22;
+static const int OSD_DEMO_BTN_W = 42;
+static const int OSD_DEMO_BTN_H = 14;
+static const int OSD_DEMO_BTN_GAP = 6;
 static const unsigned int OSD_MAX_ROWS = 24;
 static const unsigned int PACKET_TRIPLE_SIZE_THRESHOLD = 512;
 static const uint32_t LAYOUT_FILE_VERSION = 2;
@@ -211,7 +215,9 @@ enum osd_row_action_type
   osaShowPacketDestPort,
   osaPacketLimit,
   osaPacketAnimation,
-  osaAcknowledgeAnomalies
+  osaAcknowledgeAnomalies,
+  osaLaunchPsDemo,
+  osaLaunchPyDemo
 };
 
 struct osd_row_type
@@ -610,6 +616,7 @@ static bool layoutLoadLinkV2(FILE *net, uint32_t linkRecordSize, link_layout_v2_
 static void hostDeleteManaged(host_type *ht);
 void pcktsDestroy(bool gh = false);
 void offsetReset();
+void messageBox(const char *ttl, const char *msg);
 static void dynamicHostsCleanupMaybe();
 static void settsSave();
 static void localHsenDialogOpen(bool rescan = true);
@@ -620,6 +627,9 @@ static bool localHsenDiscoverInterfaces(bool keepSelections = true);
 static void localHsenPopulateInterfaceIps();
 static bool localHsenManagedRunning();
 static void localHsenAutostartMaybe();
+static bool localHsenFirstSelectedDemoTarget(char *ip, size_t ipsz, unsigned char *sensorIdOut = 0);
+static bool demoStateActive(bool pythonDemo);
+static bool demoLaunch(bool pythonDemo, char *errbuf = 0, size_t errbufsz = 0);
 #ifndef __MINGW32__
 static bool localHsenEnsureCaptureRights(char *errbuf = 0, size_t errbufsz = 0);
 #endif
@@ -1660,6 +1670,18 @@ static bool osdRowHitProcess(int x, int y)
       case osaShowPacketDestPort: setts.pdp = !setts.pdp; break;
       case osaPacketLimit: osdCyclePacketLimit(); break;
       case osaPacketAnimation: goAnim = !goAnim; break;
+      case osaLaunchPsDemo:
+      {
+        char err[256];
+        if (!demoLaunch(false, err, sizeof(err))) messageBox("ERROR", (*err ? err : "Unable to start the PowerShell demo."));
+        break;
+      }
+      case osaLaunchPyDemo:
+      {
+        char err[256];
+        if (!demoLaunch(true, err, sizeof(err))) messageBox("ERROR", (*err ? err : "Unable to start the Python demo."));
+        break;
+      }
       case osaAcknowledgeAnomalies:
         hostsSet(2, 0);
         dAnom = false;
@@ -2350,6 +2372,11 @@ static void osdValueColor(osd_color_type color)
   }
 }
 
+static int osdExtraHeight()
+{
+  return OSD_DEMO_STRIP_H;
+}
+
 static void osdBounds(int *left, int *top, int *right, int *bottom)
 {
   *right = wWin - OSD_MARGIN_X;
@@ -2360,7 +2387,57 @@ static void osdBounds(int *left, int *top, int *right, int *bottom)
     *right = *left + OSD_BOX_W;
   }
   *top = hWin - OSD_MARGIN_Y + 5;
-  *bottom = *top - ((int)osdTextLineCount * OSD_LINE_H) - (OSD_BOX_PAD_Y * 2) + 5;
+  *bottom = *top - ((int)osdTextLineCount * OSD_LINE_H) - (OSD_BOX_PAD_Y * 2) - osdExtraHeight() + 5;
+}
+
+static void osdDrawDemoButtons(int left, int bottom, int right, int labelX)
+{
+  bool psActive = demoStateActive(false);
+  bool pyActive = demoStateActive(true);
+  int stripTop = bottom + OSD_DEMO_STRIP_H - 3;
+  int stripBottom = bottom + 4;
+  int btnBottom = stripBottom + 2;
+  int btnTop = btnBottom + OSD_DEMO_BTN_H;
+  int pyRight = right - OSD_BOX_PAD_X;
+  int pyLeft = pyRight - OSD_DEMO_BTN_W;
+  int psRight = pyLeft - OSD_DEMO_BTN_GAP;
+  int psLeft = psRight - OSD_DEMO_BTN_W;
+  int textY = btnBottom + 4;
+  glColor3ub(dlgrey[0], dlgrey[1], dlgrey[2]);
+  glBegin(GL_LINES);
+    glVertex2i(left + OSD_BOX_PAD_X, stripTop);
+    glVertex2i(right - OSD_BOX_PAD_X, stripTop);
+  glEnd();
+  glColor3ub(brgrey[0], brgrey[1], brgrey[2]);
+  glRasterPos2i(labelX, textY);
+  GLWin.DrawString((const unsigned char *)"Quick Demo");
+
+  glColor3ub((psActive ? 32 : 18), (psActive ? 46 : 26), (psActive ? 18 : 32));
+  glRecti(psLeft, btnTop, psRight, btnBottom);
+  glColor3ub((pyActive ? 32 : 18), (pyActive ? 46 : 26), (pyActive ? 18 : 32));
+  glRecti(pyLeft, btnTop, pyRight, btnBottom);
+  glColor3ub((psActive ? green[0] : aqua[0]), (psActive ? green[1] : aqua[1]), (psActive ? green[2] : aqua[2]));
+  glBegin(GL_LINE_LOOP);
+    glVertex2i(psLeft, btnTop);
+    glVertex2i(psRight, btnTop);
+    glVertex2i(psRight, btnBottom);
+    glVertex2i(psLeft, btnBottom);
+  glEnd();
+  glColor3ub((pyActive ? green[0] : aqua[0]), (pyActive ? green[1] : aqua[1]), (pyActive ? green[2] : aqua[2]));
+  glBegin(GL_LINE_LOOP);
+    glVertex2i(pyLeft, btnTop);
+    glVertex2i(pyRight, btnTop);
+    glVertex2i(pyRight, btnBottom);
+    glVertex2i(pyLeft, btnBottom);
+  glEnd();
+  glColor3ub((psActive ? yellow[0] : white[0]), (psActive ? yellow[1] : white[1]), (psActive ? yellow[2] : white[2]));
+  glRasterPos2i(psLeft + 4, textY);
+  GLWin.DrawString((const unsigned char *)"PS Demo");
+  glColor3ub((pyActive ? yellow[0] : white[0]), (pyActive ? yellow[1] : white[1]), (pyActive ? yellow[2] : white[2]));
+  glRasterPos2i(pyLeft + 5, textY);
+  GLWin.DrawString((const unsigned char *)"Py Demo");
+  osdRowHitAdd(psLeft, btnTop, psRight, btnBottom, osaLaunchPsDemo);
+  osdRowHitAdd(pyLeft, btnTop, pyRight, btnBottom, osaLaunchPyDemo);
 }
 
 static void drawOsdPanel()
@@ -2427,6 +2504,7 @@ static void drawOsdPanel()
     }
     y -= OSD_LINE_H;
   }
+  osdDrawDemoButtons(left, bottom, right, labelX);
 }
 
 //update osd text
@@ -2530,7 +2608,7 @@ static void osdDrawPktLegend(int px, int py)
   const packet_tree_row_type *rows = packetTreeRows(&rowsCount);
   int left = px, right = px + OSD_BOX_W, top, bottom;
   int listTop, iconX, rowTop, rowBottom, rowIconY, rowTextY;
-  py -= (osdTextLineCount * OSD_LINE_H) + OSD_PKT_GAP_H;
+  py -= (osdTextLineCount * OSD_LINE_H) + OSD_PKT_GAP_H + osdExtraHeight();
   osdPacketHitsClear();
   top = py + 12;
   listTop = py - 12;
@@ -7647,6 +7725,267 @@ static void localHsenAutostartMaybe()
   localHsenStartSelected();
 }
 
+static void localHsenFirstIpFromList(const char *ips, char *out, size_t outsz)
+{
+  const char *end;
+  size_t len;
+  if (!out || !outsz) return;
+  *out = '\0';
+  if (!ips || !*ips) return;
+  while (*ips && isspace((unsigned char)*ips)) ips++;
+  end = ips;
+  while (*end && (*end != ',') && !isspace((unsigned char)*end)) end++;
+  len = (size_t)(end - ips);
+  if (!len) return;
+  if (len >= outsz) len = outsz - 1;
+  memcpy(out, ips, len);
+  out[len] = '\0';
+}
+
+static bool localHsenFirstSelectedDemoTarget(char *ip, size_t ipsz, unsigned char *sensorIdOut)
+{
+  bool needPopulate = true;
+  if (ip && ipsz) *ip = '\0';
+  if (sensorIdOut) *sensorIdOut = 0;
+  for (unsigned char cnt = 0; cnt < localHsenIfCount; cnt++)
+  {
+    if (localHsenIfs[cnt].selected && localHsenIfs[cnt].ips[0])
+    {
+      needPopulate = false;
+      break;
+    }
+  }
+  if (needPopulate && localHsenIfCount) localHsenPopulateInterfaceIps();
+  for (unsigned char cnt = 0; cnt < localHsenIfCount; cnt++)
+  {
+    char firstIp[64];
+    if (!localHsenIfs[cnt].selected) continue;
+    localHsenFirstIpFromList(localHsenIfs[cnt].ips, firstIp, sizeof(firstIp));
+    if (!*firstIp) continue;
+    setStringValue(ip, ipsz, firstIp);
+    if (sensorIdOut) *sensorIdOut = (localHsenIfs[cnt].sensorId ? localHsenIfs[cnt].sensorId : 1);
+    return true;
+  }
+  return false;
+}
+
+static bool demoStateActive(bool pythonDemo)
+{
+  struct stat fs;
+  char path[256];
+  time_t now = time(0);
+  setStringValue(path, sizeof(path), hsddata(pythonDemo ? "demo-python.state" : "demo-powershell.state"));
+  if (stat(path, &fs)) return false;
+  if ((fs.st_mtime > 0) && ((now - fs.st_mtime) > 120))
+  {
+    remove(path);
+    return false;
+  }
+  return true;
+}
+
+static bool selfExecutableDir(char *dir, size_t dirsz)
+{
+  if (!dir || !dirsz) return false;
+#ifdef __MINGW32__
+  char path[MAX_PATH];
+  char *slash;
+  DWORD got = GetModuleFileNameA(0, path, sizeof(path));
+  if (!got || (got >= sizeof(path))) return false;
+  slash = strrchr(path, '\\');
+  if (!slash) return false;
+  *slash = '\0';
+  setStringValue(dir, dirsz, path);
+  return true;
+#else
+  char path[PATH_MAX];
+  char *slash;
+#ifdef __linux__
+  ssize_t got = readlink("/proc/self/exe", path, sizeof(path) - 1);
+  if ((got > 0) && (got < (ssize_t)sizeof(path)))
+  {
+    path[got] = '\0';
+    slash = strrchr(path, '/');
+    if (!slash) return false;
+    *slash = '\0';
+    setStringValue(dir, dirsz, path);
+    return true;
+  }
+#endif
+  if (!getcwd(path, sizeof(path))) return false;
+  setStringValue(dir, dirsz, path);
+  return true;
+#endif
+}
+
+static bool pathJoin(char *dst, size_t dstsz, const char *left, const char *right)
+{
+  size_t leftLen, rightLen;
+  if (!dst || !dstsz || !left || !right) return false;
+  *dst = '\0';
+  leftLen = strlen(left);
+  rightLen = strlen(right);
+  if ((leftLen + rightLen + 2) > dstsz) return false;
+  setStringValue(dst, dstsz, left);
+#ifdef __MINGW32__
+  strcat(dst, "\\");
+#else
+  strcat(dst, "/");
+#endif
+  strcat(dst, right);
+  return true;
+}
+
+static bool demoResolveScriptPath(const char *name, char *path, size_t pathsz)
+{
+  char base[512], candidate[512];
+  std::string devPath;
+  if (!name || !*name || !path || !pathsz) return false;
+  if (selfExecutableDir(base, sizeof(base)))
+  {
+    if (pathJoin(candidate, sizeof(candidate), base, "testing") &&
+        pathJoin(path, pathsz, candidate, name) &&
+        fileExists(path)) return true;
+#ifdef __MINGW32__
+    devPath = std::string(base) + "\\..\\..\\..\\testing\\" + name;
+#else
+    devPath = std::string(base) + "/../../../testing/" + name;
+#endif
+    if ((devPath.size() + 1) <= pathsz)
+    {
+      setStringValue(path, pathsz, devPath.c_str());
+      if (fileExists(path)) return true;
+    }
+  }
+  if (getcwd(base, sizeof(base)))
+  {
+    if (pathJoin(candidate, sizeof(candidate), base, "testing") &&
+        pathJoin(path, pathsz, candidate, name) &&
+        fileExists(path)) return true;
+  }
+  if (pathsz) *path = '\0';
+  return false;
+}
+
+static bool launchDetachedCommandLine(const char *cmdline, const char *workdir)
+{
+  if (!cmdline || !*cmdline) return false;
+#ifdef __MINGW32__
+  STARTUPINFOA si;
+  PROCESS_INFORMATION pi;
+  char cmd[4096];
+  ZeroMemory(&si, sizeof(si));
+  ZeroMemory(&pi, sizeof(pi));
+  si.cb = sizeof(si);
+  si.dwFlags = STARTF_USESHOWWINDOW;
+  si.wShowWindow = SW_HIDE;
+  setStringValue(cmd, sizeof(cmd), cmdline);
+  if (!CreateProcessA(0, cmd, 0, 0, FALSE, CREATE_NO_WINDOW, 0, workdir, &si, &pi)) return false;
+  CloseHandle(pi.hThread);
+  CloseHandle(pi.hProcess);
+  return true;
+#else
+  pid_t pid = fork();
+  if (pid == -1) return false;
+  if (!pid)
+  {
+    int nullfd = open("/dev/null", O_RDWR);
+    if (workdir && *workdir) chdir(workdir);
+    setsid();
+    if (nullfd != -1)
+    {
+      dup2(nullfd, 0);
+      dup2(nullfd, 1);
+      dup2(nullfd, 2);
+      if (nullfd > 2) close(nullfd);
+    }
+    execl("/bin/sh", "sh", "-c", cmdline, (char *)0);
+    _exit(127);
+  }
+  return true;
+#endif
+}
+
+static bool demoLaunch(bool pythonDemo, char *errbuf, size_t errbufsz)
+{
+  char scriptPath[512], logPath[256], statePath[256], centerIp[64], cmd[4096];
+  char workdir[512] = "";
+  unsigned char sensorId = 1;
+  const char *scriptName = (pythonDemo ? "demo-hsen.py" : "demo-hsen.ps1");
+  if (errbuf && errbufsz) *errbuf = '\0';
+  if (!demoResolveScriptPath(scriptName, scriptPath, sizeof(scriptPath)))
+  {
+    if (errbuf && errbufsz) snprintf(errbuf, errbufsz, "Unable to locate testing\\%s.", scriptName);
+    return false;
+  }
+  if (!selfExecutableDir(workdir, sizeof(workdir))) *workdir = '\0';
+  localHsenFirstSelectedDemoTarget(centerIp, sizeof(centerIp), &sensorId);
+  setStringValue(logPath, sizeof(logPath), hsddata(pythonDemo ? "demo-python-last.txt" : "demo-powershell-last.txt"));
+  setStringValue(statePath, sizeof(statePath), hsddata(pythonDemo ? "demo-python.state" : "demo-powershell.state"));
+  if (demoStateActive(pythonDemo))
+  {
+    if (errbuf && errbufsz) setStringValue(errbuf, errbufsz, (pythonDemo ? "The Python demo is already running." : "The PowerShell demo is already running."));
+    return false;
+  }
+  if (fileExists(statePath)) remove(statePath);
+#ifdef __MINGW32__
+  if (pythonDemo)
+  {
+    const char *candidates[] = {"py -3", "python", "python3", 0};
+    for (unsigned char cnt = 0; candidates[cnt]; cnt++)
+    {
+      snprintf(cmd, sizeof(cmd), "%s \"%s\" --host 127.0.0.1 --port %u --sensor %u --log \"%s\" --state \"%s\"%s%s",
+               candidates[cnt], scriptPath, HOST3D_PORT, sensorId, logPath,
+               statePath,
+               (*centerIp ? " --center-ip " : ""), (*centerIp ? centerIp : ""));
+      if (launchDetachedCommandLine(cmd, workdir)) return true;
+    }
+    if (errbuf && errbufsz) setStringValue(errbuf, errbufsz, "Unable to start the Python demo. Install Python 3 or the py launcher.");
+  }
+  else
+  {
+    const char *candidates[] = {"pwsh", "powershell", 0};
+    for (unsigned char cnt = 0; candidates[cnt]; cnt++)
+    {
+      snprintf(cmd, sizeof(cmd), "%s -ExecutionPolicy Bypass -File \"%s\" -DestinationAddress 127.0.0.1 -Port %u -SensorId %u -LogPath \"%s\" -StatePath \"%s\"%s%s",
+               candidates[cnt], scriptPath, HOST3D_PORT, sensorId, logPath,
+               statePath,
+               (*centerIp ? " -CenterIp " : ""), (*centerIp ? centerIp : ""));
+      if (launchDetachedCommandLine(cmd, workdir)) return true;
+    }
+    if (errbuf && errbufsz) setStringValue(errbuf, errbufsz, "Unable to start the PowerShell demo. Install PowerShell or PowerShell 7.");
+  }
+#else
+  if (pythonDemo)
+  {
+    const char *candidates[] = {"python3", "python", 0};
+    for (unsigned char cnt = 0; candidates[cnt]; cnt++)
+    {
+      snprintf(cmd, sizeof(cmd), "%s \"%s\" --host 127.0.0.1 --port %u --sensor %u --log \"%s\" --state \"%s\"%s%s >/dev/null 2>&1",
+               candidates[cnt], scriptPath, HOST3D_PORT, sensorId, logPath,
+               statePath,
+               (*centerIp ? " --center-ip " : ""), (*centerIp ? centerIp : ""));
+      if (launchDetachedCommandLine(cmd, workdir)) return true;
+    }
+    if (errbuf && errbufsz) setStringValue(errbuf, errbufsz, "Unable to start the Python demo. Install Python 3.");
+  }
+  else
+  {
+    const char *candidates[] = {"pwsh", "powershell", 0};
+    for (unsigned char cnt = 0; candidates[cnt]; cnt++)
+    {
+      snprintf(cmd, sizeof(cmd), "%s -File \"%s\" -DestinationAddress 127.0.0.1 -Port %u -SensorId %u -LogPath \"%s\" -StatePath \"%s\"%s%s >/dev/null 2>&1",
+               candidates[cnt], scriptPath, HOST3D_PORT, sensorId, logPath,
+               statePath,
+               (*centerIp ? " -CenterIp " : ""), (*centerIp ? centerIp : ""));
+      if (launchDetachedCommandLine(cmd, workdir)) return true;
+    }
+    if (errbuf && errbufsz) setStringValue(errbuf, errbufsz, "Unable to start the PowerShell demo. Install pwsh if you want to use that OSD button.");
+  }
+#endif
+  return false;
+}
+
 static void compactBindingToken(const char *src, char *dst, size_t dstsz)
 {
   size_t pos = 0;
@@ -8377,6 +8716,7 @@ void checkControls()
     controlLine(ctls, "Middle Mouse Button", "Click-and-Drag to Change View");
     controlLine(ctls, "Right Mouse Button", "Show Menu");
     controlLine(ctls, "Left Mouse Button on OSD Row", "Cycle Clicked OSD Setting or Toggle");
+    controlLine(ctls, "Left Mouse Button on PS Demo / Py Demo", "Start the Matching Synthetic Demo Script");
     controlLine(ctls, "Left Mouse Button on OSD Packet Example", "Apply Matching Packet Filter");
     controlLine(ctls, "Esc", "Close Open Menu or Dialog");
     controlLine(ctls, "", "Menu state markers: [X]/[ ] = toggle, (*)/( ) = current mode");
@@ -8886,14 +9226,25 @@ int main(int argc, char *argv[])
   localHsenAutostartMaybe();
   signal(SIGINT, hsdStop);  //capture ctrl+c
   signal(SIGTERM, hsdStop);  //capture kill
+  bool psDemoActivePrev = demoStateActive(false);
+  bool pyDemoActivePrev = demoStateActive(true);
   while (goRun)
   {
     hostnameResolvePumpResults();
     if ((milliTime(0) - fps) > 40)  //25 FPS
     {
+      bool psDemoActive = demoStateActive(false);
+      bool pyDemoActive = demoStateActive(true);
       if (setts.anm) dAnom = true;
       dynamicHostsCleanupMaybe();
       if ((ptrc > hlt) || GLWin.On()) refresh = true;
+      if (psDemoActive || pyDemoActive) refresh = true;
+      if ((psDemoActive != psDemoActivePrev) || (pyDemoActive != pyDemoActivePrev))
+      {
+        refresh = true;
+        psDemoActivePrev = psDemoActive;
+        pyDemoActivePrev = pyDemoActive;
+      }
       if (goAnim)
       {
         if (pktsLL.Num() || altsLL.Num() || setts.mvd) animate = true;

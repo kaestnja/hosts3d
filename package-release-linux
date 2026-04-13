@@ -57,12 +57,18 @@ mkdir -p "$DISTDIR"
 rm -rf "$STAGEDIR"
 rm -f "$TARPATH" "$HASHPATH"
 mkdir -p "$STAGEDIR"
+mkdir -p "$STAGEDIR/testing"
 
 cp "$RUNDIR/hosts3d" "$STAGEDIR/hosts3d"
 cp "$RUNDIR/hsen" "$STAGEDIR/hsen"
 cp "COPYING" "$STAGEDIR/COPYING"
 cp "README-runtime-linux.md" "$STAGEDIR/README-runtime-linux.md"
 cp "README-runtime-linux.md" "$STAGEDIR/README.md"
+cp "testing/sim-hsen.ps1" "$STAGEDIR/testing/sim-hsen.ps1"
+cp "testing/sim-hsen.py" "$STAGEDIR/testing/sim-hsen.py"
+cp "testing/demo-hsen.ps1" "$STAGEDIR/testing/demo-hsen.ps1"
+cp "testing/demo-hsen.py" "$STAGEDIR/testing/demo-hsen.py"
+cp "testing/README.md" "$STAGEDIR/testing/README.md"
 
 tar -czf "$TARPATH" -C "$DISTDIR" "$PKGNAME"
 (

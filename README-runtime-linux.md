@@ -6,6 +6,10 @@ This package contains the Linux runtime files for `Hosts3D` and `hsen`.
 - `hosts3d`
 - `hsen`
 - `COPYING`
+- `testing/sim-hsen.ps1`
+- `testing/sim-hsen.py`
+- `testing/demo-hsen.ps1`
+- `testing/demo-hsen.py`
 
 ## Runtime Requirements
 Install the runtime libraries once on the target machine.
@@ -57,6 +61,17 @@ On Linux, `Stop` and normal `Exit` also sweep matching bundled local `hsen` proc
 Linux local `hsen` starts are also detached from the GUI process, and brief zombie startup failures are treated as failed launches instead of as running sensors.
 Hosts3D also marks its UDP receive socket close-on-exec and retries the packet-socket bind once after cleaning up orphaned managed local `hsen` processes, so stale previous runs do not silently block packet reception.
 
+The top-right OSD also includes `PS Demo` and `Py Demo` quick-launch buttons for the bundled synthetic visualization demos.
+While a demo is active, the matching OSD button stays tinted until the demo finishes.
+Their latest timing summaries are written to:
+- `.hosts3d/demo-powershell-last.txt`
+- `.hosts3d/demo-python-last.txt`
+
+Expected demo artifact lifetime:
+- packet and alert objects usually disappear again within seconds
+- dynamic demo hosts age out after normal inactivity cleanup, controlled by `dynamic_host_ttl_seconds`
+- the default `dynamic_host_ttl_seconds` is `300` seconds (`5` minutes`)
+
 ## Headless / Remote Sensor Use
 If the machine should only act as a sensor:
 
@@ -71,6 +86,10 @@ Replace `127.0.0.1` with the target Hosts3D receiver when needed.
 - `settings.ini` is plain text and can be edited with Hosts3D closed.
 - On Linux/macOS, runtime data is stored in `.hosts3d/`.
 - `traffic.hpt` is Hosts3D's own record/replay format, not a Wireshark capture file.
+- The quick demo scripts stay below one minute and currently run for roughly 23-25 seconds on a normal machine.
+- When a local sensor interface is selected, the demo prefers the first selected local adapter IPv4 as its central demo host and uses that interface's sensor ID.
+- The Python demo requires Python 3.
+- The PowerShell demo requires `pwsh` if you want to use that button on Linux.
 
 ## License
 Hosts3D is distributed under the GNU General Public License. See `COPYING`.
