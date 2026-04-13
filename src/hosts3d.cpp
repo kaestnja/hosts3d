@@ -81,6 +81,7 @@ static const unsigned int DEFAULT_DYNAMIC_HOST_CLEANUP_INTERVAL_SECONDS = 30;
 static const unsigned char HOSTNAME_RESOLVE_THREAD_COUNT = 2;
 static const time_t HOSTNAME_RESOLVE_STATUS_SECONDS = 5;
 static const unsigned char LOCAL_HSEN_MAX_INTERFACES = 16;
+static const unsigned char LOCAL_HSEN_SWEEP_MAX_PIDS = 32;
 static const unsigned int HELP_OVERLAY_MAX_LINES = 128;
 static const int HELP_OVERLAY_W = 480;
 static const int HELP_OVERLAY_MARGIN = 10;
@@ -6706,31 +6707,45 @@ static unsigned long long localHsenProcessCreateStamp(HANDLE proc)
   return stamp.QuadPart;
 }
 #else
-static unsigned long long localHsenProcessCreateStamp(unsigned long pid)
+static bool localHsenLinuxProcessInfo(unsigned long pid, unsigned long long *createdOut, char *stateOut)
 {
 #ifdef __linux__
   FILE *fp;
   char path[64], line[4096], *tok, *rp;
   unsigned int field = 3;
+  if (createdOut) *createdOut = 0;
+  if (stateOut) *stateOut = '\0';
   snprintf(path, sizeof(path), "/proc/%lu/stat", pid);
-  if (!(fp = fopen(path, "r"))) return 0;
+  if (!(fp = fopen(path, "r"))) return false;
   if (!fgets(line, sizeof(line), fp))
   {
     fclose(fp);
-    return 0;
+    return false;
   }
   fclose(fp);
   rp = strrchr(line, ')');
-  if (!rp || (rp[1] != ' ')) return 0;
+  if (!rp || (rp[1] != ' ')) return false;
   tok = strtok(rp + 2, " ");
   while (tok)
   {
-    if (field == 22) return strtoull(tok, 0, 10);
+    if ((field == 3) && stateOut) *stateOut = tok[0];
+    if (field == 22)
+    {
+      if (createdOut) *createdOut = strtoull(tok, 0, 10);
+      return true;
+    }
     tok = strtok(0, " ");
     field++;
   }
 #endif
-  return 0;
+  return false;
+}
+
+static unsigned long long localHsenProcessCreateStamp(unsigned long pid)
+{
+  unsigned long long stamp = 0;
+  localHsenLinuxProcessInfo(pid, &stamp, 0);
+  return stamp;
 }
 #endif
 
@@ -6872,11 +6887,24 @@ static void localHsenPidListAddUnique(localhsen_pid_type *pids, unsigned char *c
   (*count)++;
 }
 
-static bool localHsenLinuxCmdlineHasLoopbackTarget(unsigned long pid)
+static bool localHsenLinuxExeMatches(const char *target, const char *expect)
+{
+  static const char deletedSuffix[] = " (deleted)";
+  size_t targetLen, expectLen;
+  if (!target || !expect || !*expect) return false;
+  if (!strcmp(target, expect)) return true;
+  targetLen = strlen(target);
+  expectLen = strlen(expect);
+  if (targetLen != (expectLen + sizeof(deletedSuffix) - 1)) return false;
+  return (!strncmp(target, expect, expectLen) && !strcmp(target + expectLen, deletedSuffix));
+}
+
+static bool localHsenLinuxCmdlineMatches(unsigned long pid, const char *exepath, bool requireLoopback)
 {
   char path[64], buf[512];
   ssize_t got;
   int fd;
+  bool loopback = false, haveArg0 = false;
   snprintf(path, sizeof(path), "/proc/%lu/cmdline", pid);
   fd = open(path, O_RDONLY);
   if (fd == -1) return false;
@@ -6892,10 +6920,104 @@ static bool localHsenLinuxCmdlineHasLoopbackTarget(unsigned long pid)
       pos++;
       continue;
     }
-    if (!strcmp(buf + pos, "127.0.0.1")) return true;
+    if (!haveArg0)
+    {
+      if (!localHsenLinuxExeMatches(buf + pos, exepath)) return false;
+      haveArg0 = true;
+    }
+    else if (!strcmp(buf + pos, "127.0.0.1")) loopback = true;
     pos += (ssize_t)len + 1;
   }
+  return (haveArg0 && (!requireLoopback || loopback));
+}
+
+static unsigned long localHsenLinuxUdpSocketInodeForPort(unsigned short port)
+{
+  FILE *fp;
+  char line[512], portHex[8];
+  snprintf(portHex, sizeof(portHex), ":%04X", port);
+  if (!(fp = fopen("/proc/net/udp", "r"))) return 0;
+  while (fgets(line, sizeof(line), fp))
+  {
+    char *cols[18] = {0}, *tok = trimWs(line);
+    unsigned char count = 0;
+    while (*tok && (count < 18))
+    {
+      cols[count++] = tok;
+      while (*tok && !isspace((unsigned char)*tok)) tok++;
+      if (!*tok) break;
+      *tok++ = '\0';
+      tok = trimWs(tok);
+    }
+    if ((count > 9) && (strlen(cols[1]) >= 5))
+    {
+      size_t len = strlen(cols[1]);
+      if (!strEqNoCase(cols[1] + len - 5, portHex)) continue;
+      fclose(fp);
+      return strtoul(cols[9], 0, 10);
+    }
+  }
+  fclose(fp);
+  return 0;
+}
+
+static bool localHsenLinuxPidHoldsSocket(unsigned long pid, unsigned long inode)
+{
+  DIR *dp;
+  struct dirent *ent;
+  char fddir[64], path[PATH_MAX], expect[48];
+  if (!pid || !inode) return false;
+  snprintf(fddir, sizeof(fddir), "/proc/%lu/fd", pid);
+  snprintf(expect, sizeof(expect), "socket:[%lu]", inode);
+  dp = opendir(fddir);
+  if (!dp) return false;
+  while ((ent = readdir(dp)))
+  {
+    char target[128];
+    ssize_t got;
+    if (ent->d_name[0] == '.') continue;
+    snprintf(path, sizeof(path), "%s/%s", fddir, ent->d_name);
+    got = readlink(path, target, sizeof(target) - 1);
+    if ((got <= 0) || (got >= (ssize_t)sizeof(target))) continue;
+    target[got] = '\0';
+    if (!strcmp(target, expect))
+    {
+      closedir(dp);
+      return true;
+    }
+  }
+  closedir(dp);
   return false;
+}
+
+static void localHsenCollectBundledPortHolders(localhsen_pid_type *pids, unsigned char *count, unsigned char maxpids, unsigned short port)
+{
+  DIR *dp;
+  struct dirent *ent;
+  char exepath[512], workdir[512];
+  unsigned long inode;
+  if (!pids || !count || (*count >= maxpids)) return;
+  inode = localHsenLinuxUdpSocketInodeForPort(port);
+  if (!inode) return;
+  if (!localHsenExeInfo(exepath, sizeof(exepath), workdir, sizeof(workdir))) return;
+  if (!strcmp(exepath, "hsen")) return;
+  dp = opendir("/proc");
+  if (!dp) return;
+  while ((ent = readdir(dp)) && (*count < maxpids))
+  {
+    char *end = 0;
+    unsigned long long stamp = 0;
+    char state = '\0';
+    unsigned long pid;
+    if (!isdigit((unsigned char)ent->d_name[0])) continue;
+    pid = strtoul(ent->d_name, &end, 10);
+    if (!pid || !end || *end) continue;
+    if (!localHsenLinuxPidHoldsSocket(pid, inode)) continue;
+    if (!localHsenLinuxCmdlineMatches(pid, exepath, true)) continue;
+    if (localHsenLinuxProcessInfo(pid, &stamp, &state) && (state == 'Z')) continue;
+    localHsenPidListAddUnique(pids, count, maxpids, pid, stamp);
+  }
+  closedir(dp);
 }
 
 static void localHsenCollectBundledActive(localhsen_pid_type *pids, unsigned char *count, unsigned char maxpids)
@@ -6911,19 +7033,15 @@ static void localHsenCollectBundledActive(localhsen_pid_type *pids, unsigned cha
   while ((ent = readdir(dp)) && (*count < maxpids))
   {
     char *end = 0;
-    char linkpath[64], target[PATH_MAX];
-    ssize_t got;
+    unsigned long long stamp = 0;
+    char state = '\0';
     unsigned long pid;
     if (!isdigit((unsigned char)ent->d_name[0])) continue;
     pid = strtoul(ent->d_name, &end, 10);
     if (!pid || !end || *end) continue;
-    snprintf(linkpath, sizeof(linkpath), "/proc/%lu/exe", pid);
-    got = readlink(linkpath, target, sizeof(target) - 1);
-    if ((got <= 0) || (got >= (ssize_t)sizeof(target))) continue;
-    target[got] = '\0';
-    if (strcmp(target, exepath)) continue;
-    if (!localHsenLinuxCmdlineHasLoopbackTarget(pid)) continue;
-    localHsenPidListAddUnique(pids, count, maxpids, pid, localHsenProcessCreateStamp(pid));
+    if (!localHsenLinuxCmdlineMatches(pid, exepath, true)) continue;
+    if (localHsenLinuxProcessInfo(pid, &stamp, &state) && (state == 'Z')) continue;
+    localHsenPidListAddUnique(pids, count, maxpids, pid, stamp);
   }
   closedir(dp);
 }
@@ -6948,12 +7066,14 @@ static bool localHsenPidRecordActive(const localhsen_pid_type *pidrec)
   return active;
 #else
   pid_t pid = (pid_t)pidrec->pid;
+  unsigned long long stamp = 0;
+  char state = '\0';
   if (!localHsenProcessLooksManaged(pidrec->pid)) return false;
   if ((kill(pid, 0) == -1) && (errno == ESRCH)) return false;
-  if (pidrec->created)
+  if (localHsenLinuxProcessInfo(pidrec->pid, &stamp, &state))
   {
-    unsigned long long stamp = localHsenProcessCreateStamp(pidrec->pid);
-    if (stamp && (stamp != pidrec->created)) return false;
+    if (state == 'Z') return false;
+    if (pidrec->created && stamp && (stamp != pidrec->created)) return false;
   }
   return true;
 #endif
@@ -7005,6 +7125,24 @@ static unsigned char localHsenCollectManagedActive(localhsen_pid_type *pids, uns
   else localHsenStateClear();
   return active;
 }
+
+#ifndef __MINGW32__
+static void localHsenStopPidList(localhsen_pid_type *pids, unsigned char count)
+{
+  if (!pids) return;
+  for (unsigned char cnt = 0; cnt < count; cnt++)
+  {
+    pid_t pid = (pid_t)pids[cnt].pid;
+    if (!localHsenPidRecordActive(&pids[cnt])) continue;
+    kill(pid, SIGTERM);
+    if (!localHsenWaitPidInactive(&pids[cnt]))
+    {
+      kill(pid, SIGKILL);
+      localHsenWaitPidInactive(&pids[cnt], 50);
+    }
+  }
+}
+#endif
 
 static bool localHsenManagedRunning()
 {
@@ -7322,17 +7460,37 @@ static bool localHsenLaunchOne(const localhsen_if_type *iface, unsigned long *pi
   CloseHandle(pi.hProcess);
   return true;
 #else
-  pid_t pid;
+  int pipefd[2];
+  pid_t pid, runpid;
   char exepath[512], workdir[512], cmd[1600], sensor[8];
+  localhsen_pid_type started = {0, 0};
   const char *basecmd;
   if (!localHsenExeInfo(exepath, sizeof(exepath), workdir, sizeof(workdir))) return false;
   snprintf(sensor, sizeof(sensor), "%u", iface->sensorId);
   if (*setts.hsst && !textContainsNoCase(setts.hsst, "<sudo command>")) basecmd = setts.hsst;
   else basecmd = 0;
+  if (basecmd) snprintf(cmd, sizeof(cmd), "exec %s %u \"%s\" 127.0.0.1%s", basecmd, iface->sensorId, iface->id, (localHsenWindowsPromisc ? " -p" : ""));
+  if (pipe(pipefd) == -1) return false;
   pid = fork();
-  if (pid == -1) return false;
+  if (pid == -1)
+  {
+    close(pipefd[0]);
+    close(pipefd[1]);
+    return false;
+  }
   if (!pid)
   {
+    close(pipefd[0]);
+    runpid = fork();
+    if (runpid == -1) _exit(127);
+    if (runpid > 0)
+    {
+      unsigned long childPid = (unsigned long)runpid;
+      write(pipefd[1], &childPid, sizeof(childPid));
+      close(pipefd[1]);
+      _exit(0);
+    }
+    close(pipefd[1]);
     int nullfd = open("/dev/null", O_RDWR);
     if (nullfd != -1)
     {
@@ -7348,11 +7506,18 @@ static bool localHsenLaunchOne(const localhsen_if_type *iface, unsigned long *pi
       if (localHsenWindowsPromisc) execl(exepath, exepath, sensor, iface->id, "127.0.0.1", "-p", (char *) 0);
       else execl(exepath, exepath, sensor, iface->id, "127.0.0.1", (char *) 0);
     }
-    snprintf(cmd, sizeof(cmd), "exec %s %u \"%s\" 127.0.0.1%s", basecmd, iface->sensorId, iface->id, (localHsenWindowsPromisc ? " -p" : ""));
     execl("/bin/sh", "sh", "-c", cmd, (char *) 0);
     _exit(127);
   }
-  *pidOut = (unsigned long) pid;
+  close(pipefd[1]);
+  ssize_t got = read(pipefd[0], &started.pid, sizeof(started.pid));
+  close(pipefd[0]);
+  waitpid(pid, 0, 0);
+  if ((got != (ssize_t)sizeof(started.pid)) || !started.pid) return false;
+  started.created = localHsenProcessCreateStamp(started.pid);
+  usleep(200000);
+  if (!localHsenPidRecordActive(&started)) return false;
+  *pidOut = started.pid;
   return true;
 #endif
 }
@@ -8386,40 +8551,70 @@ void pktProcess()
   WORD wVersionRequested = MAKEWORD(2, 0);  //WSAStartup parameter
   WSADATA wsaData;  //WSAStartup parameter
   WSAStartup(wVersionRequested, &wsaData);  //initiate use of the Winsock DLL
-  SOCKET psock;
+  SOCKET psock = INVALID_SOCKET;
 #else
-  int psock;
+  int psock = -1;
 #endif
   sockaddr_in padr;  //hsen address
   padr.sin_family = AF_INET;
   padr.sin_addr.s_addr = INADDR_ANY;
   padr.sin_port = htons(HOST3D_PORT);
+#ifndef __MINGW32__
+  bool retryBind = true;
+retry_psock_bind:
+#endif
 #ifdef __MINGW32__
-  if ((psock = socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP)) == INVALID_SOCKET)
+  psock = socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP);
+  if (psock == INVALID_SOCKET)
   {
     MessageBoxA(0, "Socket create failed, continuing", "Hosts3D", MB_ICONWARNING | MB_OK);
-#else
-  if ((psock = socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1)
-  {
-    syslog(LOG_WARNING, "socket create failed, continuing\n");
-#endif
   }
   else if (bind(psock, (sockaddr *)&padr, sizeof(padr)) == -1)
   {
-#ifdef __MINGW32__
     MessageBoxA(0, "Socket bind failed, continuing", "Hosts3D", MB_ICONWARNING | MB_OK);
     closesocket(psock);
     WSACleanup();
-#else
-    syslog(LOG_WARNING, "socket bind failed, continuing\n");
-    close(psock);
-#endif
+    psock = INVALID_SOCKET;
   }
-#ifdef __MINGW32__
-  unsigned long sopt = 1;
-  ioctlsocket(psock, FIONBIO, &sopt);
 #else
-  fcntl(psock, F_SETFL, O_NONBLOCK);
+  psock = socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP);
+  if (psock == -1)
+  {
+    syslog(LOG_WARNING, "socket create failed, continuing\n");
+  }
+  else
+  {
+    fcntl(psock, F_SETFD, FD_CLOEXEC);
+    if (bind(psock, (sockaddr *)&padr, sizeof(padr)) == -1)
+    {
+    syslog(LOG_WARNING, "socket bind failed, continuing\n");
+      close(psock);
+      psock = -1;
+      if (retryBind)
+      {
+        localhsen_pid_type portPids[LOCAL_HSEN_SWEEP_MAX_PIDS];
+        unsigned char portCount = 0;
+        retryBind = false;
+        localHsenCollectBundledPortHolders(portPids, &portCount, LOCAL_HSEN_SWEEP_MAX_PIDS, HOST3D_PORT);
+        localHsenStopPidList(portPids, portCount);
+        localHsenStopManaged();
+        usleep(200000);
+        goto retry_psock_bind;
+      }
+    }
+  }
+#endif
+#ifdef __MINGW32__
+  if (psock != INVALID_SOCKET)
+  {
+    unsigned long sopt = 1;
+    ioctlsocket(psock, FIONBIO, &sopt);
+  }
+#else
+  if (psock != -1)
+  {
+    fcntl(psock, F_SETFL, O_NONBLOCK);
+  }
 #endif
   enum pksc_type { none, pkfl, sckt };  //packet source
   pksc_type pksc;
@@ -8459,7 +8654,13 @@ void pktProcess()
           refresh = true;
         }
       }
-      else if ((rcsz = recv(psock, pbuf, dnsz, 0)) > 0)  //received UDP packet
+      else if (
+#ifdef __MINGW32__
+        (psock != INVALID_SOCKET) &&
+#else
+        (psock != -1) &&
+#endif
+        ((rcsz = recv(psock, pbuf, dnsz, 0)) > 0))  //received UDP packet
       {
         if ((pbuf[0] == 85) && (rcsz == pesz))  //85 used to identify packet info
         {
@@ -8548,10 +8749,10 @@ void pktProcess()
     }
   }
 #ifdef __MINGW32__
-  closesocket(psock);
+  if (psock != INVALID_SOCKET) closesocket(psock);
   WSACleanup();
 #else
-  close(psock);
+  if (psock != -1) close(psock);
 #endif
   if (ptrc) fclose(pfile);
 }

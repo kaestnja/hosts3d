@@ -54,6 +54,8 @@ If that automatic step is not possible, Hosts3D shows the exact one-time command
 
 GUI-managed local `hsen` is also tracked so `Stop` and normal `Exit` can terminate it reliably instead of leaving a launcher shell or orphaned process behind.
 On Linux, `Stop` and normal `Exit` also sweep matching bundled local `hsen` processes from the same installation, which helps clean up older orphaned local sensor processes from previous runs.
+Linux local `hsen` starts are also detached from the GUI process, and brief zombie startup failures are treated as failed launches instead of as running sensors.
+Hosts3D also marks its UDP receive socket close-on-exec and retries the packet-socket bind once after cleaning up orphaned managed local `hsen` processes, so stale previous runs do not silently block packet reception.
 
 ## Headless / Remote Sensor Use
 If the machine should only act as a sensor:

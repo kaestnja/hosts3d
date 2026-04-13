@@ -339,6 +339,8 @@ Notes:
 - `Stop` stops only the local `hsen` processes that were started and tracked by Hosts3D.
 - On Linux, GUI-managed local `hsen` now records the real running process so `Stop` and `Exit` can terminate it reliably instead of leaving a launcher shell behind.
 - `Stop` and normal `Exit` on Linux also sweep matching bundled local `hsen` processes from the same installation, so older orphaned sensor processes from previous runs get cleaned up too.
+- Linux local `hsen` starts are now detached from the GUI process and brief zombie startup failures are treated as failed launches instead of as running sensors.
+- On Linux, Hosts3D now marks its UDP receive socket close-on-exec and retries the packet-socket bind once after cleaning up orphaned managed local `hsen` processes, so stale previous runs do not silently break packet reception.
 - The corresponding `settings.ini` keys are written under `[local_hsen]`.
 - If automatic setup is not possible, Hosts3D shows the exact one-time `setcap` command to run on Linux.
 - On Linux/macOS, `hsen_start_command` in `[hsen]` is still used as the launcher when you intentionally want something custom like `sudo -n hsen`.
