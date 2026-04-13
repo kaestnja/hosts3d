@@ -229,6 +229,44 @@ When behavior changes, also check whether these must be updated:
 
 If controls, menus, OSD labels, or packet meanings change, documentation should usually be updated in the same session.
 
+### Release workflow
+
+For future tagged releases, use the package/assets model instead of relying on tracked runtime binaries inside the repo.
+
+Recommended order:
+
+- verify the repo is clean and the version in `src/version.h` matches the intended release
+- build Windows runtimes:
+  - `compile-hosts3d.bat Release x86`
+  - `compile-hsen.bat Release x86`
+  - `compile-hosts3d.bat Release x64`
+  - `compile-hsen.bat Release x64`
+- create Windows release assets:
+  - `package-release-windows.bat Release x86`
+  - `package-release-windows.bat Release x64`
+- on the Raspberry Pi / Linux arm64 build machine:
+  - `git pull --ff-only`
+  - `./compile-hosts3d Release`
+  - `./compile-hsen Release`
+  - `./package-release-linux Release arm64`
+- tag the release (`v1.xx`) and push the tag
+- create the GitHub release and upload the generated assets manually
+
+Expected release assets now include:
+
+- `hosts3d-<version>-windows-x86.zip`
+- `hosts3d-<version>-windows-x86-SHA256.txt`
+- `hosts3d-<version>-windows-x64.zip`
+- `hosts3d-<version>-windows-x64-SHA256.txt`
+- `hosts3d-<version>-linux-arm64.tar.gz`
+- `hosts3d-<version>-linux-arm64-SHA256.txt`
+
+Important policy:
+
+- runtime binaries under `Release/` and `Debug/` are local build outputs
+- release-ready binaries belong in packaged archives/assets, not as tracked Git artifacts
+- if packaging behavior changes, update `README.md`, `BUILDINGNOTES.txt`, `README-runtime-windows.md`, `README-runtime-linux.md`, and this handover in the same session
+
 ### Mandatory propagation sweep after non-trivial changes
 
 This repository now has an explicit anti-drift rule:
