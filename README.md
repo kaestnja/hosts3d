@@ -337,6 +337,8 @@ Notes:
 - On Linux, `Save` also tries a one-time automatic `setcap` on the bundled `hsen` binary so local capture can run without a manual remote fix.
 - `Start` launches one local `hsen` process per selected interface.
 - `Stop` stops only the local `hsen` processes that were started and tracked by Hosts3D.
+- On Windows, `Stop` and normal `Exit` now also re-scan for matching bundled `hsen.exe` processes from the same installation path instead of trusting only the saved PID list.
+- On Windows, managed local `hsen.exe` validation now checks the full bundled executable path, not just the bare `hsen.exe` process name.
 - On Linux, GUI-managed local `hsen` now records the real running process so `Stop` and `Exit` can terminate it reliably instead of leaving a launcher shell behind.
 - `Stop` and normal `Exit` on Linux also sweep matching bundled local `hsen` processes from the same installation, so older orphaned sensor processes from previous runs get cleaned up too.
 - Linux local `hsen` starts are now detached from the GUI process and brief zombie startup failures are treated as failed launches instead of as running sensors.

@@ -37,6 +37,7 @@
 #include <ws2tcpip.h>
 #include <windows.h>
 #include <iphlpapi.h>
+#include <tlhelp32.h>
 #else
 #include <arpa/inet.h>  //inet_addr(), inet_ntoa()
 #include <dirent.h>
@@ -6858,18 +6859,16 @@ static bool localHsenProcessLooksManaged(
 )
 {
 #ifdef __MINGW32__
-  char path[MAX_PATH], *base;
+  char path[MAX_PATH], exepath[512], workdir[512];
   DWORD pathsz = sizeof(path);
   if (!QueryFullProcessImageNameA(proc, 0, path, &pathsz)) return false;
-  base = strrchr(path, '\\');
-  base = (base ? (base + 1) : path);
-  return strEqNoCase(base, "hsen.exe");
+  if (!localHsenExeInfo(exepath, sizeof(exepath), workdir, sizeof(workdir))) return false;
+  return strEqNoCase(path, exepath);
 #else
   return (pid > 0);
 #endif
 }
 
-#ifndef __MINGW32__
 static bool localHsenPidListContains(const localhsen_pid_type *pids, unsigned char count, unsigned long pid)
 {
   if (!pids || !pid) return false;
@@ -6887,6 +6886,7 @@ static void localHsenPidListAddUnique(localhsen_pid_type *pids, unsigned char *c
   (*count)++;
 }
 
+#ifndef __MINGW32__
 static bool localHsenLinuxExeMatches(const char *target, const char *expect)
 {
   static const char deletedSuffix[] = " (deleted)";
@@ -7112,13 +7112,49 @@ static void localHsenTaskkillPid(unsigned long pid)
 }
 #endif
 
+#ifdef __MINGW32__
+static void localHsenCollectBundledActive(localhsen_pid_type *pids, unsigned char *count, unsigned char maxpids)
+{
+  HANDLE snap;
+  PROCESSENTRY32 pe;
+  if (!pids || !count || (*count >= maxpids)) return;
+  snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+  if (snap == INVALID_HANDLE_VALUE) return;
+  ZeroMemory(&pe, sizeof(pe));
+  pe.dwSize = sizeof(pe);
+  if (Process32First(snap, &pe))
+  {
+    do
+    {
+      HANDLE proc;
+      unsigned long long stamp = 0;
+      DWORD code = 0;
+      if (*count >= maxpids) break;
+      proc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE, FALSE, pe.th32ProcessID);
+      if (!proc) continue;
+      if (localHsenProcessLooksManaged(proc) &&
+          GetExitCodeProcess(proc, &code) && (code == STILL_ACTIVE))
+      {
+        stamp = localHsenProcessCreateStamp(proc);
+        localHsenPidListAddUnique(pids, count, maxpids, pe.th32ProcessID, stamp);
+      }
+      CloseHandle(proc);
+    }
+    while (Process32Next(snap, &pe));
+  }
+  CloseHandle(snap);
+}
+#endif
+
 static unsigned char localHsenCollectManagedActive(localhsen_pid_type *pids, unsigned char maxpids)
 {
   localhsen_pid_type loaded[LOCAL_HSEN_MAX_INTERFACES];
   unsigned char count = localHsenStateLoad(loaded, LOCAL_HSEN_MAX_INTERFACES), active = 0;
   for (unsigned char cnt = 0; (cnt < count) && (active < maxpids); cnt++)
     if (localHsenPidRecordActive(&loaded[cnt])) pids[active++] = loaded[cnt];
-#ifndef __MINGW32__
+#ifdef __MINGW32__
+  localHsenCollectBundledActive(pids, &active, maxpids);
+#else
   localHsenCollectBundledActive(pids, &active, maxpids);
 #endif
   if (active) localHsenStateSave(pids, active);

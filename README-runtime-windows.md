@@ -32,6 +32,7 @@ Private/local test packages may additionally include:
 - Newly written `.hnl` files now use the versioned `HN2` layout format.
 - If an older incompatible `0network.hnl` is found after replacing the EXE, Hosts3D now skips it with a warning and writes a new compatible layout on exit.
 - `traffic.hpt` is Hosts3D's own record/replay format, not a Wireshark capture file.
+- `Stop` and normal `Exit` re-scan for matching bundled `hsen.exe` processes from the same installation path, so stale local sensor processes can be cleaned up even if the saved PID state was lost or outdated.
 - Public release ZIPs may omit `wpcap.dll` and `Packet.dll`. In that case, install Npcap on the target machine before using `hsen` or `Configure Local Sensors (hsen)`.
 
 ## License
