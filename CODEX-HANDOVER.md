@@ -155,7 +155,7 @@ These are important because future changes should not silently undo them.
 - hosts become effectively persistent when manually created, edited, named, loaded from layouts, or otherwise promoted to static
 - exact `/32` entries in `hsd-data/netpos.txt` are also materialized as known static hosts at startup
 - those known `/32` hosts should stay visible and labelled even when `On Activity` is `Highlight Host`
-- exact `/32` `netpos.txt` rules now have priority over broader matching nets
+- `netpos` rule matching is strict top-to-bottom first-match-wins; do not assume an older automatic `/32`-beats-broader-net override during matching
 - `netpos.txt` now accepts `colour [hold]`, so fixed hosts can be both coloured and non-offset
 - saved layouts keep static and locked hosts only
 
@@ -358,7 +358,7 @@ Keep in mind:
 - after upgrading an older installation, the first startup may skip an incompatible old `0network.hnl`
 - the next normal exit should then rewrite `0network.hnl` in the newer `HN2` format
 - `netposExactHostsSync()` must not wait on `goHosts` before the packet thread exists; this caused a real startup hang when `0network.hnl` had already set `goHosts = 0`
-- the current guard for that is `packetThreadStarted`, set only after `glfwCreateThread(pktProcess, ...)` succeeds
+- the current guard for that is `packetThreadStarted`, set only after the packet thread is launched via `packetThread = std::thread(pktProcess)`
 
 Do not accidentally reintroduce tracked runtime artifacts.
 
