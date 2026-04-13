@@ -36,6 +36,10 @@ These files already existed before this handover and remain important:
 - `RELEASE_NOTES_1.18.md`
 - `README-runtime-windows.md`
   - packaging/runtime handoff for Windows release output
+- `testing/sim-hsen.ps1`
+  - preferred synthetic packet sender for Windows visualization tests
+- `testing/sim-hsen.py`
+  - small Python 3 variant derived from the historical upstream helper
 - `.markdownlint.json`
   - repo-local markdown lint relaxations
 - `.vscode/c_cpp_properties.json`

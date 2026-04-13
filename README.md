@@ -311,6 +311,12 @@ Notes:
 - On Linux/macOS, `hsen_start_command` in `[hsen]` is still used as the launcher when you need something like `sudo -n hsen`.
 - `start-hsenW.bat` remains the manual fallback for distributed/remote sensor setups.
 
+### Synthetic test sender
+- `testing/sim-hsen.ps1` sends synthetic `hsen`-compatible UDP packet metadata directly to `Hosts3D`.
+- It is intended for visualization checks, OSD/menu checks, and quick regression demos without a live capture adapter.
+- On normal Windows test machines, this PowerShell variant is the preferred helper because it does not require Python.
+- `testing/sim-hsen.py` is a small Python 3 variant derived from the historical 2009 script.
+
 ## Controls and Interaction
 This is the main usage section for moving around the scene and operating the UI.
 
