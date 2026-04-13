@@ -618,6 +618,9 @@ static bool localHsenDiscoverInterfaces(bool keepSelections = true);
 static void localHsenPopulateInterfaceIps();
 static bool localHsenManagedRunning();
 static void localHsenAutostartMaybe();
+#ifndef __MINGW32__
+static bool localHsenEnsureCaptureRights(char *errbuf = 0, size_t errbufsz = 0);
+#endif
 void displayGL();
 
 static const int MENU_LEVEL_INDENT = 18;
@@ -4133,6 +4136,9 @@ void btnProcess(int gs)
       {
         if (!localHsenSaveUiState()) break;
         settsSave();
+#ifndef __MINGW32__
+        if (!localHsenEnsureCaptureRights(emsg, sizeof(emsg)) && *emsg) messageBox("LOCAL SENSORS", emsg);
+#endif
       }
       else
       {
@@ -7040,6 +7046,97 @@ static bool localHsenDiscoverInterfaces(bool keepSelections)
   return true;
 }
 
+#ifndef __MINGW32__
+static bool localHsenAnySelected()
+{
+  for (unsigned char cnt = 0; cnt < localHsenIfCount; cnt++)
+    if (localHsenIfs[cnt].selected) return true;
+  return false;
+}
+
+static std::string localHsenShellQuote(const char *txt)
+{
+  std::string out = "'";
+  if (!txt) return out + "'";
+  while (*txt)
+  {
+    if (*txt == '\'') out += "'\\''";
+    else out += *txt;
+    txt++;
+  }
+  out += "'";
+  return out;
+}
+
+static bool localHsenCaptureRightsPresent(const char *exepath)
+{
+  const char *getcaps[] = {"/usr/sbin/getcap", "/sbin/getcap", "getcap", 0};
+  char line[512];
+  if (!exepath || !*exepath) return false;
+  if (!strcmp(exepath, "hsen")) return false;
+  if (!fileExists(exepath)) return false;
+  if (!geteuid()) return true;
+  for (unsigned char cnt = 0; getcaps[cnt]; cnt++)
+  {
+    std::string tool = getcaps[cnt];
+    std::string cmd;
+    FILE *pp;
+    if ((tool != "getcap") && !fileExists(tool.c_str())) continue;
+    cmd = tool + " " + localHsenShellQuote(exepath) + " 2>/dev/null";
+    pp = popen(cmd.c_str(), "r");
+    if (!pp) continue;
+    line[0] = '\0';
+    if (fgets(line, sizeof(line), pp))
+    {
+      pclose(pp);
+      if (strstr(line, "cap_net_raw") && strstr(line, "cap_net_admin")) return true;
+      continue;
+    }
+    pclose(pp);
+  }
+  return false;
+}
+
+static bool localHsenTryEnableCaptureRights(const char *exepath)
+{
+  const char *setcaps[] = {"/usr/sbin/setcap", "/sbin/setcap", "setcap", 0};
+  if (!exepath || !*exepath) return false;
+  if (!strcmp(exepath, "hsen")) return false;
+  if (!fileExists(exepath)) return false;
+  for (unsigned char cnt = 0; setcaps[cnt]; cnt++)
+  {
+    std::string tool = setcaps[cnt];
+    std::string cmd;
+    int rc;
+    if ((tool != "setcap") && !fileExists(tool.c_str())) continue;
+    if (!geteuid()) cmd = tool;
+    else cmd = "sudo -n " + tool;
+    cmd += " cap_net_raw,cap_net_admin=eip " + localHsenShellQuote(exepath) + " >/dev/null 2>&1";
+    rc = system(cmd.c_str());
+    if (!rc && localHsenCaptureRightsPresent(exepath)) return true;
+  }
+  return localHsenCaptureRightsPresent(exepath);
+}
+
+static bool localHsenEnsureCaptureRights(char *errbuf, size_t errbufsz)
+{
+  char exepath[512], workdir[512], fixcmd[640];
+  if (errbuf && errbufsz) *errbuf = '\0';
+  if (!localHsenAnySelected()) return true;
+  if (*setts.hsst && !textContainsNoCase(setts.hsst, "<sudo command>")) return true;
+  if (!localHsenExeInfo(exepath, sizeof(exepath), workdir, sizeof(workdir))) return true;
+  if (!strcmp(exepath, "hsen")) return true;
+  if (localHsenCaptureRightsPresent(exepath)) return true;
+  if (localHsenTryEnableCaptureRights(exepath)) return true;
+  snprintf(fixcmd, sizeof(fixcmd), "sudo /usr/sbin/setcap cap_net_raw,cap_net_admin=eip \"%s\"", exepath);
+  if (errbuf && errbufsz)
+    snprintf(errbuf, errbufsz,
+             "Local hsen needs packet capture rights on Linux. Hosts3D could not enable them automatically.\n\nRun this once, then press Start again:\n%s",
+             fixcmd);
+  return false;
+}
+#endif
+
 static bool localHsenSaveUiState()
 {
   unsigned char sen;
@@ -7174,6 +7271,9 @@ static bool localHsenStartSelected(char *errbuf, size_t errbufsz)
   unsigned char count = 0;
   bool failed = false;
   if (errbuf && errbufsz) *errbuf = '\0';
+#ifndef __MINGW32__
+  if (!localHsenEnsureCaptureRights(errbuf, errbufsz)) return false;
+#endif
   if (!localHsenStopManaged(errbuf, errbufsz)) return false;
   for (unsigned char cnt = 0; cnt < localHsenIfCount; cnt++)
   {

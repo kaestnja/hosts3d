@@ -105,10 +105,13 @@ offsetting it to the nearest free spot.
 .SH "CONFIGURE LOCAL SENSORS (hsen)"
 The \fBConfigure Local Sensors (hsen)\fR dialog can discover interfaces
 and start/stop managed local sensors directly from the Hosts3D GUI.
-If elevated privileges are required, configure an appropriate
-\fBhsen_start_command\fR (for example "sudo -n hsen").  Managed local
-\fBhsen\fR processes are tracked and stopped individually; this workflow
-does not rely on a blanket "killall hsen".
+On Linux, \fBSave\fR and \fBStart\fR also try a one-time automatic
+\fBsetcap\fR on the bundled \fBhsen\fR binary so local capture can run
+without a separate remote setup step.  If elevated privileges are
+still required, configure an appropriate \fBhsen_start_command\fR (for
+example "sudo -n hsen").  Managed local \fBhsen\fR processes are tracked
+and stopped individually; this workflow does not rely on a blanket
+"killall hsen".
 .SH NOTES
 Firewall configuration: hsen talks to Hosts3D via UDP port 10111.  If
 hsen is running and Hosts3D is not, ICMP Port Unreachable (UDP port

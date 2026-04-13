@@ -39,8 +39,9 @@ Recommended paths:
   - in Hosts3D, right-click in the 3D view, then choose `Configure Local Sensors (hsen)`
 - Linux/macOS:
   - build with the platform commands below
-  - if local capture needs privileges, set `hsen_start_command=sudo -n hsen` in `settings.ini`
   - start `Hosts3D`, right-click in the 3D view, then choose `Configure Local Sensors (hsen)`
+  - click `Save` once in `Configure Local Sensors (hsen)` so Hosts3D can try the one-time local capture setup automatically
+  - if automatic setup fails, use the exact command shown by Hosts3D once, then press `Start`
 
 ## Requirements
 Use the platform-specific subsection that matches the machine you are building on.
@@ -313,10 +314,12 @@ Notes:
 - Target host for local GUI-managed sensors is fixed to `127.0.0.1`.
 - Ethernet adapters are preselected by default; WLAN and other adapters are listed but start deselected.
 - `Save` stores the current selection.
+- On Linux, `Save` also tries a one-time automatic `setcap` on the bundled `hsen` binary so local capture can run without a manual remote fix.
 - `Start` launches one local `hsen` process per selected interface.
 - `Stop` stops only the local `hsen` processes that were started and tracked by Hosts3D.
 - The corresponding `settings.ini` keys are written under `[local_hsen]`.
-- On Linux/macOS, `hsen_start_command` in `[hsen]` is still used as the launcher when you need something like `sudo -n hsen`.
+- If automatic setup is not possible, Hosts3D shows the exact one-time `setcap` command to run on Linux.
+- On Linux/macOS, `hsen_start_command` in `[hsen]` is still used as the launcher when you intentionally want something custom like `sudo -n hsen`.
 - `start-hsenW.bat` remains the manual fallback for distributed/remote sensor setups.
 
 ### Synthetic test sender

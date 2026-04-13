@@ -367,6 +367,7 @@ Recent behavior decisions that future sessions should preserve unless intentiona
 - `Selection of Hosts -> Add Selected Hosts To Net Positions` writes one `/32` line per selected host using the host's current coordinates and colour
 - the `Configure Local Sensors (hsen)` dialog now shows current adapter IPv4 addresses in a dedicated extra column, uses a wider window, and has separate `Refresh` / `Save` buttons plus a single `Start` / `Stop` button
 - local hsen start/stop should stay silent on success and only open an extra dialog on errors; the stop path should fall back to a hard kill if normal termination does not clear all managed `hsen` processes
+- on Linux, `Configure Local Sensors (hsen) -> Save` and `Start` should try a one-time automatic `setcap` for the bundled `hsen` binary before falling back to a precise manual command; keep this self-service and avoid reintroducing a “needs Codex/SSH” setup step for normal Pi/Linux users
 - menu confirm submenus for `Selection -> Delete` and `Net Layout -> Clear Current Layout` were intentionally removed; these actions now trigger immediately
 - flattened grouped menus should use a visible fixed text indent for child entries; `View`, `Select Inactive Hosts`, `Net Layout`, and `Anomalies` now use this pattern, and `Net Positions Editor`, `Find Hosts`, `Help`, and `About` were intentionally moved into the top-level main menu
 - `Selection of Hosts -> Set Host Colour` is now a direct inline colour strip with clickable coloured boxes, not a separate submenu
