@@ -337,6 +337,7 @@ Notes:
 - On Linux, `Save` also tries a one-time automatic `setcap` on the bundled `hsen` binary so local capture can run without a manual remote fix.
 - `Start` launches one local `hsen` process per selected interface.
 - `Stop` stops only the local `hsen` processes that were started and tracked by Hosts3D.
+- On Linux, GUI-managed local `hsen` now records the real running process so `Stop` and `Exit` can terminate it reliably instead of leaving a launcher shell behind.
 - The corresponding `settings.ini` keys are written under `[local_hsen]`.
 - If automatic setup is not possible, Hosts3D shows the exact one-time `setcap` command to run on Linux.
 - On Linux/macOS, `hsen_start_command` in `[hsen]` is still used as the launcher when you intentionally want something custom like `sudo -n hsen`.

@@ -7250,12 +7250,12 @@ static bool localHsenLaunchOne(const localhsen_if_type *iface, unsigned long *pi
   return true;
 #else
   pid_t pid;
-  char exepath[512], workdir[512], cmd[1600];
+  char exepath[512], workdir[512], cmd[1600], sensor[8];
   const char *basecmd;
   if (!localHsenExeInfo(exepath, sizeof(exepath), workdir, sizeof(workdir))) return false;
+  snprintf(sensor, sizeof(sensor), "%u", iface->sensorId);
   if (*setts.hsst && !textContainsNoCase(setts.hsst, "<sudo command>")) basecmd = setts.hsst;
-  else basecmd = exepath;
-  snprintf(cmd, sizeof(cmd), "%s %u \"%s\" 127.0.0.1%s", basecmd, iface->sensorId, iface->id, (localHsenWindowsPromisc ? " -p" : ""));
+  else basecmd = 0;
   pid = fork();
   if (pid == -1) return false;
   if (!pid)
@@ -7270,6 +7270,12 @@ static bool localHsenLaunchOne(const localhsen_if_type *iface, unsigned long *pi
     }
     if (*workdir) chdir(workdir);
     setsid();
+    if (!basecmd)
+    {
+      if (localHsenWindowsPromisc) execl(exepath, exepath, sensor, iface->id, "127.0.0.1", "-p", (char *) 0);
+      else execl(exepath, exepath, sensor, iface->id, "127.0.0.1", (char *) 0);
+    }
+    snprintf(cmd, sizeof(cmd), "exec %s %u \"%s\" 127.0.0.1%s", basecmd, iface->sensorId, iface->id, (localHsenWindowsPromisc ? " -p" : ""));
     execl("/bin/sh", "sh", "-c", cmd, (char *) 0);
     _exit(127);
   }
