@@ -218,6 +218,60 @@ When behavior changes, also check whether these must be updated:
 
 If controls, menus, OSD labels, or packet meanings change, documentation should usually be updated in the same session.
 
+### Mandatory propagation sweep after non-trivial changes
+
+This repository now has an explicit anti-drift rule:
+
+- after any non-trivial change, cleanup, rename, migration, or removal, do not assume the directly edited files are enough
+- future Codex sessions must run a deliberate follow-up sweep for affected references, wording, packaging, and maintenance files before calling the task "done"
+
+Why this rule exists:
+
+- local code changes were repeatedly completed while secondary references in docs, handover notes, ignore rules, packaging notes, or legacy support files were only caught later by manual user follow-up
+- Codex tends to optimize strongly for the immediate task unless these propagation checks are made explicit
+
+Minimum required sweep areas:
+
+- repo docs:
+  - `README.md`
+  - `README-runtime-windows.md`
+  - `BUILDINGNOTES.txt`
+  - `CREDITS.md`
+  - relevant `RELEASE_NOTES_*.md`
+  - `CODEX-HANDOVER.md`
+- build/package/install files:
+  - `compile-*.bat`
+  - `compile-*`
+  - `package-release-windows.bat`
+  - `Makefile.am` / `Makefile.in`
+  - `configure.ac` / generated `configure`
+  - `man/*.1`
+  - `third_party/README.md`
+- repo hygiene:
+  - `.gitignore`
+  - `.gitattributes`
+  - legacy folders/files that may now be obsolete
+  - references to deleted or renamed paths
+
+For renames/removals/migrations, future Codex sessions should explicitly search for:
+
+- old names
+- old menu labels
+- old feature wording
+- old paths/folders
+- old dependency names
+- old branch/worktree references
+
+Preferred method:
+
+- run targeted `rg` searches for the old/new terms before finalizing
+- do not rely only on memory or on the files already opened during the main task
+- if a cleanup removes historical/legacy material, also verify whether `.gitignore`, packaging docs, handover notes, and release notes need to be updated
+
+Completion rule:
+
+- for non-trivial repo cleanups or wording migrations, do not report the work as fully finished until this propagation sweep has been done
+
 ### Keybinding and UI rules
 
 - menu-only artificial shortcut layers were intentionally removed
