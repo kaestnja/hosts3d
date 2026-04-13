@@ -101,6 +101,13 @@ Important x64 note:
 - text entry in `MyGLWin` no longer depends on GLFW 2 ASCII-style key callbacks; printable text now enters via the GLFW 3 character callback
 - remaining follow-up risk is mostly runtime behavior verification, not basic compile portability
 
+### macOS helper status
+
+- `compile-mac-hosts3d` is still present as a helper script
+- the current `1.18` sources have not been recently verified on a real macOS machine
+- future Codex sessions should not present the macOS build path as fully verified unless it has been tested on macOS again
+- the script itself now warns and pauses for confirmation before continuing with a manual local build
+
 ### Main runtime output
 
 - `Release/windows/x86/Hosts3D.exe`

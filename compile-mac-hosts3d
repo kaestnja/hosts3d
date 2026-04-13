@@ -1,6 +1,8 @@
 #!/bin/sh
 # Build the macOS Hosts3D binary into Release/macos/<arch> or Debug/macos/<arch>.
-# This is a quick local helper script for macOS development builds.
+# This helper is kept for macOS development, but the current 1.18 sources have
+# not been recently re-verified on a real macOS machine after the GLFW 3 port.
+# Treat this as a best-effort path and verify on macOS before relying on it.
 set -eu
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
@@ -14,6 +16,25 @@ case "$CONFIG" in
     exit 1
     ;;
 esac
+
+if [ "${HSD_SKIP_MAC_WARNING:-0}" != "1" ]; then
+  echo "WARNING: macOS builds are currently not recently verified for Hosts3D 1.18." >&2
+  echo "This script is kept as a best-effort helper after the GLFW 3 migration." >&2
+  echo "Please verify the result on a real macOS machine before relying on it." >&2
+  if [ -t 0 ]; then
+    printf "Continue with the macOS build anyway? [y/N] " >&2
+    read ans
+    case "$ans" in
+      y|Y|yes|YES) ;;
+      *)
+        echo "Aborted." >&2
+        exit 1
+        ;;
+    esac
+  else
+    echo "Non-interactive shell detected: continuing without prompt." >&2
+  fi
+fi
 
 MACHINE=$(g++ -dumpmachine 2>/dev/null || uname -m)
 case "$MACHINE" in

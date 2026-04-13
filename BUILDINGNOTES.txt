@@ -22,6 +22,11 @@ Quick script builds:
     compile-hosts3d.bat [Release|Debug] [x86|x64] [--no-pause]
     compile-hsen.bat [Release|Debug] [x86|x64] [--no-pause]
 
+macOS note:
+    compile-mac-hosts3d is still kept as a helper script, but the current 1.18 tree
+    has not been recently verified on a real macOS machine.
+    Treat it as a best-effort path and verify on macOS before relying on it.
+
 Script output layout:
     Release/<os>/<arch>/
     Debug/<os>/<arch>/

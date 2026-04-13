@@ -77,11 +77,18 @@ Alternative manual build commands:
 ./compile-hosts3d
 ```
 
-### macOS (legacy upstream flow)
+### macOS (helper script present, but not recently verified)
+The macOS helper script is still kept in the repository, but the current `1.18`
+sources have not been recently verified on a real macOS machine.
+
+Use this path as a best-effort starting point, not as a guaranteed tested build.
+
 ```bash
 ./compile-hsen
 ./compile-mac-hosts3d
 ```
+
+The script itself now prints a warning and pauses for confirmation before it proceeds.
 
 ### FreeBSD (`hsen`)
 ```bash
