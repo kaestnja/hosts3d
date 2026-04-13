@@ -1,4 +1,4 @@
-# Hosts3D 1.17
+# Hosts3D 1.18
 
 > 3D Real-Time Network Monitor (legacy project, modernized build workflow)  
 > Original upstream release: 10 May 2011, Del Castle

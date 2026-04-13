@@ -14,7 +14,7 @@ Use this file to recover:
 
 ## Current State
 
-- Current working version: `1.17`
+- Current working version: `1.18`
 - Version source of truth: `src/version.h`
 - Current Windows target in daily use: `Release/windows/x86`
 - Build toolchains now available on Windows: `MSYS2/MinGW32` and `MSYS2/MinGW64`
@@ -33,6 +33,7 @@ These files already existed before this handover and remain important:
   - legacy upstream history up to original `1.15`
 - `RELEASE_NOTES_1.16.md`
 - `RELEASE_NOTES_1.17.md`
+- `RELEASE_NOTES_1.18.md`
 - `README-runtime-windows.md`
   - packaging/runtime handoff for Windows release output
 - `.markdownlint.json`
@@ -78,7 +79,7 @@ Important x64 note:
 - the required code fix was changing the legacy hashtable callback arg type from `long` to pointer-safe `HtArgType` (`intptr_t`) for Windows x64
 - `Release/windows/x64/Hosts3D.exe` has been smoke-tested: it starts and creates `hsd-data` in the x64 runtime dir
 - `Release/windows/x64/hsen.exe -l` works and lists interfaces
-- `package-release-windows.bat Release x64` now produces `Release/dist/hosts3d-1.17-windows-x64.zip`
+- `package-release-windows.bat Release x64` now produces `Release/dist/hosts3d-1.18-windows-x64.zip`
 - `compile-hosts3d.bat` now links `Hosts3D` against GLFW 3 and copies `glfw3.dll` from the selected MSYS2 toolchain into the runtime output
 
 ### GLFW 3 migration status
@@ -200,7 +201,7 @@ These are the most important project-specific rules that emerged during the work
 When behavior changes, also check whether these must be updated:
 
 - `README.md`
-- `RELEASE_NOTES_1.17.md` or the next release notes file
+- `RELEASE_NOTES_1.18.md` or the next release notes file
 - generated help/controls text in `checkControls()` / `controls.txt`
 - menu labels and OSD wording
 

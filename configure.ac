@@ -2,8 +2,8 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ([2.67])
-AC_INIT([hosts3d], [1.17], [https://github.com/kaestnja/hosts3d/issues])
-AM_INIT_AUTOMAKE([hosts3d], [1.17])
+AC_INIT([hosts3d], [1.18], [https://github.com/kaestnja/hosts3d/issues])
+AM_INIT_AUTOMAKE([hosts3d], [1.18])
 AC_CONFIG_SRCDIR([config.h.in])
 AC_CONFIG_HEADERS([config.h])
 

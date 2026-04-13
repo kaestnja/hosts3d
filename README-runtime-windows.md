@@ -1,4 +1,4 @@
-# Hosts3D 1.17 for Windows
+# Hosts3D 1.18 for Windows
 
 This package contains the Windows runtime files for `Hosts3D` and `hsen`.
 
