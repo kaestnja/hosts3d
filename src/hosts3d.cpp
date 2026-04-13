@@ -6854,6 +6854,81 @@ static bool localHsenProcessLooksManaged(
 #endif
 }
 
+#ifndef __MINGW32__
+static bool localHsenPidListContains(const localhsen_pid_type *pids, unsigned char count, unsigned long pid)
+{
+  if (!pids || !pid) return false;
+  for (unsigned char cnt = 0; cnt < count; cnt++)
+    if (pids[cnt].pid == pid) return true;
+  return false;
+}
+
+static void localHsenPidListAddUnique(localhsen_pid_type *pids, unsigned char *count, unsigned char maxpids, unsigned long pid, unsigned long long created)
+{
+  if (!pids || !count || !pid || (*count >= maxpids)) return;
+  if (localHsenPidListContains(pids, *count, pid)) return;
+  pids[*count].pid = pid;
+  pids[*count].created = created;
+  (*count)++;
+}
+
+static bool localHsenLinuxCmdlineHasLoopbackTarget(unsigned long pid)
+{
+  char path[64], buf[512];
+  ssize_t got;
+  int fd;
+  snprintf(path, sizeof(path), "/proc/%lu/cmdline", pid);
+  fd = open(path, O_RDONLY);
+  if (fd == -1) return false;
+  got = read(fd, buf, sizeof(buf) - 1);
+  close(fd);
+  if (got <= 0) return false;
+  buf[got] = '\0';
+  for (ssize_t pos = 0; pos < got; )
+  {
+    size_t len = strnlen(buf + pos, (size_t)(got - pos));
+    if (!len)
+    {
+      pos++;
+      continue;
+    }
+    if (!strcmp(buf + pos, "127.0.0.1")) return true;
+    pos += (ssize_t)len + 1;
+  }
+  return false;
+}
+
+static void localHsenCollectBundledActive(localhsen_pid_type *pids, unsigned char *count, unsigned char maxpids)
+{
+  DIR *dp;
+  struct dirent *ent;
+  char exepath[512], workdir[512];
+  if (!pids || !count || (*count >= maxpids)) return;
+  if (!localHsenExeInfo(exepath, sizeof(exepath), workdir, sizeof(workdir))) return;
+  if (!strcmp(exepath, "hsen")) return;
+  dp = opendir("/proc");
+  if (!dp) return;
+  while ((ent = readdir(dp)) && (*count < maxpids))
+  {
+    char *end = 0;
+    char linkpath[64], target[PATH_MAX];
+    ssize_t got;
+    unsigned long pid;
+    if (!isdigit((unsigned char)ent->d_name[0])) continue;
+    pid = strtoul(ent->d_name, &end, 10);
+    if (!pid || !end || *end) continue;
+    snprintf(linkpath, sizeof(linkpath), "/proc/%lu/exe", pid);
+    got = readlink(linkpath, target, sizeof(target) - 1);
+    if ((got <= 0) || (got >= (ssize_t)sizeof(target))) continue;
+    target[got] = '\0';
+    if (strcmp(target, exepath)) continue;
+    if (!localHsenLinuxCmdlineHasLoopbackTarget(pid)) continue;
+    localHsenPidListAddUnique(pids, count, maxpids, pid, localHsenProcessCreateStamp(pid));
+  }
+  closedir(dp);
+}
+#endif
+
 static bool localHsenPidRecordActive(const localhsen_pid_type *pidrec)
 {
   if (!pidrec || !pidrec->pid) return false;
@@ -6921,13 +6996,11 @@ static unsigned char localHsenCollectManagedActive(localhsen_pid_type *pids, uns
 {
   localhsen_pid_type loaded[LOCAL_HSEN_MAX_INTERFACES];
   unsigned char count = localHsenStateLoad(loaded, LOCAL_HSEN_MAX_INTERFACES), active = 0;
-  if (!count)
-  {
-    localHsenStateClear();
-    return 0;
-  }
   for (unsigned char cnt = 0; (cnt < count) && (active < maxpids); cnt++)
     if (localHsenPidRecordActive(&loaded[cnt])) pids[active++] = loaded[cnt];
+#ifndef __MINGW32__
+  localHsenCollectBundledActive(pids, &active, maxpids);
+#endif
   if (active) localHsenStateSave(pids, active);
   else localHsenStateClear();
   return active;

@@ -110,8 +110,9 @@ On Linux, \fBSave\fR and \fBStart\fR also try a one-time automatic
 without a separate remote setup step.  If elevated privileges are
 still required, configure an appropriate \fBhsen_start_command\fR (for
 example "sudo -n hsen").  Managed local \fBhsen\fR processes are tracked
-and stopped individually; this workflow does not rely on a blanket
-"killall hsen".
+and stopped individually, and Linux also sweeps matching bundled local
+\fBhsen\fR processes from the same installation path; this workflow does
+not rely on a blanket "killall hsen".
 .SH NOTES
 Firewall configuration: hsen talks to Hosts3D via UDP port 10111.  If
 hsen is running and Hosts3D is not, ICMP Port Unreachable (UDP port

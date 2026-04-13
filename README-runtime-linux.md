@@ -53,6 +53,7 @@ On Linux, `Save` and `Start` try a one-time automatic `setcap` on the bundled `h
 If that automatic step is not possible, Hosts3D shows the exact one-time command to run locally.
 
 GUI-managed local `hsen` is also tracked so `Stop` and normal `Exit` can terminate it reliably instead of leaving a launcher shell or orphaned process behind.
+On Linux, `Stop` and normal `Exit` also sweep matching bundled local `hsen` processes from the same installation, which helps clean up older orphaned local sensor processes from previous runs.
 
 ## Headless / Remote Sensor Use
 If the machine should only act as a sensor:
