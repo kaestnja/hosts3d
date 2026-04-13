@@ -2155,7 +2155,7 @@ static unsigned int packetTrafficReplayListCreate(const char *fl, char *firstNam
     FindClose(nl);
   }
 #else
-  DIR *dir = opendir(HSDDATA);
+  DIR *dir = opendir(hsddata(""));
   if (dir)
   {
     dirent *ent;
