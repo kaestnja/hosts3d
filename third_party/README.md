@@ -1,14 +1,13 @@
 # Third-Party Layout (Local, No Global SDK Paths)
 
 This project can be built on Windows using local dependencies in this `third_party` tree.
-In the `port/glfw3` branch, `Hosts3D.exe` no longer uses the legacy `third_party/glfw2` tree for GLFW.
-It now links against the GLFW 3 package installed in the active MSYS2 MinGW toolchain and copies `glfw3.dll` from that toolchain into the runtime output.
+For the current `1.18` mainline, `Hosts3D.exe` no longer uses a vendored GLFW tree.
+It links against the GLFW 3 package installed in the active MSYS2 MinGW toolchain and copies `glfw3.dll` from that toolchain into the runtime output.
 
 ## Expected folder layout
 
 ```text
 third_party/
-  glfw2/                             (legacy, no longer used by the GLFW 3 port branch)
   wpcap/
     include/pcap.h                   (and related headers from SDK include folder)
     lib/windows/x86/libwpcap.a       (or wpcap.lib)

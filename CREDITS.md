@@ -11,7 +11,7 @@ This repository is an independent continuation of Hosts3D, maintained by the cur
 
 - It is **not** an official upstream by the original author.
 - Existing copyright and license notices from upstream are retained.
-- New maintenance, build, and compatibility updates are documented in `CHANGELOG.md`.
+- New maintenance, build, and compatibility updates are documented in the `RELEASE_NOTES_*.md` files.
 
 ## Attribution Policy
 - Keep upstream copyright/license headers intact.

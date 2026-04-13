@@ -1,4 +1,4 @@
-.TH HSEN 1 "13 Apr 11"
+.TH HSEN 1 "13 Apr 26"
 .SH NAME
 hsen \- hosts3d sensor
 .SH SYNOPSIS
@@ -6,10 +6,10 @@ hsen \- hosts3d sensor
 .SH DESCRIPTION
 .B hsen
 is a packet capture agent which reads and sends packet header
-information to Hosts3D, locally or remotely.  hsen also equates
-hostname to IP by reading DNS packets (UDP type A class IN standard
-query response).  Multiple sensors can send information to multiple
-computers running Hosts3D on the same subnet via broadcast.
+information to Hosts3D, locally or remotely.  It can read from a live
+capture interface or from a pcap file and can also forward DNS
+name-to-IP hints derived from standard UDP/53 responses.  Multiple
+sensors can send information to one or more Hosts3D systems.
 .TP 13
 .I id
 Identify packets from a specific hsen when multiple exist (1-255).
@@ -21,7 +21,7 @@ Listen on interface (eth0, eth1, ppp0, wlan0, etc.); or
 Read packets from pcap file.  Standard input is used if file is "\-".
 .TP 13
 .I destination
-Hosts3D IP or broadcast address (default localhost).
+Hosts3D IP or broadcast address (default localhost / 127.0.0.1).
 .TP
 .B \-l
 Display capture interfaces.
@@ -36,9 +36,9 @@ Firewall configuration: hsen talks to Hosts3D via UDP port 10111.  If
 hsen is running and Hosts3D is not, ICMP Port Unreachable (UDP port
 10111) may be generated.  To capture packets from some interfaces, or
 in promiscuous mode, you may have to start hsen as root (sudo).  hsen
-logs to syslog, check when troubleshooting.  Support only for IPv4.
-IP headers with options are ignored.  Support for packets with
-optionless GRE or VLAN 802.1Q encapsulation.
+logs to syslog, check when troubleshooting.  Support is IPv4 only.
+IP headers with options are ignored.  Packets with optionless GRE or
+VLAN 802.1Q encapsulation are supported.
 .SH "SEE ALSO"
 hosts3d(1)
 .SH AUTHOR

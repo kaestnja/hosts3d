@@ -19,7 +19,7 @@ Use this file to recover:
 - Current Windows target in daily use: `Release/windows/x86`
 - Build toolchains now available on Windows: `MSYS2/MinGW32` and `MSYS2/MinGW64`
 - The project is already in productive use; changes should stay pragmatic and low-risk
-- The `port/glfw3` worktree is the active GLFW 3 migration branch for `Hosts3D`
+- `master` is now the active GLFW 3 / `1.18` mainline
 
 ## Existing Reference Files
 
@@ -27,9 +27,7 @@ These files already existed before this handover and remain important:
 
 - `README.md`
   - authoritative user-facing documentation
-- `CHANGELOG.md`
-  - continuation-repository history
-- `ChangeLog`
+- `RELEASE_NOTES_1.15.md`
   - legacy upstream history up to original `1.15`
 - `RELEASE_NOTES_1.16.md`
 - `RELEASE_NOTES_1.17.md`
@@ -72,6 +70,15 @@ The current working machine/repo state is:
 - `C:\msys64\mingw32\lib\libglfw3.a`
 - `third_party\wpcap\include`
 - `third_party\wpcap\lib\windows\x86`
+
+Windows bootstrap note for future Codex sessions:
+
+- if `C:\msys64` is missing, install MSYS2 first from `https://www.msys2.org/` or via `winget install -e --id MSYS2.MSYS2`
+- once MSYS2 exists, a Codex session can usually install/update the needed packages directly with:
+  - `C:\msys64\usr\bin\bash -lc "pacman -Syu --noconfirm"`
+  - `C:\msys64\usr\bin\bash -lc "pacman -S --needed --noconfirm mingw-w64-i686-gcc mingw-w64-i686-binutils mingw-w64-i686-glfw make"`
+  - `C:\msys64\usr\bin\bash -lc "pacman -S --needed --noconfirm mingw-w64-x86_64-gcc mingw-w64-x86_64-binutils mingw-w64-x86_64-glfw make"`
+- the interactive MSYS2 installer itself is better launched by the user than assumed by automation
 
 Important x64 note:
 
@@ -143,7 +150,7 @@ These are important because future changes should not silently undo them.
 
 ### Local `hsen`
 
-- `Local hsen` exists as a first-class menu entry
+- `Configure Local Sensors (hsen)` exists as a first-class menu entry
 - the local `hsen` GUI is aligned across Windows and Linux
 - Windows local `hsen` management uses interface discovery from `hsen -l`
 - local sensor management state is machine-local

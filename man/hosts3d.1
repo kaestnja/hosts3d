@@ -1,31 +1,37 @@
-.TH HOSTS3D 1 "13 Apr 11"
+.TH HOSTS3D 1 "13 Apr 26"
 .SH NAME
 hosts3d \- 3D real-time network monitor
 .SH SYNOPSIS
 .B hosts3d \fR[\fB\-f\fR]
 .SH DESCRIPTION
 .B Hosts3D
-is a 3D real-time network monitor, displaying hosts and packet
+is a 3D real-time network monitor that displays hosts and packet
 traffic.  Features include support for multiple sensors, analysis of
 packets to gather hostnames and services, configurable layout of
-subnetworks, recording/replaying of packet traffic, and the ability to
-filter packets by hosts, protocol or port.
+subnetworks, packet capture/replay, managed local \fBhsen\fR sensors,
+and filtering by host, protocol tree, sensor, or port.
 .TP
 .B \-f
 Display full screen.
 .P
-Press H key in Hosts3D to show help.
+Press \fBH\fR in Hosts3D or open \fBHelp\fR from the right-click menu.
 .SH "DATA FILES"
-Created in directory ".hosts3d/".
+Created in the runtime data directory:
+.TP 16
+.I .hosts3d/
+Linux/macOS runtime data directory
+.TP 16
+.I hsd-data/
+Windows runtime data directory
 .TP 16
 .I controls.txt
-Controls
+Generated controls/help text
 .TP 16
 .I settings.ini
 Settings (plain text)
 .TP 16
 .I 0network.hnl
-Network Layout On-Exit
+Network Layout On-Exit (newly written layouts use versioned HN2 format)
 .TP 16
 .I 1network.hnl
 Network Layout 1
@@ -40,10 +46,10 @@ Network Layout 3
 Network Layout 4
 .TP 16
 .I netpos.txt
-CIDR Notation Net Position/Colour
+Network positioning rules
 .TP 16
-.I traffic.hpt
-Packet Traffic Record
+.I traffic*.hpt
+Packet Capture & Replay files
 .TP 16
 .I tmp-hinfo-hsd
 Temporary Information
@@ -53,13 +59,22 @@ Temporary Net Positions
 .TP 16
 .I tmp-flist-hsd
 Temporary Working Directory File List
+.TP 16
+.I local-hsen.state / local-hsen-windows.state
+Managed local \fBhsen\fR process state
 .SH "NET POSITIONS"
-If a host is not a member of any net position entries, it is placed in
-the Grey Zone.  If a host is a member of multiple net position
-entries, the first entry is used.  Line format for net position
-entries is "pos net x-position y-position z-position colour",
+If a host does not match any explicit net position entry, it is placed
+in the Grey Zone.  Rules are evaluated from top to bottom and the
+first full match wins.
+.P
+Supported rule formats include:
 .br
-eg. "pos 123.123.123.123/32 10 0 \-10 green".
+"pos net x-position y-position z-position colour [hold]"
+.br
+"host ip=1.2.3.4 [mac=00:11:22:33:44:55] [fqdn=host.example] x=0 y=0 z=0 color=green [hold]"
+.P
+Exact IP rules such as \fBpos .../32\fR and \fBhost ip=...\fR can also
+materialize known hosts at startup.
 .P
 .I Positions:
 .TP 12
@@ -84,28 +99,31 @@ negative z-position
 .I Colours:
 .P
 none (where multiple colours are used), default (grey), orange,
-yellow, fluro, green, mint, aqua, blue, purple, violet and hold (place
-hosts in same position).
-.SH "START/STOP LOCAL hsen"
-Local hsen management can discover interfaces and start/stop managed
-local hsen processes from the Hosts3D GUI.  If sudo is required to
-start a local hsen, the user starting Hosts3D must be in /etc/sudoers
-and configure an appropriate \fBhsen_start_command\fR (for example
-"sudo -n hsen").  Managed local hsen processes are stopped individually;
-Hosts3D does not rely on "killall hsen" for this GUI workflow.
+yellow, fluro, green, mint, aqua, blue, purple, violet.  Adding
+\fBhold\fR keeps a host exactly on the configured position instead of
+offsetting it to the nearest free spot.
+.SH "CONFIGURE LOCAL SENSORS (hsen)"
+The \fBConfigure Local Sensors (hsen)\fR dialog can discover interfaces
+and start/stop managed local sensors directly from the Hosts3D GUI.
+If elevated privileges are required, configure an appropriate
+\fBhsen_start_command\fR (for example "sudo -n hsen").  Managed local
+\fBhsen\fR processes are tracked and stopped individually; this workflow
+does not rely on a blanket "killall hsen".
 .SH NOTES
 Firewall configuration: hsen talks to Hosts3D via UDP port 10111.  If
 hsen is running and Hosts3D is not, ICMP Port Unreachable (UDP port
 10111) may be generated.  Hosts3D logs to syslog, check when
-troubleshooting.  By default hosts are added from packet source IP
-address, activate Add Destination Hosts to also add from destination
-IP address.  Anomalies are a new host or host service.  Using the menu
-options to move/arrange a few thousand hosts may take a few minutes.
-Deleting hosts, using the menu options to move/arrange hosts, or
-clearing/restoring a net layout may affect packet recording.  Clicking
-a multiple host object will cycle through selecting hosts within.
-Data files from 32-bit version are incompatible with 64-bit version
-and vice versa.
+troubleshooting.  By default hosts are created from packet source IP
+address; enable \fBCreate Hosts for Destination Targets\fR to also add
+destination-side targets as hosts.  Anomalies are a new host or host
+service.  Using the menu options to move/arrange a few thousand hosts
+may take a few minutes.  Deleting hosts, using the menu options to
+move/arrange hosts, or clearing/restoring a net layout may affect
+packet capture/replay.  Clicking a multiple host object cycles through
+selecting the hosts within it.  \fBsettings.ini\fR is plain text and
+portable across 32-bit and 64-bit builds.  Older raw layout or packet
+files remain more sensitive to binary compatibility than the current
+HN2/text-based runtime data.
 .SH "SEE ALSO"
 hsen(1)
 .SH AUTHOR

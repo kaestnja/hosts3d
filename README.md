@@ -26,9 +26,9 @@ If your main goal is to get the project running again, use this order:
 
 1. Build `Hosts3D` and `hsen`
 2. Start `Hosts3D`
-3. Right-click in the 3D view, then choose `Local hsen`
+3. Right-click in the 3D view, then choose `Configure Local Sensors (hsen)`
 4. Select one or more capture interfaces
-5. Click `Save + Start`
+5. Click `Save`, then `Start`
 
 Recommended paths:
 - Windows 11:
@@ -36,11 +36,11 @@ Recommended paths:
   - run `.\compile-hosts3d.bat Release x86`
   - run `.\compile-hsen.bat Release x86`
   - start `.\start-Hosts3DW.bat`
-  - in Hosts3D, right-click in the 3D view, then choose `Local hsen`
+  - in Hosts3D, right-click in the 3D view, then choose `Configure Local Sensors (hsen)`
 - Linux/macOS:
   - build with the platform commands below
   - if local capture needs privileges, set `hsen_start_command=sudo -n hsen` in `settings.ini`
-  - start `Hosts3D`, right-click in the 3D view, then choose `Local hsen`
+  - start `Hosts3D`, right-click in the 3D view, then choose `Configure Local Sensors (hsen)`
 
 ## Requirements
 Use the platform-specific subsection that matches the machine you are building on.
@@ -90,6 +90,7 @@ Alternative manual build commands:
 
 ### Windows 11 Build (MSYS2 + MinGW32)
 > If `g++` is missing (`g++ is not recognized`), install toolchain first.
+> Install MSYS2 first from the official project (`https://www.msys2.org/`) or via `winget`, then use the package commands below.
 
 ```powershell
 winget install -e --id MSYS2.MSYS2
@@ -152,7 +153,6 @@ Notes:
 - The Windows scripts now accept an explicit arch such as `x86` or `x64`.
 - Windows builds now place intermediate object files under `build/windows/<target>/<arch>/<config>/`, so `x86`/`x64` and `Hosts3D`/`hsen` builds can run in parallel without mixing object files.
 - Local dependency layout for build scripts: see `third_party/README.md`.
-- Archived old binaries for comparison: `Original/windows/x86/`.
 - Portable Wireshark helper location: `Tools/Wireshark/`.
 
 ### Windows Packaging
@@ -174,7 +174,7 @@ Create a private/local test ZIP that also carries `wpcap.dll` and `Packet.dll`:
 ```
 
 Use these helpers when you want the old script-driven workflow or a manual/distributed setup.  
-For normal local use, the built-in `Local hsen` dialog is now the preferred path.
+For normal local use, the built-in `Configure Local Sensors (hsen)` dialog is now the preferred path.
 
 Related Windows helper notes:
 - Quick copy/paste PowerShell snippets: `POWERSHELL_SNIPPETS.md`
@@ -231,7 +231,7 @@ hsen -l
 
 ## Safe Stop (Windows)
 Preferred for GUI-managed local sensors:
-- use `Local hsen > Stop` in Hosts3D
+- use `Configure Local Sensors (hsen) > Stop` in Hosts3D
 
 Fallback from the shell:
 
@@ -300,12 +300,13 @@ Notes:
   - `dynamic_host_cleanup_interval_seconds=30`
 
 ### Local `hsen`
-- `Local hsen` now uses the same GUI on Windows and Linux.
-- Open it by right-clicking in the 3D view and choosing `Local hsen`.
+- `Configure Local Sensors (hsen)` now uses the same GUI on Windows and Linux.
+- Open it by right-clicking in the 3D view and choosing `Configure Local Sensors (hsen)`.
 - Interface discovery is done by calling `hsen -l`.
 - Target host for local GUI-managed sensors is fixed to `127.0.0.1`.
 - Ethernet adapters are preselected by default; WLAN and other adapters are listed but start deselected.
-- `Save + Start` stores the current selection and launches one local `hsen` process per selected interface.
+- `Save` stores the current selection.
+- `Start` launches one local `hsen` process per selected interface.
 - `Stop` stops only the local `hsen` processes that were started and tracked by Hosts3D.
 - The corresponding `settings.ini` keys are written under `[local_hsen]`.
 - On Linux/macOS, `hsen_start_command` in `[hsen]` is still used as the launcher when you need something like `sudo -n hsen`.
@@ -868,8 +869,8 @@ This repository is an independent, community-maintained continuation of the orig
 
 For attribution and maintenance context:
 - See `CREDITS.md`
-- See `CHANGELOG.md` (continuation history)
-- See `ChangeLog` (legacy upstream history up to 1.15)
+- See `RELEASE_NOTES_1.18.md`, `RELEASE_NOTES_1.17.md`, and `RELEASE_NOTES_1.16.md` for continuation history
+- See `RELEASE_NOTES_1.15.md` for legacy upstream history up to original `1.15`
 
 ## License
 GNU General Public License v2

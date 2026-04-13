@@ -9,7 +9,7 @@ To compile you need the following libraries installed
 Project status
     This repository is an independent continuation of the original Hosts3D 1.15 project.
     Original upstream authorship remains credited to Del Castle.
-    See CREDITS.md and CHANGELOG.md for continuation context.
+    See CREDITS.md and the RELEASE_NOTES_*.md files for continuation context.
 
 ./configure
 make 
@@ -35,6 +35,16 @@ Parallel Windows build note:
 Windows local third-party layout:
     See third_party/README.md
 
+Windows MSYS2 bootstrap:
+    Install MSYS2 first from:
+        https://www.msys2.org/
+    or via:
+        winget install -e --id MSYS2.MSYS2
+    Then install/update the toolchain packages, for example:
+        C:\msys64\usr\bin\bash -lc "pacman -Syu --noconfirm"
+        C:\msys64\usr\bin\bash -lc "pacman -S --needed --noconfirm mingw-w64-i686-gcc mingw-w64-i686-binutils mingw-w64-i686-glfw make"
+        C:\msys64\usr\bin\bash -lc "pacman -S --needed --noconfirm mingw-w64-x86_64-gcc mingw-w64-x86_64-binutils mingw-w64-x86_64-glfw make"
+
 Windows x64 note:
     x64 builds need an x64 MinGW compiler.
     The GLFW 3 package must be installed in the matching MSYS2 MinGW toolchain root.
@@ -43,6 +53,11 @@ Windows x64 note:
         mingw-w64-x86_64-glfw
     On the current machine, the verified x64 compiler path is:
         C:\msys64\mingw64\bin\g++.exe
+
+Codex note:
+    A future Codex session can usually run the pacman/package commands above if MSYS2
+    is already installed at C:\msys64.
+    The interactive MSYS2 installer itself should still be started by the user.
 
 Windows packaging note:
     package-release-windows.bat defaults to a public ZIP without Packet.dll and wpcap.dll.

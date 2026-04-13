@@ -15,9 +15,9 @@ Private/local test packages may additionally include:
 
 ## First Start
 1. Start `Hosts3D.exe`
-2. Right-click in the 3D view and choose `Local hsen`
+2. Right-click in the 3D view and choose `Configure Local Sensors (hsen)`
 3. Select one or more capture interfaces
-4. Click `Save + Start`
+4. Click `Save`, then `Start`
 
 `Hosts3D` creates its runtime folder and files on first start as needed:
 - `hsd-data\settings.ini`
@@ -32,7 +32,7 @@ Private/local test packages may additionally include:
 - Newly written `.hnl` files now use the versioned `HN2` layout format.
 - If an older incompatible `0network.hnl` is found after replacing the EXE, Hosts3D now skips it with a warning and writes a new compatible layout on exit.
 - `traffic.hpt` is Hosts3D's own record/replay format, not a Wireshark capture file.
-- Public release ZIPs may omit `wpcap.dll` and `Packet.dll`. In that case, install Npcap on the target machine before using `hsen` or `Local hsen`.
+- Public release ZIPs may omit `wpcap.dll` and `Packet.dll`. In that case, install Npcap on the target machine before using `hsen` or `Configure Local Sensors (hsen)`.
 
 ## License
 Hosts3D is distributed under the GNU General Public License. See `COPYING`.
