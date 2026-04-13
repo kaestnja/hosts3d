@@ -155,6 +155,8 @@ Build scripts place binaries into config/os/arch folders:
 With explicit arch selection, the same scripts also produce:
 - `Release/windows/x64/Hosts3D.exe`
 - `Release/windows/x64/hsen.exe`
+- `Release/linux/arm64/hosts3d`
+- `Release/linux/arm64/hsen`
 
 Notes:
 - Scripts overwrite known targets but do not wipe the whole `Release`/`Debug` tree.
@@ -162,6 +164,8 @@ Notes:
 - Windows builds now place intermediate object files under `build/windows/<target>/<arch>/<config>/`, so `x86`/`x64` and `Hosts3D`/`hsen` builds can run in parallel without mixing object files.
 - Local dependency layout for build scripts: see `third_party/README.md`.
 - Portable Wireshark helper location: `Tools/Wireshark/`.
+- Runtime binaries under `Release/` and `Debug/` are local build outputs and are not intended to stay tracked in Git.
+- Distributable binaries should be shipped as release packages/assets instead.
 
 ### Windows Packaging
 Create a public release ZIP without bundled Npcap DLLs:
@@ -173,6 +177,22 @@ Create a private/local test ZIP that also carries `wpcap.dll` and `Packet.dll`:
 ```powershell
 .\package-release-windows.bat Release x64 with-npcap
 ```
+
+### Linux Packaging
+On Linux or Raspberry Pi OS, create a distributable tarball from the already-built runtime:
+```bash
+./package-release-linux Release arm64
+```
+
+This creates:
+- `Release/dist/hosts3d-<version>-linux-arm64.tar.gz`
+- `Release/dist/hosts3d-<version>-linux-arm64-SHA256.txt`
+
+The Linux package includes:
+- `hosts3d`
+- `hsen`
+- `COPYING`
+- `README-runtime-linux.md`
 
 ## Manual Start Helpers (Windows, Optional)
 ```powershell

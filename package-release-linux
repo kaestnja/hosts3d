@@ -1,0 +1,74 @@
+#!/bin/sh
+# Stage the Linux runtime files and create a distributable tar.gz plus SHA256 file.
+# Uses the already-built runtime from Release/linux/<arch> or Debug/linux/<arch>.
+set -eu
+
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+cd "$SCRIPT_DIR"
+
+CONFIG="${1:-Release}"
+case "$CONFIG" in
+  Release|Debug) ;;
+  *)
+    echo "Usage: $(basename "$0") [Release|Debug] [arch]" >&2
+    echo "Example: $(basename "$0") Release arm64" >&2
+    exit 1
+    ;;
+esac
+
+detect_arch() {
+  machine=$(g++ -dumpmachine 2>/dev/null || uname -m)
+  case "$machine" in
+    *x86_64*|*amd64*) printf '%s' "x64" ;;
+    *aarch64*|*arm64*) printf '%s' "arm64" ;;
+    *i?86*|*x86*) printf '%s' "x86" ;;
+    *) printf '%s' "$machine" ;;
+  esac
+}
+
+ARCH="${2:-$(detect_arch)}"
+
+VERSION=$(awk '/^#define HSD_VERSION_STR/{gsub(/"/, "", $3); print $3; exit}' src/version.h)
+if [ -z "$VERSION" ]; then
+  echo "Unable to detect version from src/version.h" >&2
+  exit 1
+fi
+
+RUNDIR="$CONFIG/linux/$ARCH"
+DISTDIR="Release/dist"
+PKGNAME="hosts3d-$VERSION-linux-$ARCH"
+STAGEDIR="$DISTDIR/$PKGNAME"
+TARPATH="$DISTDIR/$PKGNAME.tar.gz"
+HASHPATH="$DISTDIR/$PKGNAME-SHA256.txt"
+
+if [ ! -f "$RUNDIR/hosts3d" ]; then
+  echo "Missing \"$RUNDIR/hosts3d\"" >&2
+  echo "Build the Linux runtime first." >&2
+  exit 1
+fi
+
+if [ ! -f "$RUNDIR/hsen" ]; then
+  echo "Missing \"$RUNDIR/hsen\"" >&2
+  echo "Build the Linux runtime first." >&2
+  exit 1
+fi
+
+mkdir -p "$DISTDIR"
+rm -rf "$STAGEDIR"
+rm -f "$TARPATH" "$HASHPATH"
+mkdir -p "$STAGEDIR"
+
+cp "$RUNDIR/hosts3d" "$STAGEDIR/hosts3d"
+cp "$RUNDIR/hsen" "$STAGEDIR/hsen"
+cp "COPYING" "$STAGEDIR/COPYING"
+cp "README-runtime-linux.md" "$STAGEDIR/README-runtime-linux.md"
+cp "README-runtime-linux.md" "$STAGEDIR/README.md"
+
+tar -czf "$TARPATH" -C "$DISTDIR" "$PKGNAME"
+(
+  cd "$DISTDIR"
+  sha256sum "$(basename "$TARPATH")" > "$(basename "$HASHPATH")"
+)
+
+echo "Created \"$TARPATH\""
+echo "Created \"$HASHPATH\""

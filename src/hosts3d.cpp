@@ -1279,7 +1279,14 @@ static void hostCollisionDetach(host_type *cht)
 //create host
 host_type *hostCreate(in_addr ip, bool dynamic, bool queueResolve)
 {
-  host_type host = {0, 0, 0, 0, 0, setts.anm, setts.nhp, 0, setts.nhl, 0, SPC, 0, SPC, 0, 0, 0, 0, ip, "", "", "", ""}, *ht;
+  host_type host = {}, *ht;
+  host.anm = (setts.anm ? 1 : 0);
+  host.shp = (setts.nhp ? 1 : 0);
+  host.alk = (setts.nhl ? 1 : 0);
+  host.px = SPC;
+  host.py = 0;
+  host.pz = SPC;
+  host.hip = ip;
   strcpy(host.htip, inet_ntoa(ip));
   for (unsigned char cnt = 0; cnt < SVCS; cnt++) host.svc[cnt] = -1;
 
@@ -2599,7 +2606,7 @@ static void osdDrawPktLegend(int px, int py)
 static void drawPacketTrafficStatus()
 {
   int left, bottom, top, right, y;
-  char elapsed[16], replayTime[32];
+  char elapsed[16], replayTime[64];
   if (ptrc <= hlt) return;
   left = 6;
   bottom = 6;
@@ -6808,8 +6815,12 @@ static bool localHsenExeInfo(char *exepath, size_t exepathsz, char *workdir, siz
     {
       *slash = '\0';
       if (workdir) setStringValue(workdir, workdirsz, modpath);
-      snprintf(exepath, exepathsz, "%s/hsen", modpath);
-      if (fileExists(exepath)) return true;
+      if ((strlen(modpath) + 6) < exepathsz)
+      {
+        setStringValue(exepath, exepathsz, modpath);
+        strcat(exepath, "/hsen");
+        if (fileExists(exepath)) return true;
+      }
     }
   }
 #endif
@@ -7121,6 +7132,7 @@ static bool localHsenTryEnableCaptureRights(const char *exepath)
 static bool localHsenEnsureCaptureRights(char *errbuf, size_t errbufsz)
 {
   char exepath[512], workdir[512], fixcmd[640];
+  const char *prefix = "Local hsen needs Linux packet capture rights.\nRun once, then press Start again:\n";
   if (errbuf && errbufsz) *errbuf = '\0';
   if (!localHsenAnySelected()) return true;
   if (*setts.hsst && !textContainsNoCase(setts.hsst, "<sudo command>")) return true;
@@ -7130,9 +7142,10 @@ static bool localHsenEnsureCaptureRights(char *errbuf, size_t errbufsz)
   if (localHsenTryEnableCaptureRights(exepath)) return true;
   snprintf(fixcmd, sizeof(fixcmd), "sudo /usr/sbin/setcap cap_net_raw,cap_net_admin=eip \"%s\"", exepath);
   if (errbuf && errbufsz)
-    snprintf(errbuf, errbufsz,
-             "Local hsen needs packet capture rights on Linux. Hosts3D could not enable them automatically.\n\nRun this once, then press Start again:\n%s",
-             fixcmd);
+  {
+    setStringValue(errbuf, errbufsz, prefix);
+    if ((strlen(errbuf) + 1) < errbufsz) strncat(errbuf, fixcmd, errbufsz - strlen(errbuf) - 1);
+  }
   return false;
 }
 #endif
@@ -7909,7 +7922,9 @@ static bool settsLoadLegacy(const char *path)
 static bool settsSaveIni(const char *path)
 {
   FILE *sts;
+#ifdef __MINGW32__
   bool anyLocalHsenExample = false;
+#endif
   if (!(sts = fopen(path, "w"))) return false;
   fputs("# Hosts3D settings\n", sts);
   fputs("# Generated automatically. Edit with Hosts3D closed.\n\n", sts);

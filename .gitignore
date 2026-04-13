@@ -12,6 +12,7 @@ hsen-interfaces-*.txt
 Tools/Wireshark/WiresharkPortable64_4.6.4.paf.exe
 
 # Machine-local Hosts3D runtime data
+**/.hosts3d/
 **/hsd-data/*network*.hnl
 **/hsd-data/controls*
 **/hsd-data/netpos*
@@ -21,6 +22,18 @@ Tools/Wireshark/WiresharkPortable64_4.6.4.paf.exe
 **/hsd-data/local-hsen-windows.state
 **/hsd-data/local-hsen.state
 Release/dist/
+Release/linux/
+Debug/linux/
+Release/windows/*/Hosts3D.exe
+Release/windows/*/hsen.exe
+Release/windows/*/glfw3.dll
+Release/windows/*/libwinpthread-1.dll
+Debug/windows/*/Hosts3D.exe
+Debug/windows/*/hsen.exe
+Debug/windows/*/glfw3.dll
+Debug/windows/*/libwinpthread-1.dll
 Release/windows/*/README-runtime-windows.md
 Release/windows/*/Packet.dll
 Release/windows/*/wpcap.dll
+Debug/windows/*/Packet.dll
+Debug/windows/*/wpcap.dll

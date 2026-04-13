@@ -19,6 +19,7 @@ Quick script builds:
     ./compile-hosts3d [Release|Debug]
     ./compile-hsen [Release|Debug]
     ./compile-mac-hosts3d [Release|Debug]
+    ./package-release-linux [Release|Debug] [arm64|x64|x86]
     compile-hosts3d.bat [Release|Debug] [x86|x64] [--no-pause]
     compile-hsen.bat [Release|Debug] [x86|x64] [--no-pause]
 
@@ -31,6 +32,11 @@ Script output layout:
     Release/<os>/<arch>/
     Debug/<os>/<arch>/
     build/windows/<target>/<arch>/<config>/
+
+Build output policy:
+    Runtime binaries under Release/ and Debug/ are local build products.
+    They should not be kept as tracked Git artifacts.
+    Publish distributable binaries as release packages/assets instead.
 
 Parallel Windows build note:
     compile-hosts3d.bat and compile-hsen.bat now use separate object directories per
@@ -69,3 +75,7 @@ Windows packaging note:
     Use:
         package-release-windows.bat Release x64 with-npcap
     when you want a private/local test ZIP that carries the Npcap runtime DLLs.
+
+Linux packaging note:
+    package-release-linux creates a tar.gz plus SHA256 file from Release/linux/<arch>.
+    For Raspberry Pi 5 the expected arch is usually arm64.

@@ -34,6 +34,8 @@ These files already existed before this handover and remain important:
 - `RELEASE_NOTES_1.18.md`
 - `README-runtime-windows.md`
   - packaging/runtime handoff for Windows release output
+- `README-runtime-linux.md`
+  - packaging/runtime handoff for Linux release output
 - `testing/sim-hsen.ps1`
   - preferred synthetic packet sender for Windows visualization tests
 - `testing/sim-hsen.py`
@@ -119,6 +121,8 @@ The Windows build/package flow now keeps the runtime README visible automaticall
 - `compile-hosts3d.bat` and `compile-hsen.bat` copy `README-runtime-windows.md` into the runtime output directory
 - `package-release-windows.bat` includes both `README-runtime-windows.md` and `README.md` in the staged Windows release ZIP
 - `package-release-windows.bat` now defaults to a public ZIP without `wpcap.dll` and `Packet.dll`
+- `package-release-linux` creates `Release/dist/hosts3d-<version>-linux-<arch>.tar.gz` plus SHA256 from the already-built Linux runtime
+- runtime binaries under `Release/` and `Debug/` are now treated as local build outputs, not as Git-tracked release artifacts
 - use `with-npcap` only for private/local test packages when you explicitly want those DLLs carried in the ZIP
 
 ### VS Code support
