@@ -18,7 +18,6 @@ Tools/Wireshark/WiresharkPortable64_4.6.4.paf.exe
 **/hsd-data/settings*
 **/hsd-data/traffic*.hpt
 **/hsd-data/tmp*
-hsen-interfaces-JAN1.txt
 **/hsd-data/local-hsen-windows.state
 **/hsd-data/local-hsen.state
 Release/dist/
