@@ -324,7 +324,8 @@ enum tcp_conn_state_flag_type
   tcpcfSynAck = 0x02,
   tcpcfEstablished = 0x04,
   tcpcfMidstreamForward = 0x08,
-  tcpcfMidstreamReverse = 0x10
+  tcpcfMidstreamReverse = 0x10,
+  tcpcfDirectionKnown = 0x20
 };
 
 struct tcp_conn_type
@@ -2041,6 +2042,60 @@ static void tcpConnectionMarkEstablished(tcp_conn_type *tc)
   refresh = true;
 }
 
+static void tcpConnectionDrawDirectionMarker(host_type *sht, host_type *dht)
+{
+  const double tipInset = 8.0;
+  const double arrowLength = 7.0;
+  const double arrowHalfWidth = 2.5;
+  double sx, sy, sz, dx, dy, dz, vx, vy, vz, len, px, py, pz, plen;
+  double tipx, tipy, tipz, basex, basey, basez;
+  if (!sht || !dht) return;
+  sx = (double)sht->px;
+  sy = (double)sht->py + PACKET_CENTER_Y;
+  sz = (double)sht->pz;
+  dx = (double)dht->px;
+  dy = (double)dht->py + PACKET_CENTER_Y;
+  dz = (double)dht->pz;
+  vx = dx - sx;
+  vy = dy - sy;
+  vz = dz - sz;
+  len = sqrt((vx * vx) + (vy * vy) + (vz * vz));
+  if (len < (tipInset + arrowLength + 2.0)) return;
+  vx /= len;
+  vy /= len;
+  vz /= len;
+
+  // Use a side vector perpendicular to the line; fall back if the line is close to world-up.
+  px = -vz;
+  py = 0.0;
+  pz = vx;
+  plen = sqrt((px * px) + (py * py) + (pz * pz));
+  if (plen < 0.001)
+  {
+    px = 0.0;
+    py = vz;
+    pz = -vy;
+    plen = sqrt((px * px) + (py * py) + (pz * pz));
+    if (plen < 0.001) return;
+  }
+  px /= plen;
+  py /= plen;
+  pz /= plen;
+
+  tipx = dx - (vx * tipInset);
+  tipy = dy - (vy * tipInset);
+  tipz = dz - (vz * tipInset);
+  basex = tipx - (vx * arrowLength);
+  basey = tipy - (vy * arrowLength);
+  basez = tipz - (vz * arrowLength);
+
+  glBegin(GL_TRIANGLES);
+    glVertex3d(tipx, tipy, tipz);
+    glVertex3d(basex + (px * arrowHalfWidth), basey + (py * arrowHalfWidth), basez + (pz * arrowHalfWidth));
+    glVertex3d(basex - (px * arrowHalfWidth), basey - (py * arrowHalfWidth), basez - (pz * arrowHalfWidth));
+  glEnd();
+}
+
 static tcp_conn_type *tcpConnectionFind(const pkif_type *pkt, bool *reverse = 0)
 {
   tcp_conn_type *tc;
@@ -2134,7 +2189,7 @@ static void tcpConnectionTrackPacket(host_type *sht, host_type *dht, const pkex_
   {
     tcp_conn_type conn = {sht, dht, pkt->srcip, pkt->dstip, pkt->srcpt, pkt->dstpt, 0, now};
     if (pkex->rst || pkex->fin) return;
-    if (pkex->syn && !pkex->ack) conn.state |= tcpcfSyn;
+    if (pkex->syn && !pkex->ack) conn.state |= (tcpcfSyn | tcpcfDirectionKnown);
     if (pkex->pld) conn.state |= tcpcfMidstreamForward;
     if (!conn.state) return;
     tcpConnsLL.Write(new tcp_conn_type(conn));
@@ -2151,7 +2206,7 @@ static void tcpConnectionTrackPacket(host_type *sht, host_type *dht, const pkex_
   }
   if (!reverse)
   {
-    if (pkex->syn && !pkex->ack) tc->state |= tcpcfSyn;
+    if (pkex->syn && !pkex->ack) tc->state |= (tcpcfSyn | tcpcfDirectionKnown);
     if (pkex->pld) tc->state |= tcpcfMidstreamForward;
     if ((tc->state & tcpcfSynAck) && pkex->ack && !pkex->syn) tcpConnectionMarkEstablished(tc);
   }
@@ -3206,7 +3261,10 @@ void tcpConnectionsDraw()
 {
   tcp_conn_type *tc;
   std::set<std::pair<uintptr_t, uintptr_t> > drawn;
+  std::set<std::pair<uintptr_t, uintptr_t> > drawnDirections;
   tcpConnsLL.Start(1);
+  // Runtime TCP lines can overlap saved grey links exactly; allow equal-depth redraw so blue wins.
+  glDepthFunc(GL_LEQUAL);
   glColor3ub(blue[0], blue[1], blue[2]);
   while ((tc = (tcp_conn_type *)tcpConnsLL.Read(1)))
   {
@@ -3215,19 +3273,23 @@ void tcpConnectionsDraw()
       uintptr_t left = (uintptr_t) tc->sht;
       uintptr_t right = (uintptr_t) tc->dht;
       if (left > right) std::swap(left, right);
-      if (drawn.insert(std::make_pair(left, right)).second)
+      bool visiblePair = ((setts.sona != hst) || (hostShouldDrawInShowHostMode(tc->sht) && hostShouldDrawInShowHostMode(tc->dht)));
+      if (drawn.insert(std::make_pair(left, right)).second && visiblePair)
       {
-        if ((setts.sona != hst) || (hostShouldDrawInShowHostMode(tc->sht) && hostShouldDrawInShowHostMode(tc->dht)))
-        {
-          glBegin(GL_LINES);
-            glVertex3i(tc->sht->px, tc->sht->py + 5, tc->sht->pz);
-            glVertex3i(tc->dht->px, tc->dht->py + 5, tc->dht->pz);
-          glEnd();
-        }
+        glBegin(GL_LINES);
+          glVertex3i(tc->sht->px, tc->sht->py + 5, tc->sht->pz);
+          glVertex3i(tc->dht->px, tc->dht->py + 5, tc->dht->pz);
+        glEnd();
+      }
+      if (visiblePair && (tc->state & tcpcfDirectionKnown)
+        && drawnDirections.insert(std::make_pair((uintptr_t) tc->sht, (uintptr_t) tc->dht)).second)
+      {
+        tcpConnectionDrawDirectionMarker(tc->sht, tc->dht);
       }
     }
     tcpConnsLL.Next(1);
   }
+  glDepthFunc(GL_LESS);
 }
 
 //draw alert objects
@@ -4871,18 +4933,16 @@ void keyboardGL(GLFWwindow *window, int key, int scancode, int action, int mods)
         }
         else lnkht = 0;
         break;
-      case kaAutoLinksAll:  //runtime TCP connection lines for all hosts
-        setts.nhl = 1;
-        hostsSet(4, 1);  //ht->alk
+      case kaAutoLinksAll:  //toggle runtime TCP connection lines for all hosts
+        setts.nhl = !setts.nhl;
+        hostsSet(4, (setts.nhl ? 1 : 0));  //ht->alk
         osdUpdate();
         break;
       case kaToggleNewHostLinks:  //toggle runtime TCP connection lines for new hosts
         setts.nhl = !setts.nhl;
         osdUpdate();
         break;
-      case kaDeleteAllLinks:  //delete link lines for all hosts
-        setts.nhl = 0;
-        hostsSet(4, 0);  //ht->alk
+      case kaDeleteAllLinks:  //delete persistent/manual link lines for all hosts
         goHosts = 1;
         while (goHosts == 1) usleep(1000);
         linksDestroy();
@@ -8200,9 +8260,71 @@ static void compactBindingToken(const char *src, char *dst, size_t dstsz)
   dst[pos] = '\0';
 }
 
+static bool keyCodeHasLocalizedPrintableName(int key)
+{
+  return (((key >= GLFW_KEY_A) && (key <= GLFW_KEY_Z))
+    || ((key >= GLFW_KEY_0) && (key <= GLFW_KEY_9))
+    || (key == GLFW_KEY_LEFT_BRACKET) || (key == GLFW_KEY_RIGHT_BRACKET)
+    || (key == GLFW_KEY_EQUAL) || (key == GLFW_KEY_MINUS)
+    || (key == GLFW_KEY_COMMA) || (key == GLFW_KEY_PERIOD));
+}
+
+static bool localizedKeyName(int key, char *dst, size_t dstsz)
+{
+  const char *name;
+  size_t pos = 0;
+  if (!dst || !dstsz) return false;
+  dst[0] = '\0';
+  if (!mainWindow || !keyCodeHasLocalizedPrintableName(key)) return false;
+  name = glfwGetKeyName(key, 0);
+  if (!name || !*name) return false;
+  while (*name && (pos < (dstsz - 1)))
+  {
+    unsigned char ch = (unsigned char)*name++;
+    if ((ch >= 'a') && (ch <= 'z')) ch = (unsigned char)(ch - ('a' - 'A'));
+    dst[pos++] = (char) ch;
+  }
+  dst[pos] = '\0';
+  return (pos != 0);
+}
+
+static int localizedKeyCodeFromToken(const char *token)
+{
+  char localized[16], compact[32];
+  int key;
+  if (!token || !*token) return 0;
+  for (key = GLFW_KEY_A; key <= GLFW_KEY_Z; key++)
+  {
+    if (localizedKeyName(key, localized, sizeof(localized)))
+    {
+      compactBindingToken(localized, compact, sizeof(compact));
+      if (!strcmp(compact, token)) return key;
+    }
+  }
+  for (key = GLFW_KEY_0; key <= GLFW_KEY_9; key++)
+  {
+    if (localizedKeyName(key, localized, sizeof(localized)))
+    {
+      compactBindingToken(localized, compact, sizeof(compact));
+      if (!strcmp(compact, token)) return key;
+    }
+  }
+  static const int punct[] = {GLFW_KEY_LEFT_BRACKET, GLFW_KEY_RIGHT_BRACKET, GLFW_KEY_EQUAL, GLFW_KEY_MINUS, GLFW_KEY_COMMA, GLFW_KEY_PERIOD};
+  for (unsigned int idx = 0; idx < (sizeof(punct) / sizeof(punct[0])); idx++)
+  {
+    if (localizedKeyName(punct[idx], localized, sizeof(localized)))
+    {
+      compactBindingToken(localized, compact, sizeof(compact));
+      if (!strcmp(compact, token)) return punct[idx];
+    }
+  }
+  return 0;
+}
+
 static int keyCodeFromToken(const char *token)
 {
   if (!token || !*token) return 0;
+  if (int localized = localizedKeyCodeFromToken(token)) return localized;
   if (strlen(token) == 1)
   {
     unsigned char ch = (unsigned char)token[0];
@@ -8295,7 +8417,8 @@ static bool parseBindingValue(const char *value, int *out)
 
 static const char *keyCodeName(int key)
 {
-  static char single[2];
+  static char single[16];
+  if (localizedKeyName(key, single, sizeof(single))) return single;
   switch (key)
   {
   case GLFW_KEY_UP: return "Up";

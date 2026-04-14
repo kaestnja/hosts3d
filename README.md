@@ -307,6 +307,7 @@ Notes:
 
 ### Keyboard Customization
 - Keyboard bindings live in the `[keybindings]` section of `settings.ini`.
+- Printable key bindings are resolved against the active keyboard layout, so labels such as `Y` / `Z` follow the actual local keyboard rather than assuming a US layout.
 - `controls.txt` is regenerated from the current bindings when Hosts3D starts.
 - Supported examples: `1`, `0`, `F7`, `F10`, `F11`, `F12`, `Ctrl + K`, `Ctrl + Shift + F1`, `Tab`, `Plus`, `Minus`, `Comma`, and `Period`.
 
@@ -446,11 +447,11 @@ Ctrl + N	Select All Named Hosts
 R	Edit Remarks for Selected Host
 L	Start Link Line from Selected Host (then press on the other host)
 Ctrl + L	Start Delete Link Line from Selected Host (then press on the other host)
-Y	Auto Link All Hosts
+Y	Toggle Auto Link All Hosts
 Ctrl + Y	Toggle Auto Link New Hosts [L]
 J	Auto Link Hosts in Selection
 Ctrl + J	Stop Auto Link Hosts in Selection
-Ctrl + R	Delete Link Lines for All Hosts
+Ctrl + R	Delete All Saved Link Lines
 P	Show Packets for Selection
 Ctrl + P	Stop Showing Packets for Selection
 U	Packet Display On
@@ -581,11 +582,11 @@ Inline colour boxes: `Grey`, `Orange`, `Yellow`, `Fluro`, `Green`, `Mint`, `Aqua
 | `Auto Link New Hosts (Ctrl+Y)` |
 | `DELETE` |
 | `Delete Link Lines for Hosts in Selection` |
-| `Delete All Link Lines (Ctrl+R)` |
+| `Delete All Saved Link Lines (Ctrl+R)` |
 
 `Start Link Line...` and the delete actions operate on persistent grey layout lines.
 
-`Auto Link...` now controls runtime TCP connection lines for the chosen hosts. These lines are drawn in blue, appear after an observed TCP handshake or clear bidirectional midstream TCP payload, and disappear again on `FIN`, `RST`, or after a short idle timeout.
+`Auto Link...` now controls runtime TCP connection lines for the chosen hosts. These lines are drawn in blue, appear after an observed TCP handshake or clear bidirectional midstream TCP payload, and disappear again on `FIN`, `RST`, or after a short idle timeout. When the initiator direction is known from the observed handshake, a small blue target marker is also drawn at the destination side.
 
 ### `Anomalies`
 | Item |
@@ -874,7 +875,7 @@ This section helps you map what you see on-screen back to the current implementa
 | Anomaly alert | bright red |
 | On-active alert | protocol color |
 | Manual/saved link lines | dull grey |
-| Active runtime TCP connection lines | blue |
+| Active runtime TCP connection lines | blue, with a target marker when setup direction is known |
 | OSD/text/labels/port labels | white |
 
 ### 3D Object Types
