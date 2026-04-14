@@ -75,7 +75,8 @@ struct atomic_u8_state
 };
 
 FILE *pfile;  //packet traffic record file
-bool goRun = true, goSize = true, goAnim = true, mMove = false, mView = false, dAnom = false, refresh = false, animate = false, fullscn = false;
+bool goRun = true, goSize = true, goAnim = true, mMove = false, mView = false, dAnom = false, refresh = false, animate = false, fullscn = false,
+     osdClickCapture = false;
 static const int DEFAULT_WIN_W = 1024;
 static const int DEFAULT_WIN_H = 600;
 static const unsigned int DEFAULT_DYNAMIC_HOST_TTL_SECONDS = 300;
@@ -6251,6 +6252,14 @@ void clickGL(GLFWwindow *window, int button, int action, int mods)
   GLWin.MousePos(mPsx, hWin - mPsy);
   if (button == GLFW_MOUSE_BUTTON_LEFT)
   {
+    if (action) osdClickCapture = false;
+    else if (osdClickCapture)
+    {
+      mMove = false;
+      osdClickCapture = false;
+      refresh = true;
+      return;
+    }
     if (GLWin.On())  //if 2D GUI displayed
     {
       int gs = GLWin.Select(!action);  //2D GUI object clicked
@@ -6275,9 +6284,17 @@ void clickGL(GLFWwindow *window, int button, int action, int mods)
         }
       }
     }
-    else if (action && setts.osd && (osdRowHitProcess(mPsx, hWin - mPsy) || osdPacketHitProcess(mPsx, hWin - mPsy)))
+    else if (setts.osd)
     {
-      mMove = false;
+      if (action)
+      {
+        if (osdRowHitProcess(mPsx, hWin - mPsy) || osdPacketHitProcess(mPsx, hWin - mPsy))
+        {
+          mMove = false;
+          osdClickCapture = true;
+          return;
+        }
+      }
     }
     else if (action)  //start selection box
     {

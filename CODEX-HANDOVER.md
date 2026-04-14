@@ -367,6 +367,7 @@ Completion rule:
 - OSD legend items are part of the interaction model now, not just decoration
 - if host-visibility behavior gains exceptions, reflect that explicitly in the OSD instead of leaving `Display Scope` or `On Activity` misleading
 - most mode/toggle rows in the top-right OSD are now clickable and should stay consistent with both the visible value and the corresponding keyboard/menu behavior
+- overlay clicks must never leak into underlying 3D host selection; the built-in GLWin menu/dialog path already consumes its own click lifecycle, and custom overlays such as the OSD must do the same on both press and release, even if a click opens a dialog mid-click
 - the `RUNTIME` OSD strip now also contains two small quick-launch buttons: `PS Demo` and `Py Demo`
 - the same `RUNTIME` strip also contains a clickable `Dynamic Host TTL` row for quick aging changes during live testing
 - those demo buttons should stay non-blocking, should write their timing summaries into `hsd-data`, and should prefer the first selected local sensor IPv4 plus sensor ID as the demo's central host when available
