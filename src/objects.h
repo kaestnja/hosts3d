@@ -237,7 +237,6 @@ void svcAdd(host_type *sht, int svc, bool anm);
 
 //load netpos file into memory, create empty
 void netpsLoad();
-bool netpsLineExactIp(const char *line, in_addr *ip);
 
 //destroy net positions LL
 void netpsDestroy();

@@ -255,25 +255,6 @@ static bool netpsParseLine(const char *line, netp_type *out)
   return false;
 }
 
-static bool netpExactIp(const netp_type *ne, in_addr_t *ip)
-{
-  char ntmp[19], *cd;
-  if (!ne) return false;
-  if (ne->rtp == 'h')
-  {
-    if (!ne->hip) return false;
-    if (ip) *ip = inet_addr(ne->ip);
-    return true;
-  }
-  strcpy(ntmp, ne->nt);
-  cd = strchr(ntmp, '/');
-  if (!cd || strcmp(cd, "/32")) return false;
-  *cd = '\0';
-  if (!*ntmp) return false;
-  if (ip) *ip = inet_addr(ntmp);
-  return true;
-}
-
 static void netpApplyVisual(host_type *ht, const netp_type *ne)
 {
   if (!ht || !ne) return;
@@ -779,17 +760,6 @@ void netpsLoad()
     fputs("#host ip=1.2.3.4 [mac=00:11:22:33:44:55] [fqdn=host.example] x=0 y=0 z=0 color=green [hold]\n", npos);
     fclose(npos);
   }
-}
-
-bool netpsLineExactIp(const char *line, in_addr *ip)
-{
-  netp_type ne;
-  in_addr_t addr;
-  if (!line || !ip) return false;
-  if (!netpsParseLine(line, &ne)) return false;
-  if (!netpExactIp(&ne, &addr)) return false;
-  ip->s_addr = addr;
-  return true;
 }
 
 //destroy net positions LL

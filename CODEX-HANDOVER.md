@@ -161,11 +161,27 @@ These are important because future changes should not silently undo them.
 - dynamic hosts age out after the configured inactivity timeout
 - locked or currently selected hosts are not removed by cleanup
 - hosts become effectively persistent when manually created, edited, named, loaded from layouts, or otherwise promoted to static
-- exact `/32` entries in `hsd-data/netpos.txt` are also materialized as known static hosts at startup
-- those known `/32` hosts should stay visible and labelled even when `On Activity` is `Highlight Host`
+- automatic hostname resolution may fill in `htnm`, but it should not by itself promote a host from `dynamic` to `static`
+- `netpos.txt` is a rule file; its rules do not create hosts by themselves
+- exact IP rules such as `pos .../32` and `host ip=...` only affect hosts after those hosts were actually observed or loaded from a layout
 - `netpos` rule matching is strict top-to-bottom first-match-wins; do not assume an older automatic `/32`-beats-broader-net override during matching
 - `netpos.txt` now accepts `colour [hold]`, so fixed hosts can be both coloured and non-offset
 - saved layouts keep static and locked hosts only
+
+### Host identity and enrichment rules
+
+- treat hosts as arising from three sources only: observed traffic, saved layouts, or explicit manual creation
+- `netpos.txt` is a rule file and must not create hosts by itself
+- when a host is created from observed traffic, apply `netpos` rules immediately to decide placement/colour
+- enrichment is additive: later observations may add hostname, discovery name, MAC address, service hints, counters, sensor id, and recent packet metadata to the same host
+- automatic hostname resolution must enrich only; it must not by itself promote a `dynamic` host to `static`
+- current host identity is intentionally IP-centric
+- do not introduce MAC-only host merging as a general rule; for routed/off-subnet traffic many remote hosts would otherwise collapse onto the gateway MAC
+
+### Special cases to refine later
+
+- keep room here for explicit future decisions where `netpos` knows more identity than the currently observed traffic
+- example: a host was once observed locally with IP + MAC + DNS name, was later written into `netpos`, then removed from the layout, and later only ARP traffic for that MAC is seen; the desired reappearance/placement behaviour still needs an explicit design before implementation
 
 ### Local `hsen`
 
@@ -376,8 +392,8 @@ Keep in mind:
 
 - after upgrading an older installation, the first startup may skip an incompatible old `0network.hnl`
 - the next normal exit should then rewrite `0network.hnl` in the newer `HN2` format
-- `netposExactHostsSync()` must not wait on `goHosts` before the packet thread exists; this caused a real startup hang when `0network.hnl` had already set `goHosts = 0`
-- the current guard for that is `packetThreadStarted`, set only after the packet thread is launched via `packetThread = std::thread(pktProcess)`
+- startup-time netpos/layout handling must not block on host-thread coordination before the packet thread exists; an older exact-netpos sync path once caused a real startup hang when `0network.hnl` had already set `goHosts = 0`
+- if a future startup-time resync is added again, guard it against the pre-thread state rather than waiting blindly on `goHosts`
 
 Do not accidentally reintroduce tracked runtime artifacts.
 
@@ -456,7 +472,7 @@ Recent behavior decisions that future sessions should preserve unless intentiona
 - the OSD `RUNTIME` section now includes `Packet Capture & Replay` plus `Replay Packet Time` while replay is active; keep the exact replay timestamp visible there
 - `netpos.txt` now supports both legacy `pos ...` rules and newer exact `host ...` rules with optional `ip=`, `mac=`, and `fqdn=` identity fields
 - `netpos` matching is now strict top-to-bottom first-match-wins; do not reintroduce the older `/32`-beats-broad-net special case
-- exact rules with an IP (`pos .../32` or `host ip=...`) are the ones that auto-materialize known hosts at startup
+- exact IP rules (`pos .../32` or `host ip=...`) are still only rules; do not auto-materialize hosts from them
 - the former high-risk string-overflow paths in `hostDetails()` and selection CSV export have been replaced with bounded appends / direct field writing; do not reintroduce raw `strcat()`-style assembly for long host text
 - `glwin` fixed-size text fields (`CreateWin`, `AddButton`, `AddList`, `AddView`, `AddMenu`, `PutLabel`) now clamp copied text; keep new UI text writes bounded by destination buffer sizes
 - `hsddata()` now builds paths with bounded formatting instead of raw `strcpy`/`strcat`

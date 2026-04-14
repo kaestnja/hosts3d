@@ -287,7 +287,7 @@ Main files:
 | `settings.ini` | human-readable runtime settings |
 | `0network.hnl` | network layout on exit; newly written layouts now use the versioned `HN2` format |
 | `1network.hnl`..`4network.hnl` | saved layouts; newly written layouts now use the versioned `HN2` format |
-| `netpos.txt` | CIDR-to-position/color mapping; exact `/32` entries also materialize known hosts at startup |
+| `netpos.txt` | CIDR-to-position/color mapping and exact host matching rules for already observed or layout-loaded hosts |
 | `traffic.hpt` | Hosts3D packet traffic record/replay data (not PCAP) |
 | `local-hsen.state` | machine-local state file for managed local `hsen` PIDs/process stamps on Linux/macOS |
 | `local-hsen-windows.state` | machine-local state file for managed local `hsen.exe` PIDs/process stamps on Windows |
@@ -316,7 +316,8 @@ Notes:
 - Dynamic hosts are automatically removed again after `dynamic_host_ttl_seconds` of inactivity when dynamic cleanup is enabled. This is meant to keep one-off Internet/test sources from staying in the scene indefinitely.
 - Dynamic cleanup skips hosts that are currently selected or locked.
 - Hosts loaded from a saved layout, created manually, manually edited (`Name`/`Remarks`), or named through `Selection > Resolve Hostnames` are treated as `static`.
-- Exact `/32` entries in `netpos.txt` are also treated as known hosts: Hosts3D materializes them at startup, keeps them static, and shows them immediately even when `On Activity` is set to `Highlight Host`.
+- Automatic hostname resolution can fill in host names, but it does not by itself promote a host from `dynamic` to `static`.
+- `netpos.txt` remains a rule file: its rules do not create hosts by themselves and only affect hosts after they were actually observed or loaded from a layout.
 - Locked hosts are protected from dynamic cleanup and are also kept when layouts are saved.
 - Saved layouts (`0network.hnl`..`4network.hnl`) persist static and locked hosts only.
 - When a new build first opens an older incompatible `0network.hnl`, Hosts3D now skips that file, continues running, and writes a fresh compatible layout on exit.
@@ -324,6 +325,18 @@ Notes:
   - `dynamic_hosts_enabled=1`
   - `dynamic_host_ttl_seconds=300`
   - `dynamic_host_cleanup_interval_seconds=30`
+
+### Host Identity and Enrichment Rules
+- Hosts are created from actual observations, saved layouts, or explicit manual creation.
+- `netpos.txt` is a rule file; it does not create hosts by itself.
+- When a new host is created from observed traffic, `netpos` rules are applied immediately to decide placement and colour.
+- Host enrichment is additive: later observations may add hostname, discovery name, MAC address, service hints, packet shape history, counters, and sensor information to the same host.
+- Automatic hostname resolution enriches a host, but must not by itself make that host persistent.
+- Host identity is currently IP-centric. For now, do not merge different IP hosts purely by MAC address, because traffic outside the local subnet may otherwise collapse onto the gateway MAC.
+
+### Special Cases To Refine
+- Placeholder for cases where `netpos` already knows more identity than the currently observed traffic does.
+- Example under discussion: a host was once known with IP, MAC, and DNS name and added to `netpos`, later disappears from the layout, and then only ARP traffic for its MAC is seen again. The intended future behaviour still needs to be specified carefully.
 
 ### Local `hsen`
 - `Configure Local Sensors (hsen)` now uses the same GUI on Windows and Linux.
@@ -382,7 +395,6 @@ Runtime behavior not explicitly listed in `controls.txt`:
 - While one of those demos is running, its button is tinted to show the active state and returns to the normal colour when the demo ends.
 - Expected demo artifact lifetime: packet and alert objects vanish again after their short animation completes; any dynamic demo hosts that were created then age out after the normal `dynamic_host_ttl_seconds` inactivity timeout, which defaults to `300` seconds (`5` minutes).
 - The OSD is grouped into `FILTERS`, `LABELS`, `PACKETS`, and `RUNTIME`, with grey labels, white values, yellow highlights for active deviations, and red alerts for important attention states.
-- The `LABELS` group now also shows `Known NetPos Exact`, so it stays obvious when exact host rules from `netpos.txt` are being kept visible and labelled independently of the normal on-active host mode.
 - The packet legend inside the OSD now renders actual miniature 3D packet examples at an angled view instead of flat markers, using the same shapes as the live animated packet objects.
 - Clicking a packet example inside the OSD legend immediately applies the matching packet-tree filter.
 - Packet traffic filters are exclusive: at any moment you either see all packet traffic, or exactly one active packet filter, whether that filter was chosen by sensor, the packet tree, or a port filter.
@@ -786,8 +798,7 @@ Important behavior:
 - `host ...` rules are for exact host identity and may use any combination of `ip=`, `mac=`, and `fqdn=`.
 - In `host ...` rules, all given identity fields are AND-linked. If one does not match, the rule is ignored.
 - Rules are evaluated strictly from top to bottom. The first fully matching rule wins, and all following rules are ignored.
-- Exact rules with an IP (`pos .../32` and `host ip=...`) now also materialize those hosts immediately at startup if they are not already present in the current layout.
-- These exact hosts are treated as known/static hosts, inherit their `netpos.txt` position/color, and show an IP or resolved name immediately.
+- `netpos.txt` remains a rule file. Exact IP rules (`pos .../32` and `host ip=...`) still match precisely, but they do not create hosts by themselves.
 - If an exact host already exists in the layout, `netpos.txt` still wins for its startup position/color.
 - Normal colour rules use the given position as an anchor and move colliding hosts to the nearest free position around it.
 - Adding `hold` disables that automatic offset, so the host stays exactly on the configured position even when it collides.

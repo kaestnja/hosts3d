@@ -73,8 +73,8 @@ Supported rule formats include:
 .br
 "host ip=1.2.3.4 [mac=00:11:22:33:44:55] [fqdn=host.example] x=0 y=0 z=0 color=green [hold]"
 .P
-Exact IP rules such as \fBpos .../32\fR and \fBhost ip=...\fR can also
-materialize known hosts at startup.
+Net position rules do not create hosts by themselves; they apply once a
+host has actually been observed or loaded from a layout.
 .P
 .I Positions:
 .TP 12
