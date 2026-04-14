@@ -66,6 +66,7 @@ Hosts3D also marks its UDP receive socket close-on-exec and retries the packet-s
 
 The top-right OSD also includes `PS Demo` and `Py Demo` quick-launch buttons for the bundled synthetic visualization demos.
 While a demo is active, the matching OSD button stays tinted until the demo finishes.
+The same `RUNTIME` strip also includes a clickable `Dynamic Host TTL` row with presets from `Off` up to `1h`.
 This package keeps the quick demo scripts beside the `hosts3d` binary. The runtime still also accepts the older `testing/` layout and the usual development layout as fallbacks.
 Their latest timing summaries are written to:
 - `.hosts3d/demo-powershell-last.txt`
@@ -74,7 +75,8 @@ Their latest timing summaries are written to:
 Expected demo artifact lifetime:
 - packet and alert objects usually disappear again within seconds
 - dynamic demo hosts age out after normal inactivity cleanup, controlled by `dynamic_host_ttl_seconds`
-- the default `dynamic_host_ttl_seconds` is `300` seconds (`5` minutes`)
+- the default `dynamic_host_ttl_seconds` is `300` seconds (`5` minutes)
+- `dynamic_host_ttl_seconds=0` means `Off`, so dynamic hosts are no longer removed automatically
 
 ## Headless / Remote Sensor Use
 If the machine should only act as a sensor:

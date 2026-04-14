@@ -167,6 +167,8 @@ These are important because future changes should not silently undo them.
 - `netpos` rule matching is strict top-to-bottom first-match-wins; do not assume an older automatic `/32`-beats-broader-net override during matching
 - `netpos.txt` now accepts `colour [hold]`, so fixed hosts can be both coloured and non-offset
 - saved layouts keep static and locked hosts only
+- the OSD `RUNTIME` section now also contains a clickable `Dynamic Host TTL` preset row cycling through `Off`, `30s`, `60s`, `5m`, `15m`, and `1h`
+- `dynamic_host_ttl_seconds=0` is valid and intentionally means `Off`; do not silently coerce it back to `300`
 
 ### Host identity and enrichment rules
 
@@ -182,6 +184,10 @@ These are important because future changes should not silently undo them.
 
 - keep room here for explicit future decisions where `netpos` knows more identity than the currently observed traffic
 - example: a host was once observed locally with IP + MAC + DNS name, was later written into `netpos`, then removed from the layout, and later only ARP traffic for that MAC is seen; the desired reappearance/placement behaviour still needs an explicit design before implementation
+- local-subnet IP scans are only partially visible today when probe packets target hosts that do not yet exist as drawn hosts; decide later whether outgoing probes to unseen local targets should create short-lived probe targets, a subnet/broadcast marker, or remain intentionally invisible
+- directed broadcast / subnet-wide ping traffic should not invent many fake hosts just because a packet was broadcast; if this area is expanded later, prefer one explicit broadcast marker or fan-out only to already known hosts rather than silently creating a crowd of unverified recipients
+- traffic caused by Hosts3D itself, especially reverse-DNS / hostname resolution side effects, is a distinct special-case family; decide later whether such observer-caused traffic should be hidden, de-emphasized, or at least prevented from keeping unrelated hosts alive
+- keep these special cases separate: `observed real participant traffic`, `probe-only traffic to not-yet-confirmed targets`, `broadcast fan-out`, and `observer-caused maintenance traffic` should not collapse into one generic host-creation rule
 
 ### Local `hsen`
 
@@ -362,8 +368,10 @@ Completion rule:
 - if host-visibility behavior gains exceptions, reflect that explicitly in the OSD instead of leaving `Display Scope` or `On Activity` misleading
 - most mode/toggle rows in the top-right OSD are now clickable and should stay consistent with both the visible value and the corresponding keyboard/menu behavior
 - the `RUNTIME` OSD strip now also contains two small quick-launch buttons: `PS Demo` and `Py Demo`
+- the same `RUNTIME` strip also contains a clickable `Dynamic Host TTL` row for quick aging changes during live testing
 - those demo buttons should stay non-blocking, should write their timing summaries into `hsd-data`, and should prefer the first selected local sensor IPv4 plus sensor ID as the demo's central host when available
 - README/runtime docs for the demo scripts and OSD demo buttons should continue to mention expected artifact lifetime: packets/alerts fade within seconds, while dynamic demo hosts follow the normal `dynamic_host_ttl_seconds` timeout (default `300` seconds / `5` minutes)
+- keep the `Dynamic Host TTL` OSD row aligned with the real settings semantics: preset-based, clickable, and `Off` represented by `dynamic_host_ttl_seconds=0`
 - while a demo is running, the matching OSD button should visibly tint to the active state and clear again when the state file disappears
 
 ### Packet filter rules

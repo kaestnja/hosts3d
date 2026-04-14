@@ -325,6 +325,8 @@ Notes:
   - `dynamic_hosts_enabled=1`
   - `dynamic_host_ttl_seconds=300`
   - `dynamic_host_cleanup_interval_seconds=30`
+- In the OSD `RUNTIME` section, `Dynamic Host TTL` can be clicked directly to cycle through `Off`, `30s`, `60s`, `5m`, `15m`, and `1h`.
+- `dynamic_host_ttl_seconds=0` means `Off`, so dynamic hosts are no longer aged out automatically.
 
 ### Host Identity and Enrichment Rules
 - Hosts are created from actual observations, saved layouts, or explicit manual creation.
@@ -391,6 +393,7 @@ Runtime behavior not explicitly listed in `controls.txt`:
 - The top-right OSD now spells out current filters and toggles using the same naming style as the menu and in-app help, for example `Display Mode`, `Display Scope`, `On Activity`, and `Packet Limit`.
 - Most mode/toggle rows in the top-right OSD can now be clicked directly to cycle them, so you do not have to remember the corresponding keyboard shortcut first.
 - The `RUNTIME` part of the OSD now also includes two small quick-launch buttons: `PS Demo` and `Py Demo`.
+- The same `RUNTIME` area also includes a clickable `Dynamic Host TTL` preset row for quick aging changes during live testing.
 - These start the bundled short synthetic demo scripts, first looking beside the runtime binary and then under `testing/`, and prefer the first selected local sensor IPv4 as the demo's central host when available.
 - While one of those demos is running, its button is tinted to show the active state and returns to the normal colour when the demo ends.
 - Expected demo artifact lifetime: packet and alert objects vanish again after their short animation completes; any dynamic demo hosts that were created then age out after the normal `dynamic_host_ttl_seconds` inactivity timeout, which defaults to `300` seconds (`5` minutes).

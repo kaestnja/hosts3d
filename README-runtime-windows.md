@@ -37,6 +37,7 @@ You can also trigger the bundled synthetic visualization demos from the top-righ
 - `Py Demo`
 
 While a demo is active, the matching OSD button stays tinted until the demo finishes.
+The same `RUNTIME` strip also includes a clickable `Dynamic Host TTL` row with presets from `Off` up to `1h`.
 
 This package keeps the quick demo scripts beside `Hosts3D.exe`. The runtime still also accepts the older `testing\` layout and the usual development layout as fallbacks. The latest timing summary is written to:
 - `hsd-data\demo-powershell-last.txt`
@@ -45,7 +46,8 @@ This package keeps the quick demo scripts beside `Hosts3D.exe`. The runtime stil
 Expected demo artifact lifetime:
 - packet and alert objects usually disappear again within seconds
 - dynamic demo hosts age out after normal inactivity cleanup, controlled by `dynamic_host_ttl_seconds`
-- the default `dynamic_host_ttl_seconds` is `300` seconds (`5` minutes`)
+- the default `dynamic_host_ttl_seconds` is `300` seconds (`5` minutes)
+- `dynamic_host_ttl_seconds=0` means `Off`, so dynamic hosts are no longer removed automatically
 
 ## Notes
 - `settings.ini` is plain text and can be edited with Hosts3D closed.

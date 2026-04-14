@@ -217,6 +217,7 @@ enum osd_row_action_type
   osaNewHostLinks,
   osaShowPacketDestPort,
   osaPacketLimit,
+  osaDynamicHostTtl,
   osaPacketAnimation,
   osaAcknowledgeAnomalies,
   osaLaunchPsDemo,
@@ -1530,6 +1531,36 @@ static void osdCycleOnActiveAction()
   else setts.sona = don;
 }
 
+static const char *osdDynamicHostTtlLabel()
+{
+  static char buf[16];
+  if (!dynamicHostTtlSeconds) return "Off";
+  if (dynamicHostTtlSeconds < 60)
+  {
+    snprintf(buf, sizeof(buf), "%us", dynamicHostTtlSeconds);
+    return buf;
+  }
+  if ((dynamicHostTtlSeconds % 3600) == 0)
+  {
+    snprintf(buf, sizeof(buf), "%uh", (dynamicHostTtlSeconds / 3600));
+    return buf;
+  }
+  snprintf(buf, sizeof(buf), "%um", (dynamicHostTtlSeconds / 60));
+  return buf;
+}
+
+static void osdCycleDynamicHostTtl()
+{
+  static const unsigned int ttls[] = {0, 30, 60, 300, 900, 3600};
+  unsigned int idx = 0;
+  for (; idx < (sizeof(ttls) / sizeof(ttls[0])); idx++)
+    if (dynamicHostTtlSeconds == ttls[idx]) break;
+  if (idx >= (sizeof(ttls) / sizeof(ttls[0]))) idx = 0;
+  else idx = (idx + 1) % (sizeof(ttls) / sizeof(ttls[0]));
+  dynamicHostTtlSeconds = ttls[idx];
+  settsSave();
+}
+
 static void osdCyclePacketLimit()
 {
   static const unsigned int limits[] = {1000, 5000, 10000, 25000, 50000, 100000, 250000, 500000, 1000000};
@@ -1573,6 +1604,7 @@ static bool osdRowHitProcess(int x, int y)
       case osaNewHostLinks: setts.nhl = !setts.nhl; break;
       case osaShowPacketDestPort: setts.pdp = !setts.pdp; break;
       case osaPacketLimit: osdCyclePacketLimit(); break;
+      case osaDynamicHostTtl: osdCycleDynamicHostTtl(); break;
       case osaPacketAnimation: goAnim = !goAnim; break;
       case osaLaunchPsDemo:
       {
@@ -2641,6 +2673,7 @@ void osdUpdate()
   osdAddRow("Show Packet Destination Port", osdOnOff(setts.pdp), (setts.pdp ? osdAccent : osdNormal), osaShowPacketDestPort);
   osdAddRow("Packet Limit", packetLimitLabel, osdNormal, osaPacketLimit);
   osdAddSection("RUNTIME");
+  osdAddRow("Dynamic Host TTL", osdDynamicHostTtlLabel(), ((dynamicHostTtlSeconds != DEFAULT_DYNAMIC_HOST_TTL_SECONDS) ? osdAccent : osdNormal), osaDynamicHostTtl);
   osdAddRow("Packet Animation", (goAnim ? "Running" : "Paused"), (goAnim ? osdNormal : osdAccent), osaPacketAnimation, true);
   packetCaptureReplayStatusLabel(packetCaptureReplayLabel, sizeof(packetCaptureReplayLabel), &packetCaptureReplayColor);
   osdAddRow("Packet Capture & Replay", packetCaptureReplayLabel, packetCaptureReplayColor);
@@ -5202,7 +5235,7 @@ static void dynamicHostsCleanupMaybe()
   time_t now;
 
   if (!dynamicHostsEnabled || goHosts) return;
-  if (!dynamicHostTtlSeconds) dynamicHostTtlSeconds = DEFAULT_DYNAMIC_HOST_TTL_SECONDS;
+  if (!dynamicHostTtlSeconds) return;
   if (!dynamicHostCleanupIntervalSeconds) dynamicHostCleanupIntervalSeconds = DEFAULT_DYNAMIC_HOST_CLEANUP_INTERVAL_SECONDS;
 
   time(&now);
@@ -8659,7 +8692,7 @@ static bool settsLoadIni(const char *path)
     }
     else if (!strcmp(key, "dynamic_host_ttl_seconds"))
     {
-      if (parseUnsignedIntValue(value, &ui) && ui) dynamicHostTtlSeconds = ui;
+      if (parseUnsignedIntValue(value, &ui)) dynamicHostTtlSeconds = ui;
     }
     else if (!strcmp(key, "dynamic_host_cleanup_interval_seconds"))
     {
