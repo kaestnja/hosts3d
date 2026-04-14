@@ -583,6 +583,10 @@ Inline colour boxes: `Grey`, `Orange`, `Yellow`, `Fluro`, `Green`, `Mint`, `Aqua
 | `Delete Link Lines for Hosts in Selection` |
 | `Delete All Link Lines (Ctrl+R)` |
 
+`Start Link Line...` and the delete actions operate on persistent grey layout lines.
+
+`Auto Link...` now controls runtime TCP connection lines for the chosen hosts. These lines are drawn in blue, appear after an observed TCP handshake or clear bidirectional midstream TCP payload, and disappear again on `FIN`, `RST`, or after a short idle timeout.
+
 ### `Anomalies`
 | Item |
 |---|
@@ -869,7 +873,8 @@ This section helps you map what you see on-screen back to the current implementa
 | Packet legend in OSD | rendered as miniature 3D examples of the real packet objects, shown from an angled view and clickable for packet-tree filters |
 | Anomaly alert | bright red |
 | On-active alert | protocol color |
-| Link lines | dull grey |
+| Manual/saved link lines | dull grey |
+| Active runtime TCP connection lines | blue |
 | OSD/text/labels/port labels | white |
 
 ### 3D Object Types

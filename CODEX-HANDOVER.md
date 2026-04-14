@@ -441,6 +441,7 @@ Recent behavior decisions that future sessions should preserve unless intentiona
 - `Selection of Hosts` now starts with a grouped `SELECTION TOOLS` block for `Select All Hosts`, `Invert Current Selection`, `Select All Named Hosts`, `Show Packets for Selection`, `Stop Showing Packets for Selection`, and `Export Selection Details in CSV File As...`
 - `Selection of Hosts -> SELECTION TOOLS` also includes `Persistent Host Labels for Selection`, and `Reset` now only covers traffic counters and services
 - `Host Lines` is now its own top-level grouped menu for selected-host link actions, automatic link modes, and link deletion
+- `Host Lines` now has split semantics: manual start/delete actions still manage persistent grey layout lines, while `Auto Link...` drives runtime-only blue TCP connection lines for hosts with `alk` enabled
 - `Packet Filters -> Sensor Filter` is now also a direct inline strip (`All`, `1`..`9`), not a separate submenu
 - `Packet Display On/Off` is now a direct stateful top-level main-menu toggle; it no longer lives inside `Packet Filters`
 - `Pause/Resume Packet Animation` is now also a direct stateful top-level main-menu toggle near `Packet Filters`

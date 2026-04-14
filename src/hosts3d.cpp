@@ -20,6 +20,7 @@
 #include <stdint.h>
 #include <map>
 #include <math.h>  //cos(), sin(), sqrt()
+#include <set>
 #include <signal.h>  //signal()
 #include <stdio.h>
 #include <stdlib.h>  //abs(), atoi(), system()
@@ -128,6 +129,8 @@ static const int OSD_DEMO_BTN_H = 14;
 static const int OSD_DEMO_BTN_GAP = 6;
 static const unsigned int OSD_MAX_ROWS = 24;
 static const unsigned int PACKET_TRIPLE_SIZE_THRESHOLD = 512;
+static const time_t TCP_CONNECTION_PENDING_TIMEOUT_SECONDS = 10;
+static const time_t TCP_CONNECTION_IDLE_TIMEOUT_SECONDS = 60;
 static const uint32_t LAYOUT_FILE_VERSION = 2;
 static const uint32_t LAYOUT_MAX_HOST_RECORD_SIZE = 4096;
 static const uint32_t LAYOUT_MAX_LINK_RECORD_SIZE = 64;
@@ -315,8 +318,27 @@ struct osd_pkt_hit_type
   bool active;
 };
 
+enum tcp_conn_state_flag_type
+{
+  tcpcfSyn = 0x01,
+  tcpcfSynAck = 0x02,
+  tcpcfEstablished = 0x04,
+  tcpcfMidstreamForward = 0x08,
+  tcpcfMidstreamReverse = 0x10
+};
+
+struct tcp_conn_type
+{
+  host_type *sht, *dht;
+  in_addr srcip, dstip;
+  unsigned short srcpt, dstpt;
+  unsigned char state;
+  time_t ttime;
+};
+
 host_runtime_meta_type hostRuntimeMetaDefault = {0, 0, 0, 0, 0, "", "", false, false, false, false};
 std::map<unsigned long, host_runtime_meta_type> hostRuntimeMetaByIp;
+MyLL tcpConnsLL;
 osd_pkt_hit_type osdPacketHits[OSD_PKT_HIT_MAX];
 unsigned int osdPacketHitCount = 0;
 unsigned char packetTreeFilter = pfAll;
@@ -570,6 +592,11 @@ static bool packetIsNameDiscovery(const pkif_type *pkt);
 static unsigned char packetTreeFilterForPacket(const pkex_type *pkex);
 static unsigned char packetColorIndex(const pkex_type *pkex);
 static unsigned char packetShape(const pkex_type *pkex);
+static void tcpConnectionsDestroy();
+static void tcpConnectionsRemoveHost(host_type *ht);
+static void tcpConnectionsPrune(time_t now);
+static void tcpConnectionTrackPacket(host_type *sht, host_type *dht, const pkex_type *pkex);
+static void tcpConnectionsDraw();
 static const packet_tree_row_type *packetTreeRows(unsigned int *count = 0);
 static const char *packetTreeFilterLabel(unsigned char filter);
 static const char *packetTreeFilterString(unsigned char filter);
@@ -1994,8 +2021,151 @@ static int packetListIndex(unsigned char colorIndex, unsigned char shape)
   return PACKET_LIST_BASE + (colorIndex * PACKET_SHAPE_COUNT) + shape;
 }
 
+static bool tcpConnectionAllowed(host_type *sht, host_type *dht)
+{
+  return (sht && dht && (sht->alk || dht->alk));
+}
+
+static bool tcpConnectionExpired(const tcp_conn_type *tc, time_t now)
+{
+  time_t timeout;
+  if (!tc) return true;
+  timeout = ((tc->state & tcpcfEstablished) ? TCP_CONNECTION_IDLE_TIMEOUT_SECONDS : TCP_CONNECTION_PENDING_TIMEOUT_SECONDS);
+  return ((now - tc->ttime) > timeout);
+}
+
+static void tcpConnectionMarkEstablished(tcp_conn_type *tc)
+{
+  if (!tc || (tc->state & tcpcfEstablished)) return;
+  tc->state |= tcpcfEstablished;
+  refresh = true;
+}
+
+static tcp_conn_type *tcpConnectionFind(const pkif_type *pkt, bool *reverse = 0)
+{
+  tcp_conn_type *tc;
+  time_t now = time(0);
+  if (reverse) *reverse = false;
+  if (!pkt) return 0;
+  tcpConnsLL.Start(1);
+  while ((tc = (tcp_conn_type *)tcpConnsLL.Read(1)))
+  {
+    if (tcpConnectionExpired(tc, now) || !tcpConnectionAllowed(tc->sht, tc->dht))
+    {
+      bool hadLine = ((tc->state & tcpcfEstablished) != 0);
+      delete tc;
+      tcpConnsLL.Delete(1);
+      if (hadLine) refresh = true;
+      continue;
+    }
+    if ((pkt->srcip.s_addr == tc->srcip.s_addr) && (pkt->dstip.s_addr == tc->dstip.s_addr)
+      && (pkt->srcpt == tc->srcpt) && (pkt->dstpt == tc->dstpt)) return tc;
+    if ((pkt->srcip.s_addr == tc->dstip.s_addr) && (pkt->dstip.s_addr == tc->srcip.s_addr)
+      && (pkt->srcpt == tc->dstpt) && (pkt->dstpt == tc->srcpt))
+    {
+      if (reverse) *reverse = true;
+      return tc;
+    }
+    tcpConnsLL.Next(1);
+  }
+  return 0;
+}
+
+static void tcpConnectionsDestroy()
+{
+  tcp_conn_type *tc;
+  tcpConnsLL.Start(1);
+  while ((tc = (tcp_conn_type *)tcpConnsLL.Read(1)))
+  {
+    delete tc;
+    tcpConnsLL.Next(1);
+  }
+  tcpConnsLL.Destroy();
+}
+
+static void tcpConnectionsRemoveHost(host_type *ht)
+{
+  tcp_conn_type *tc;
+  if (!ht) return;
+  tcpConnsLL.Start(1);
+  while ((tc = (tcp_conn_type *)tcpConnsLL.Read(1)))
+  {
+    if ((tc->sht == ht) || (tc->dht == ht))
+    {
+      bool hadLine = ((tc->state & tcpcfEstablished) != 0);
+      delete tc;
+      tcpConnsLL.Delete(1);
+      if (hadLine) refresh = true;
+    }
+    else tcpConnsLL.Next(1);
+  }
+}
+
+static void tcpConnectionsPrune(time_t now)
+{
+  tcp_conn_type *tc;
+  tcpConnsLL.Start(1);
+  while ((tc = (tcp_conn_type *)tcpConnsLL.Read(1)))
+  {
+    if (tcpConnectionExpired(tc, now) || !tcpConnectionAllowed(tc->sht, tc->dht))
+    {
+      bool hadLine = ((tc->state & tcpcfEstablished) != 0);
+      delete tc;
+      tcpConnsLL.Delete(1);
+      if (hadLine) refresh = true;
+    }
+    else tcpConnsLL.Next(1);
+  }
+}
+
+static void tcpConnectionTrackPacket(host_type *sht, host_type *dht, const pkex_type *pkex)
+{
+  const pkif_type *pkt;
+  tcp_conn_type *tc;
+  bool reverse = false;
+  time_t now;
+  if (!pkex || !sht || !dht) return;
+  pkt = &pkex->pk;
+  if ((pkt->pr != IPPROTO_TCP) || !pkt->srcpt || !pkt->dstpt) return;
+  if (!tcpConnectionAllowed(sht, dht)) return;
+  tc = tcpConnectionFind(pkt, &reverse);
+  time(&now);
+  if (!tc)
+  {
+    tcp_conn_type conn = {sht, dht, pkt->srcip, pkt->dstip, pkt->srcpt, pkt->dstpt, 0, now};
+    if (pkex->rst || pkex->fin) return;
+    if (pkex->syn && !pkex->ack) conn.state |= tcpcfSyn;
+    if (pkex->pld) conn.state |= tcpcfMidstreamForward;
+    if (!conn.state) return;
+    tcpConnsLL.Write(new tcp_conn_type(conn));
+    return;
+  }
+  tc->ttime = now;
+  if (pkex->rst || pkex->fin)
+  {
+    bool hadLine = ((tc->state & tcpcfEstablished) != 0);
+    delete tc;
+    tcpConnsLL.Delete(1);
+    if (hadLine) refresh = true;
+    return;
+  }
+  if (!reverse)
+  {
+    if (pkex->syn && !pkex->ack) tc->state |= tcpcfSyn;
+    if (pkex->pld) tc->state |= tcpcfMidstreamForward;
+    if ((tc->state & tcpcfSynAck) && pkex->ack && !pkex->syn) tcpConnectionMarkEstablished(tc);
+  }
+  else
+  {
+    if (pkex->syn && pkex->ack && (tc->state & tcpcfSyn)) tc->state |= tcpcfSynAck;
+    if (pkex->pld) tc->state |= tcpcfMidstreamReverse;
+  }
+  if (!(tc->state & tcpcfEstablished) && (tc->state & tcpcfMidstreamForward) && (tc->state & tcpcfMidstreamReverse))
+    tcpConnectionMarkEstablished(tc);
+}
+
 //create packet
-void pcktCreate(pkex_type *pkex, host_type *sht, host_type *dht, bool lk)
+void pcktCreate(pkex_type *pkex, host_type *sht, host_type *dht)
 {
   pkif_type *pkt = &pkex->pk;
   unsigned char shape = packetShape(pkex), color = packetColorIndex(pkex);
@@ -2013,7 +2183,6 @@ void pcktCreate(pkex_type *pkex, host_type *sht, host_type *dht, bool lk)
       pktsLL.Prev(2);
     }
     pktsLL.Write(new pckt_type(pckt));
-    if (lk && (sht->alk || dht->alk)) linkCreDel(sht, dht, 0);
     if (setts.sona == hst)
     {
       sht->vis = 254;
@@ -2034,6 +2203,7 @@ void hostDestroyCb(void **data, HtArgType arg1, HtArgType arg2, HtArgType arg3, 
 //destroy hosts LL
 void hostsDestroy()
 {
+  tcpConnectionsDestroy();
   hstsByIp.forEach(1, hostDestroyCb, 0, 0, 0, 0);
   hstsByIp.destroy();
   hstsByPos.destroy();
@@ -3012,7 +3182,7 @@ void hostsDraw(GLenum mode)
   hstsByIp.forEach(1, hostDrawCb, 0l, dips ? 1l : 0l, anms ? 1l : 0l, 0);
 }
 
-//draw link objects
+//draw persistent/manual link objects
 void linksDraw()
 {
   glColor3ub(dlgrey[0], dlgrey[1], dlgrey[2]);
@@ -3028,6 +3198,35 @@ void linksDraw()
       glEnd();
     }
     lnksLL.Next(1);
+  }
+}
+
+//draw active runtime TCP connection lines
+void tcpConnectionsDraw()
+{
+  tcp_conn_type *tc;
+  std::set<std::pair<uintptr_t, uintptr_t> > drawn;
+  tcpConnsLL.Start(1);
+  glColor3ub(blue[0], blue[1], blue[2]);
+  while ((tc = (tcp_conn_type *)tcpConnsLL.Read(1)))
+  {
+    if ((tc->state & tcpcfEstablished) && tcpConnectionAllowed(tc->sht, tc->dht))
+    {
+      uintptr_t left = (uintptr_t) tc->sht;
+      uintptr_t right = (uintptr_t) tc->dht;
+      if (left > right) std::swap(left, right);
+      if (drawn.insert(std::make_pair(left, right)).second)
+      {
+        if ((setts.sona != hst) || (hostShouldDrawInShowHostMode(tc->sht) && hostShouldDrawInShowHostMode(tc->dht)))
+        {
+          glBegin(GL_LINES);
+            glVertex3i(tc->sht->px, tc->sht->py + 5, tc->sht->pz);
+            glVertex3i(tc->dht->px, tc->dht->py + 5, tc->dht->pz);
+          glEnd();
+        }
+      }
+    }
+    tcpConnsLL.Next(1);
   }
 }
 
@@ -3199,6 +3398,7 @@ void displayGL()
   glCallList(objsDraw + 14);  //draw cross object
   if (hstsByIp.Num() != 0) hostsDraw(GL_RENDER);
   if (lnksLL.Num()) linksDraw();
+  if (tcpConnsLL.Num()) tcpConnectionsDraw();
   if (altsLL.Num()) alrtsDraw();
   if (pktsLL.Num()) pcktsDraw();
   if (setts.osd || seltd || mMove || (ptrc > hlt) || GLWin.On() || helpOverlayVisible) draw2D();
@@ -4404,11 +4604,11 @@ void keyboardForEachCb(void **data, HtArgType arg1, HtArgType arg2, HtArgType ar
 
     case kaAutoLinksSelection:
       ht->alk = 1;
-      break;  //automatic link lines for selection
+      break;  //runtime TCP connection lines for selection
 
     case kaStopAutoLinksSelection:
       ht->alk = 0;
-      break;  //stop automatic link lines for selection, ctrl+j
+      break;  //stop runtime TCP connection lines for selection, ctrl+j
 
     case kaShowSelectionPackets:
       ht->shp = 1;
@@ -4671,12 +4871,12 @@ void keyboardGL(GLFWwindow *window, int key, int scancode, int action, int mods)
         }
         else lnkht = 0;
         break;
-      case kaAutoLinksAll:  //automatic link lines for all hosts
+      case kaAutoLinksAll:  //runtime TCP connection lines for all hosts
         setts.nhl = 1;
         hostsSet(4, 1);  //ht->alk
         osdUpdate();
         break;
-      case kaToggleNewHostLinks:  //toggle automatic link lines for new hosts
+      case kaToggleNewHostLinks:  //toggle runtime TCP connection lines for new hosts
         setts.nhl = !setts.nhl;
         osdUpdate();
         break;
@@ -5038,6 +5238,7 @@ static void hostDeleteManaged(host_type *ht)
     }
     else altsLL.Next(1);
   }
+  tcpConnectionsRemoveHost(ht);
   linkCreDel(ht, 0, 0, true);
   hostByPositionPreMove(ht);
   hostCollisionDetach(ht);
@@ -8921,7 +9122,7 @@ void pktProcessCb(void **data, HtArgType arg1, HtArgType arg2, HtArgType arg3, H
   pkex_type *pkex = (pkex_type *) ptrFromHtArg(arg4);
 
   if ((dh != sh) && ((dh->hip.s_addr & mask) == dstip))
-    pcktCreate(pkex, sh, dh, false);
+    pcktCreate(pkex, sh, dh);
 }
 
 //packet gatherer thread
@@ -9008,6 +9209,7 @@ retry_psock_bind:
   char pbuf[dnsz];
   host_type *sh, *dh;
   pkrc1_type pkr1;
+  time_t tcpCleanupLast = 0;
   while (goRun)
   {
     if (!goHosts)
@@ -9066,6 +9268,14 @@ retry_psock_bind:
           }
         }
       }
+      {
+        time_t now = time(0);
+        if (now != tcpCleanupLast)
+        {
+          tcpConnectionsPrune(now);
+          tcpCleanupLast = now;
+        }
+      }
       if (pksc)
       {
         unsigned short importantPort = packetImportantPort(pkif);
@@ -9096,7 +9306,8 @@ retry_psock_bind:
             dh->dld += pkex->sz;
             time(&dh->lpk);
           }
-          pcktCreate(pkex, sh, dh, true);
+          tcpConnectionTrackPacket(sh, dh, pkex);
+          pcktCreate(pkex, sh, dh);
         }
         else if (setts.bct && (mask = isBroadcast(pkif->dstip)))
         {
