@@ -9,7 +9,7 @@ To compile you need the following libraries installed
 Project status
     This repository is an independent continuation of the original Hosts3D 1.15 project.
     Original upstream authorship remains credited to Del Castle.
-    See CREDITS.md and the RELEASE_NOTES_*.md files for continuation context.
+    See CREDITS.md and RELEASE_NOTES.md for continuation context.
 
 ./configure
 make 

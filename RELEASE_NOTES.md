@@ -1,15 +1,100 @@
-# Hosts3D 1.15
+# Hosts3D Release Notes
 
-This file preserves the legacy upstream release history through the original
+This file collects the continuation release history and the preserved legacy
+upstream history in one place.
+
+## Hosts3D 1.18
+
+### Highlights
+- `Hosts3D` has been ported from the legacy GLFW 2 API to GLFW 3.
+- The old GLFW 2 threading layer has been replaced with standard C++ threading primitives:
+  - `std::thread`
+  - `std::mutex`
+  - `std::condition_variable`
+- Window creation, event callbacks, scroll handling, cursor motion, and buffer swaps now use the GLFW 3 API.
+- GUI text entry no longer relies on GLFW 2 ASCII-style key callbacks; printable input now comes from the GLFW 3 character callback.
+- Windows build scripts now use the installed MSYS2 GLFW 3 packages and copy `glfw3.dll` into the runtime output.
+- `compile-all-windows.bat` now builds both Windows runtime pairs in one command and can optionally package them.
+- Linux/macOS/autotools build metadata has been updated to use GLFW 3 headers and libraries.
+- Windows packaging now includes `glfw3.dll` instead of the old `glfw.dll`.
+
+### Notes
+- Existing rendering remains on the current OpenGL fixed-function path; this release updates the windowing/input/runtime layer, not the renderer architecture.
+- The migration was smoke-tested successfully after the port.
+- Local `hsen` interface settings are reconciled with the current `hsen -l` discovery result, preventing stale adapter selections from a copied data folder from being reused.
+- Windows local `hsen` adapter IP/name display now maps Npcap interfaces to Windows adapters by GUID and shows friendly adapter names when available, avoiding mismatched rows on systems with several similar Ethernet adapters.
+
+## Hosts3D 1.17
+
+### Highlights
+- Packet rendering now distinguishes control traffic from payload-carrying traffic by shape:
+  - cube for control / no payload
+  - double cuboid for payload
+  - triple cuboid for larger payload
+- TCP control traffic is now distinguished more clearly:
+  - orange cube for setup / finish traffic
+  - red cube for TCP reset traffic
+- Name and discovery traffic such as DNS, mDNS, LLMNR, and NetBIOS name service is highlighted with spherical packet markers.
+- ICMP and fragmented traffic is highlighted with pyramid packet markers.
+- ARP traffic is now distinguished into request, reply, and gratuitous ARP, each with its own visual mapping.
+- The OSD packet legend now shows miniature angled 3D packet examples instead of flat text markers, arranged as a simple packet-filter tree.
+- Clicking an OSD packet example applies the matching tree filter immediately, and the active OSD row is highlighted directly in the legend.
+- Packet traffic filters are now exclusive across sensor, packet tree, and port: you see either all traffic or exactly one active filter.
+- The `Packets` menu now mirrors the same packet-filter tree and the same active filter state as the OSD.
+- Selected host details now include the last observed protocol, packet form, important port, and discovery name when known.
+- New packet recordings preserve the extended packet-shape metadata, while older `traffic.hpt` recordings remain readable.
+- Active packet recording and replay now show a dedicated bottom-left status panel with mode, elapsed time, replay packet time, and the current file label.
+- New packet recordings now auto-increment to the next free `traffic*.hpt` name instead of overwriting the previous recording.
+- Replay now opens a list of available `.hpt` recordings from `hsd-data`.
+- Exact `/32` entries in `netpos.txt` now materialize known hosts immediately at startup, keep them visible in `Show Host` mode, and label them with IP or name when available.
+- Most mode/toggle rows in the top-right OSD can now be clicked directly to cycle them, in addition to the existing keyboard shortcuts and menu entries.
+- Newly written `.hnl` layout files now use a versioned `HN2` format; older incompatible `0network.hnl` files are skipped cleanly with a warning instead of blocking startup, and a new compatible layout is written on exit.
+- `netpos.txt` exact `/32` rules now override broader matching nets, and `hold` can now be combined with a colour token such as `green hold`.
+- Windows packaging now supports a public ZIP without bundled Npcap DLLs, plus an optional `with-npcap` package for local/private testing.
+
+### Notes
+- Packet colours still indicate protocol family.
+- Packet shape now adds an additional visual layer for behavior and traffic type.
+- The new OSD packet examples use the same OpenGL packet objects as the live animated packets, so the legend stays consistent with the scene.
+
+## Hosts3D 1.16
+
+### Highlights
+- Human-readable `settings.ini` replaced the old binary settings file.
+- Dynamic/static host lifetime handling was added:
+  - automatically discovered hosts start as `dynamic`
+  - dynamic hosts are automatically removed again after the configured inactivity timeout
+  - locked, selected, or promoted static hosts are kept
+- `Selection > Resolve Hostnames` can resolve selected hosts and keep those names in saved layouts.
+- `Configure Local Sensors (hsen)` is now available through the GUI on Windows and Linux with interface discovery and local process management.
+- The help view is now a non-blocking overlay instead of a modal window.
+- Menu entries show current states and real keyboard shortcuts.
+- The top-right OSD now uses grouped, readable labels instead of compact abbreviations.
+- Windows builds now embed version information in `Hosts3D.exe` and `hsen.exe`.
+- Windows packaging is prepared as a distributable runtime ZIP.
+- The continuation repository baseline was established for this line:
+  - the legacy plain-text `README` was replaced with structured `README.md`
+  - `CREDITS.md` was added to preserve authorship and continuation context
+  - build/runtime documentation was refreshed for the current repository
+  - control and menu documentation was synchronized with the actual runtime behavior
+
+### Recommended Windows Release Asset
+- `hosts3d-1.16-windows-x86.zip`
+
+### Notes
+- Runtime files inside `hsd-data` are intentionally not shipped as part of the release asset.
+- `traffic.hpt` remains a Hosts3D record/replay format, not a Wireshark capture format.
+
+## Legacy Upstream History
+
+This section preserves the legacy upstream release history through the original
 Hosts3D `1.15` release.
 
 Notes:
 - original authorship remains with Del Castle
 - original release wording has been kept as closely as practical
-- this file acts as the historical baseline before the continuation repository
-  began publishing its own `RELEASE_NOTES_*.md` files
-
-## Legacy Upstream History
+- this section acts as the historical baseline before the continuation repository
+  began publishing its own release notes
 
 ### 1.15 (10 May 11)
 - (All) Fixed MinGW static linking in Windows so DLLs aren't required

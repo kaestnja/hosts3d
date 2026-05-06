@@ -29,11 +29,8 @@ These files already existed before this handover and remain important:
 
 - `README.md`
   - authoritative user-facing documentation
-- `RELEASE_NOTES_1.15.md`
-  - legacy upstream history up to original `1.15`
-- `RELEASE_NOTES_1.16.md`
-- `RELEASE_NOTES_1.17.md`
-- `RELEASE_NOTES_1.18.md`
+- `RELEASE_NOTES.md`
+  - continuation history and legacy upstream history up to original `1.15`
 - `README-runtime-windows.md`
   - packaging/runtime handoff for Windows release output
 - `README-runtime-linux.md`
@@ -265,7 +262,7 @@ These are the most important project-specific rules that emerged during the work
 When behavior changes, also check whether these must be updated:
 
 - `README.md`
-- `RELEASE_NOTES_1.18.md` or the next release notes file
+- `RELEASE_NOTES.md`
 - generated help/controls text in `checkControls()` / `controls.txt`
 - menu labels and OSD wording
 
@@ -326,7 +323,7 @@ Minimum required sweep areas:
   - `README-runtime-windows.md`
   - `BUILDINGNOTES.txt`
   - `CREDITS.md`
-  - relevant `RELEASE_NOTES_*.md`
+  - `RELEASE_NOTES.md`
   - `CODEX-HANDOVER.md`
 - build/package/install files:
   - `compile-*.bat`

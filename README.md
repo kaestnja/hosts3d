@@ -940,8 +940,7 @@ This repository is an independent, community-maintained continuation of the orig
 
 For attribution and maintenance context:
 - See `CREDITS.md`
-- See `RELEASE_NOTES_1.18.md`, `RELEASE_NOTES_1.17.md`, and `RELEASE_NOTES_1.16.md` for continuation history
-- See `RELEASE_NOTES_1.15.md` for legacy upstream history up to original `1.15`
+- See `RELEASE_NOTES.md` for continuation history and legacy upstream history up to original `1.15`
 
 ## License
 GNU General Public License v2
