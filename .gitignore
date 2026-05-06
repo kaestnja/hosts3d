@@ -9,6 +9,7 @@ Debug/
 # Machine-local runtime/helper config
 start-hsenW.local.bat
 hsen-interfaces-*.txt
+sync-built-x64-binaries.local.ps1
 
 # Local helper binaries (kept locally, not versioned)
 Tools/Wireshark/WiresharkPortable64_4.6.4.paf.exe
