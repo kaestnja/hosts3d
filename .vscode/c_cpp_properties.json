@@ -9,7 +9,7 @@
       "cppStandard": "c++17",
       "includePath": [
         "${workspaceFolder}/src",
-        "${workspaceFolder}/third_party/glfw2/include",
+        "C:/msys64/mingw32/include",
         "${workspaceFolder}/third_party/wpcap/include",
         "${workspaceFolder}/third_party/wpcap/include/pcap"
       ],
@@ -21,7 +21,7 @@
       "browse": {
         "path": [
           "${workspaceFolder}/src",
-          "${workspaceFolder}/third_party/glfw2/include",
+          "C:/msys64/mingw32/include",
           "${workspaceFolder}/third_party/wpcap/include",
           "${workspaceFolder}/third_party/wpcap/include/pcap"
         ],

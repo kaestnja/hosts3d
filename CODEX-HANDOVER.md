@@ -453,6 +453,7 @@ Recent behavior decisions that future sessions should preserve unless intentiona
 - `HOST INFORMATION` and `SELECTION INFORMATION` should stay as smaller left-aligned windows, not near-fullscreen overlays
 - `Selection of Hosts -> Add Selected Hosts To Net Positions` writes one `/32` line per selected host using the host's current coordinates and colour
 - the `Configure Local Sensors (hsen)` dialog now shows current adapter IPv4 addresses in a dedicated extra column, uses a wider window, and has separate `Refresh` / `Save` buttons plus a single `Start` / `Stop` button
+- on Windows, local `hsen` now maps Npcap interfaces to Windows adapters by GUID and displays the Windows friendly adapter name when available, so several similar Ethernet adapters do not get their IPv4 rows crossed
 - local hsen discovery should reconcile saved interface settings against `hsen -l` and save the cleaned result when stale copied adapter entries are removed or sensor IDs are repaired
 - local hsen start/stop should stay silent on success and only open an extra dialog on errors; the stop path should fall back to a hard kill if normal termination does not clear all managed `hsen` processes
 - on Windows, managed local `hsen.exe` checks should validate the full bundled executable path, not just the bare process name, and `Stop` / normal `Exit` should re-scan for matching bundled `hsen.exe` processes from the same installation path instead of trusting only the saved PID list

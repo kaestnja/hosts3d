@@ -347,6 +347,7 @@ Notes:
 - Saved local sensor interfaces are reconciled with the current `hsen -l` result, so stale adapter entries from a copied `settings.ini` are removed before local sensors start.
 - Target host for local GUI-managed sensors is fixed to `127.0.0.1`.
 - Ethernet adapters are preselected by default; WLAN and other adapters are listed but start deselected.
+- On Windows, Npcap interface IDs are matched to Windows adapters by adapter GUID, and the dialog shows the Windows friendly adapter name when available. This keeps similarly named Ethernet adapters aligned with their correct IPv4 addresses and capture interface.
 - `Save` stores the current selection.
 - On Linux, `Save` also tries a one-time automatic `setcap` on the bundled `hsen` binary so local capture can run without a manual remote fix.
 - `Start` launches one local `hsen` process per selected interface.
@@ -778,6 +779,7 @@ The `About Hosts3D` window shows the current version, continuation status, the G
 - removes stale saved local sensor entries that no longer appear in `hsen -l`
 - shows Ethernet/WLAN/Other adapters in a selection dialog
 - shows the current IPv4 addresses of each discovered adapter to help choose the right local sensor
+- on Windows, shows friendly adapter names such as `LAN_192.168.6.41` when the Npcap device can be matched to the Windows adapter GUID
 - uses `Refresh`, `Save`, and a combined `Start` / `Stop` button
 - no extra success popups for local hsen actions; only errors open a dialog
 

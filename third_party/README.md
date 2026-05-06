@@ -29,6 +29,8 @@ Install the matching MSYS2 package for the selected MinGW toolchain:
 
 The Windows `Hosts3D` build script resolves headers, libraries and `glfw3.dll` from the active toolchain root.
 
+The VS Code C/C++ configuration follows the same model and points at the MSYS2 MinGW include tree. There is intentionally no `third_party/glfw2/include` directory in the current GLFW 3 mainline.
+
 ### WinPcap/Npcap SDK files (for `hsen.exe`)
 
 Search for:

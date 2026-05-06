@@ -350,6 +350,7 @@ struct localhsen_if_type
 {
   char id[256];
   char name[256];
+  char friendly[256];
   char klass[16];
   char ips[160];
   bool selected;
@@ -6825,6 +6826,24 @@ static bool localHsenAdapterKeyContains(const char *text, const char *token)
   return (strstr(left, right) != 0);
 }
 
+#ifdef __MINGW32__
+static bool localHsenInterfaceMatchesAdapterId(const localhsen_if_type *iface, const char *adapterId)
+{
+  if (!iface || !adapterId || !*adapterId) return false;
+  return localHsenAdapterKeyContains(iface->id, adapterId);
+}
+
+static void localHsenWideToUtf8(const wchar_t *src, char *dst, size_t dstsz)
+{
+  int written;
+  if (!dst || !dstsz) return;
+  dst[0] = '\0';
+  if (!src || !*src) return;
+  written = WideCharToMultiByte(CP_UTF8, 0, src, -1, dst, (int)dstsz, 0, 0);
+  if (written <= 0) dst[0] = '\0';
+  else dst[dstsz - 1] = '\0';
+}
+#else
 static bool localHsenInterfaceMatchesAdapter(const localhsen_if_type *iface, const char *adapterId, const char *adapterName = 0)
 {
   if (!iface) return false;
@@ -6840,6 +6859,7 @@ static bool localHsenInterfaceMatchesAdapter(const localhsen_if_type *iface, con
   }
   return false;
 }
+#endif
 
 static void localHsenAppendIp(char *dst, size_t dstsz, const char *ip)
 {
@@ -6858,23 +6878,41 @@ static void localHsenPopulateInterfaceIps()
 {
   for (unsigned char cnt = 0; cnt < localHsenIfCount; cnt++) localHsenIfs[cnt].ips[0] = '\0';
 #ifdef __MINGW32__
-  ULONG bufsz = 0;
-  DWORD rc = GetAdaptersInfo(0, &bufsz);
-  if ((rc != ERROR_BUFFER_OVERFLOW) || !bufsz) return;
+  ULONG bufsz = 15000;
+  DWORD rc;
   std::vector<unsigned char> raw(bufsz, 0);
-  IP_ADAPTER_INFO *ad = (IP_ADAPTER_INFO *)&raw[0];
-  if (GetAdaptersInfo(ad, &bufsz) != NO_ERROR) return;
+  IP_ADAPTER_ADDRESSES *ad;
+  rc = GetAdaptersAddresses(AF_INET, GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER, 0,
+                            (IP_ADAPTER_ADDRESSES *)&raw[0], &bufsz);
+  if (rc == ERROR_BUFFER_OVERFLOW)
+  {
+    raw.assign(bufsz, 0);
+    rc = GetAdaptersAddresses(AF_INET, GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER, 0,
+                              (IP_ADAPTER_ADDRESSES *)&raw[0], &bufsz);
+  }
+  if (rc != NO_ERROR) return;
+  ad = (IP_ADAPTER_ADDRESSES *)&raw[0];
   while (ad)
   {
     for (unsigned char cnt = 0; cnt < localHsenIfCount; cnt++)
     {
-      if (localHsenInterfaceMatchesAdapter(&localHsenIfs[cnt], ad->AdapterName, ad->Description))
+      if (localHsenInterfaceMatchesAdapterId(&localHsenIfs[cnt], ad->AdapterName))
       {
-        IP_ADDR_STRING *ua = &ad->IpAddressList;
+        char friendly[256];
+        IP_ADAPTER_UNICAST_ADDRESS *ua;
+        localHsenWideToUtf8(ad->FriendlyName, friendly, sizeof(friendly));
+        if (*friendly) setStringValue(localHsenIfs[cnt].friendly, sizeof(localHsenIfs[cnt].friendly), friendly);
+        ua = ad->FirstUnicastAddress;
         while (ua)
         {
-          if (strcmp(ua->IpAddress.String, "0.0.0.0"))
-            localHsenAppendIp(localHsenIfs[cnt].ips, sizeof(localHsenIfs[cnt].ips), ua->IpAddress.String);
+          char ip[INET_ADDRSTRLEN];
+          sockaddr *sa = ua->Address.lpSockaddr;
+          if (sa && (sa->sa_family == AF_INET))
+          {
+            sockaddr_in *sin = (sockaddr_in *)sa;
+            if (inet_ntop(AF_INET, &sin->sin_addr, ip, sizeof(ip)) && strcmp(ip, "0.0.0.0"))
+              localHsenAppendIp(localHsenIfs[cnt].ips, sizeof(localHsenIfs[cnt].ips), ip);
+          }
           ua = ua->Next;
         }
         break;
@@ -6901,6 +6939,13 @@ static void localHsenPopulateInterfaceIps()
   }
   freeifaddrs(ifaddr);
 #endif
+}
+
+static const char *localHsenDisplayName(const localhsen_if_type *iface)
+{
+  if (!iface) return "";
+  if (iface->friendly[0]) return iface->friendly;
+  return iface->name;
 }
 
 static bool localHsenDefaultSelected(const char *klass)
@@ -7968,7 +8013,7 @@ static void localHsenDialogOpen(bool rescan)
     localHsenUiIfaceChecks[cnt] = GLWin.AddCheck(10, rowTop - 5, localHsenIfs[cnt].selected);
     snprintf(sbuf, sizeof(sbuf), "%u", localHsenIfs[cnt].sensorId);
     localHsenUiIfaceSensors[cnt] = GLWin.AddInput(48, rowTop - 5, 3, 3, sbuf);
-    snprintf(lbuf, sizeof(lbuf), "%s  %.36s", localHsenClassLabel(localHsenIfs[cnt].klass), localHsenIfs[cnt].name);
+    snprintf(lbuf, sizeof(lbuf), "%s  %.36s", localHsenClassLabel(localHsenIfs[cnt].klass), localHsenDisplayName(&localHsenIfs[cnt]));
     GLWin.AddLabel(104, rowTop, lbuf);
     snprintf(ipbuf, sizeof(ipbuf), "%.60s", (*localHsenIfs[cnt].ips ? localHsenIfs[cnt].ips : "-"));
     GLWin.AddLabel(442, rowTop, ipbuf);

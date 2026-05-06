@@ -16,3 +16,4 @@
 - Existing rendering remains on the current OpenGL fixed-function path; this release updates the windowing/input/runtime layer, not the renderer architecture.
 - The migration was smoke-tested successfully after the port.
 - Local `hsen` interface settings are reconciled with the current `hsen -l` discovery result, preventing stale adapter selections from a copied data folder from being reused.
+- Windows local `hsen` adapter IP/name display now maps Npcap interfaces to Windows adapters by GUID and shows friendly adapter names when available, avoiding mismatched rows on systems with several similar Ethernet adapters.
