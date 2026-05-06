@@ -33,8 +33,8 @@ If your main goal is to get the project running again, use this order:
 Recommended paths:
 - Windows 11:
   - install the MinGW/MSYS2 toolchain once
-  - run `.\compile-hosts3d.bat Release x86`
-  - run `.\compile-hsen.bat Release x86`
+  - build `x64` first with `.\compile-hosts3d.bat Release x64` and `.\compile-hsen.bat Release x64`
+  - when possible, also build the fallback/runtime-compatibility pair `.\compile-hosts3d.bat Release x86` and `.\compile-hsen.bat Release x86`
   - start `.\start-Hosts3DW.bat`
   - in Hosts3D, right-click in the 3D view, then choose `Configure Local Sensors (hsen)`
 - Linux/macOS:
@@ -96,7 +96,7 @@ The script itself now prints a warning and pauses for confirmation before it pro
 ./compile-hsen
 ```
 
-### Windows 11 Build (MSYS2 + MinGW32)
+### Windows 11 Build (MSYS2 + MinGW32/MinGW64)
 > If `g++` is missing (`g++ is not recognized`), install toolchain first.
 > Install MSYS2 first from the official project (`https://www.msys2.org/`) or via `winget`, then use the package commands below.
 
@@ -104,6 +104,7 @@ The script itself now prints a warning and pauses for confirmation before it pro
 winget install -e --id MSYS2.MSYS2
 C:\msys64\usr\bin\bash -lc "pacman -Syu --noconfirm"
 C:\msys64\usr\bin\bash -lc "pacman -S --needed --noconfirm mingw-w64-i686-gcc mingw-w64-i686-binutils mingw-w64-i686-glfw make"
+C:\msys64\usr\bin\bash -lc "pacman -S --needed --noconfirm mingw-w64-x86_64-gcc mingw-w64-x86_64-binutils mingw-w64-x86_64-glfw make"
 ```
 
 ```powershell
@@ -117,19 +118,19 @@ Expected target:
 i686-w64-mingw32
 ```
 
-Build:
+Recommended build order:
 ```powershell
 $repo = Join-Path $env:USERPROFILE "source\\repos\\github.com\\<your-github-user>\\hosts3d"
 Set-Location $repo
+.\compile-hosts3d.bat Release x64
+.\compile-hsen.bat Release x64
 .\compile-hosts3d.bat Release x86
 .\compile-hsen.bat Release x86
 ```
 
-For a 64-bit build, request `x64` explicitly:
-```powershell
-.\compile-hosts3d.bat Release x64
-.\compile-hsen.bat Release x64
-```
+Prefer `x64` as the main runtime/package target when it builds and runs cleanly.
+Build `x86` as well when possible so you keep a compatibility/fallback runtime ready.
+If `x64` shows concrete build, startup, or runtime problems on a given machine, fall back to `x86`.
 
 Windows x64 also requires:
 - an installed x64 MinGW toolchain (`mingw64` or `ucrt64`)
@@ -161,6 +162,7 @@ With explicit arch selection, the same scripts also produce:
 Notes:
 - Scripts overwrite known targets but do not wipe the whole `Release`/`Debug` tree.
 - The Windows scripts now accept an explicit arch such as `x86` or `x64`.
+- For current Windows work, prefer `x64` first and build `x86` as an additional compatibility/fallback output when possible.
 - Windows builds now place intermediate object files under `build/windows/<target>/<arch>/<config>/`, so `x86`/`x64` and `Hosts3D`/`hsen` builds can run in parallel without mixing object files.
 - Local dependency layout for build scripts: see `third_party/README.md`.
 - Portable Wireshark helper location: `Tools/Wireshark/`.

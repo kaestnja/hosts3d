@@ -42,6 +42,12 @@ Parallel Windows build note:
     compile-hosts3d.bat and compile-hsen.bat now use separate object directories per
     target and architecture, so x86/x64 and Hosts3D/hsen builds can run in parallel
     without clobbering each other's object files.
+    Current Codex/default expectation: when the required toolchains are available,
+    build both Windows architectures.
+    Prefer x64 first and treat it as the primary runtime/package target when it
+    builds and runs cleanly.
+    Fall back to x86 as the practical primary target only when x64 shows concrete
+    build, startup, or runtime problems.
 
 Windows local third-party layout:
     See third_party/README.md

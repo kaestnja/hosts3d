@@ -16,7 +16,9 @@ Use this file to recover:
 
 - Current working version: `1.18`
 - Version source of truth: `src/version.h`
-- Current Windows target in daily use: `Release/windows/x86`
+- Preferred Windows target in daily use: `Release/windows/x64` when it builds and runs cleanly
+- Default Windows build expectation for Codex sessions: build both `Release/windows/x64` and `Release/windows/x86` when possible
+- Fallback rule: prefer `x64`; only fall back to `x86` as the primary runtime target when `x64` shows build, startup, or runtime problems
 - Build toolchains now available on Windows: `MSYS2/MinGW32` and `MSYS2/MinGW64`
 - The project is already in productive use; changes should stay pragmatic and low-risk
 - `master` is now the active GLFW 3 / `1.18` mainline
@@ -68,6 +70,9 @@ Build safety note:
 - Windows build scripts now use separate object directories under `build/windows/<target>/<arch>/<config>/`
 - `x86`/`x64` and `Hosts3D`/`hsen` builds can therefore run in parallel without mixing object files
 - if old mixed `src/*.o` or `src/*-res.o` artifacts are still around from earlier builds, they can be deleted safely
+- future Codex sessions should build both Windows architectures when the required toolchains are available
+- `x64` should be attempted first and treated as the preferred runtime/package target unless a concrete problem is observed
+- if `x64` fails to build cleanly, fails to start, or shows architecture-specific runtime trouble, document that and fall back to `x86` as the practical primary target
 
 The current working machine/repo state is:
 
@@ -116,6 +121,9 @@ Important x64 note:
 
 ### Main runtime output
 
+- Preferred when healthy: `Release/windows/x64/Hosts3D.exe`
+- Preferred when healthy: `Release/windows/x64/hsen.exe`
+- Preferred when healthy: `Release/windows/x64/README-runtime-windows.md`
 - `Release/windows/x86/Hosts3D.exe`
 - `Release/windows/x86/hsen.exe`
 - `Release/windows/x86/README-runtime-windows.md`
