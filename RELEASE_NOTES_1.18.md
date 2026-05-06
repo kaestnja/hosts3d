@@ -9,6 +9,7 @@
 - Window creation, event callbacks, scroll handling, cursor motion, and buffer swaps now use the GLFW 3 API.
 - GUI text entry no longer relies on GLFW 2 ASCII-style key callbacks; printable input now comes from the GLFW 3 character callback.
 - Windows build scripts now use the installed MSYS2 GLFW 3 packages and copy `glfw3.dll` into the runtime output.
+- `compile-all-windows.bat` now builds both Windows runtime pairs in one command and can optionally package them.
 - Linux/macOS/autotools build metadata has been updated to use GLFW 3 headers and libraries.
 - Windows packaging now includes `glfw3.dll` instead of the old `glfw.dll`.
 

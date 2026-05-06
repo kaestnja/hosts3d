@@ -20,6 +20,7 @@ Quick script builds:
     ./compile-hsen [Release|Debug]
     ./compile-mac-hosts3d [Release|Debug]
     ./package-release-linux [Release|Debug] [arm64|x64|x86]
+    compile-all-windows.bat [Release|Debug] [all|x86|x64|arm64] [--package] [public|with-npcap]
     compile-hosts3d.bat [Release|Debug] [x86|x64] [--no-pause]
     compile-hsen.bat [Release|Debug] [x86|x64] [--no-pause]
 
@@ -77,6 +78,8 @@ Codex note:
     The interactive MSYS2 installer itself should still be started by the user.
 
 Windows packaging note:
+    Use compile-all-windows.bat Release --package to build Hosts3D and hsen for
+    both x64 and x86, then create both public Windows ZIPs in one run.
     package-release-windows.bat defaults to a public ZIP without Packet.dll and wpcap.dll.
     Use:
         package-release-windows.bat Release x64 with-npcap

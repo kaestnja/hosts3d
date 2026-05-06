@@ -33,8 +33,7 @@ If your main goal is to get the project running again, use this order:
 Recommended paths:
 - Windows 11:
   - install the MinGW/MSYS2 toolchain once
-  - build `x64` first with `.\compile-hosts3d.bat Release x64` and `.\compile-hsen.bat Release x64`
-  - when possible, also build the fallback/runtime-compatibility pair `.\compile-hosts3d.bat Release x86` and `.\compile-hsen.bat Release x86`
+  - build both Windows runtime pairs with `.\compile-all-windows.bat`
   - start `.\start-Hosts3DW.bat`
   - in Hosts3D, right-click in the 3D view, then choose `Configure Local Sensors (hsen)`
 - Linux/macOS:
@@ -122,10 +121,7 @@ Recommended build order:
 ```powershell
 $repo = Join-Path $env:USERPROFILE "source\\repos\\github.com\\<your-github-user>\\hosts3d"
 Set-Location $repo
-.\compile-hosts3d.bat Release x64
-.\compile-hsen.bat Release x64
-.\compile-hosts3d.bat Release x86
-.\compile-hsen.bat Release x86
+.\compile-all-windows.bat
 ```
 
 Prefer `x64` as the main runtime/package target when it builds and runs cleanly.
@@ -170,6 +166,11 @@ Notes:
 - Distributable binaries should be shipped as release packages/assets instead.
 
 ### Windows Packaging
+Build both Windows runtime pairs and create both public release ZIPs:
+```powershell
+.\compile-all-windows.bat Release --package
+```
+
 Create a public release ZIP without bundled Npcap DLLs:
 ```powershell
 .\package-release-windows.bat Release x64

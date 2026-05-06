@@ -59,11 +59,13 @@ There was no existing Codex-specific handover file before this one.
 
 - `compile-hosts3d.bat`
 - `compile-hsen.bat`
+- `compile-all-windows.bat`
 
 The build scripts now accept:
 
 - `compile-hosts3d.bat [Release|Debug] [x86|x64|arm64] [--no-pause]`
 - `compile-hsen.bat [Release|Debug] [x86|x64|arm64] [--no-pause]`
+- `compile-all-windows.bat [Release|Debug] [all|x64|x86|arm64] [--package|package] [public|with-npcap]`
 
 Build safety note:
 
@@ -102,6 +104,7 @@ Important x64 note:
 - `Release/windows/x64/Hosts3D.exe` has been smoke-tested: it starts and creates `hsd-data` in the x64 runtime dir
 - `Release/windows/x64/hsen.exe -l` works and lists interfaces
 - `package-release-windows.bat Release x64` now produces `Release/dist/hosts3d-1.18-windows-x64.zip`
+- `compile-all-windows.bat Release --package` builds Hosts3D and hsen for x64 and x86, then creates both public Windows ZIPs
 - `compile-hosts3d.bat` now links `Hosts3D` against GLFW 3 and copies `glfw3.dll` from the selected MSYS2 toolchain into the runtime output
 
 ### GLFW 3 migration status
@@ -276,13 +279,9 @@ Recommended order:
 
 - verify the repo is clean and the version in `src/version.h` matches the intended release
 - build Windows runtimes:
-  - `compile-hosts3d.bat Release x86`
-  - `compile-hsen.bat Release x86`
-  - `compile-hosts3d.bat Release x64`
-  - `compile-hsen.bat Release x64`
+  - `compile-all-windows.bat Release`
 - create Windows release assets:
-  - `package-release-windows.bat Release x86`
-  - `package-release-windows.bat Release x64`
+  - `compile-all-windows.bat Release --package`
 - on the Raspberry Pi / Linux arm64 build machine:
   - `git pull --ff-only`
   - `./compile-hosts3d Release`
