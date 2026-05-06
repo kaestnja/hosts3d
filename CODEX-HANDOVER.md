@@ -194,6 +194,7 @@ These are important because future changes should not silently undo them.
 - `Configure Local Sensors (hsen)` exists as a first-class menu entry
 - the local `hsen` GUI is aligned across Windows and Linux
 - Windows local `hsen` management uses interface discovery from `hsen -l`
+- saved local `hsen` interface settings are reconciled against the current `hsen -l` result so copied/stale data folders cannot keep selecting adapters that are not on the local machine
 - local sensor management state is machine-local
 - distributed/manual use via `start-hsenW.bat` still remains available as a separate path
 
@@ -452,6 +453,7 @@ Recent behavior decisions that future sessions should preserve unless intentiona
 - `HOST INFORMATION` and `SELECTION INFORMATION` should stay as smaller left-aligned windows, not near-fullscreen overlays
 - `Selection of Hosts -> Add Selected Hosts To Net Positions` writes one `/32` line per selected host using the host's current coordinates and colour
 - the `Configure Local Sensors (hsen)` dialog now shows current adapter IPv4 addresses in a dedicated extra column, uses a wider window, and has separate `Refresh` / `Save` buttons plus a single `Start` / `Stop` button
+- local hsen discovery should reconcile saved interface settings against `hsen -l` and save the cleaned result when stale copied adapter entries are removed or sensor IDs are repaired
 - local hsen start/stop should stay silent on success and only open an extra dialog on errors; the stop path should fall back to a hard kill if normal termination does not clear all managed `hsen` processes
 - on Windows, managed local `hsen.exe` checks should validate the full bundled executable path, not just the bare process name, and `Stop` / normal `Exit` should re-scan for matching bundled `hsen.exe` processes from the same installation path instead of trusting only the saved PID list
 - on Linux, `Configure Local Sensors (hsen) -> Save` and `Start` should try a one-time automatic `setcap` for the bundled `hsen` binary before falling back to a precise manual command; keep this self-service and avoid reintroducing a “needs Codex/SSH” setup step for normal Pi/Linux users

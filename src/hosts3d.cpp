@@ -379,6 +379,8 @@ unsigned char localHsenIfCount = 0;
 bool localHsenWindowsAutostart = false;
 bool localHsenWindowsPromisc = false;
 int localHsenUiAutostart = -1, localHsenUiPromisc = -1;
+bool localHsenConfigCleaned = false;
+char localHsenConfigNotice[160] = "";
 int localHsenUiIfaceChecks[LOCAL_HSEN_MAX_INTERFACES];
 int localHsenUiIfaceSensors[LOCAL_HSEN_MAX_INTERFACES];
 std::vector<hostname_resolve_request_type> hostnameResolveQueue;
@@ -6929,6 +6931,70 @@ static unsigned char localHsenNextSensorId(const localhsen_if_type *arr, unsigne
   return 1;
 }
 
+static bool localHsenClassValid(const char *klass)
+{
+  return klass && (!strcmp(klass, "ethernet") || !strcmp(klass, "wlan") || !strcmp(klass, "other"));
+}
+
+static unsigned char localHsenFirstFreeSensorId(const bool *used)
+{
+  for (unsigned short sen = 1; sen < 256; sen++)
+  {
+    if (!used[sen]) return (unsigned char) sen;
+  }
+  return 1;
+}
+
+static bool localHsenSanitizeDiscoveredConfig(const localhsen_if_type *saved, unsigned char savedCount)
+{
+  bool changed = false, used[256] = {false};
+  unsigned char stale = 0, staleSelected = 0, duplicateSensors = 0;
+
+  for (unsigned char cnt = 0; cnt < savedCount; cnt++)
+  {
+    if (!saved[cnt].id[0]) continue;
+    if (localHsenFindById(localHsenIfs, localHsenIfCount, saved[cnt].id) == -1)
+    {
+      stale++;
+      if (saved[cnt].selected) staleSelected++;
+    }
+  }
+
+  for (unsigned char cnt = 0; cnt < localHsenIfCount; cnt++)
+  {
+    localhsen_if_type *iface = &localHsenIfs[cnt];
+    if (!localHsenClassValid(iface->klass))
+    {
+      setStringValue(iface->klass, sizeof(iface->klass), localHsenClassify(iface->id, iface->name));
+      changed = true;
+    }
+    if (!iface->sensorId || used[iface->sensorId])
+    {
+      iface->sensorId = localHsenFirstFreeSensorId(used);
+      duplicateSensors++;
+      changed = true;
+    }
+    used[iface->sensorId] = true;
+  }
+
+  if (stale || staleSelected)
+  {
+    changed = true;
+    if (staleSelected)
+      snprintf(localHsenConfigNotice, sizeof(localHsenConfigNotice),
+               "Cleaned local hsen config: removed %u stale adapter(s), %u selected.", stale, staleSelected);
+    else
+      snprintf(localHsenConfigNotice, sizeof(localHsenConfigNotice),
+               "Cleaned local hsen config: removed %u stale adapter(s).", stale);
+  }
+  if (!localHsenConfigNotice[0] && duplicateSensors)
+  {
+    snprintf(localHsenConfigNotice, sizeof(localHsenConfigNotice),
+             "Cleaned local hsen config: repaired duplicate or missing sensor ID(s).");
+  }
+  return changed;
+}
+
 static void localHsenStatePath(char *path, size_t pathsz)
 {
 #ifdef __MINGW32__
@@ -7513,8 +7579,17 @@ static bool localHsenDiscoverInterfaces(bool keepSelections)
   localhsen_if_type saved[LOCAL_HSEN_MAX_INTERFACES];
   unsigned char savedCount = localHsenIfCount;
   char output[8192], *line, *sep, *name;
+  localHsenConfigCleaned = false;
+  localHsenConfigNotice[0] = '\0';
   if (savedCount) memcpy(saved, localHsenIfs, sizeof(saved));
-  if (!localHsenRunAndCaptureDiscovery(output, sizeof(output))) return false;
+  if (!localHsenRunAndCaptureDiscovery(output, sizeof(output)))
+  {
+    localHsenIfCount = 0;
+    memset(localHsenIfs, 0, sizeof(localHsenIfs));
+    setStringValue(localHsenConfigNotice, sizeof(localHsenConfigNotice),
+                   "Interface scan failed; saved adapters are hidden to avoid starting stale config.");
+    return false;
+  }
   localHsenIfCount = 0;
   line = strtok(output, "\r\n");
   while (line && (localHsenIfCount < LOCAL_HSEN_MAX_INTERFACES))
@@ -7560,6 +7635,7 @@ static bool localHsenDiscoverInterfaces(bool keepSelections)
     line = strtok(0, "\r\n");
   }
   localHsenPopulateInterfaceIps();
+  localHsenConfigCleaned = localHsenSanitizeDiscoveredConfig((keepSelections ? saved : 0), (keepSelections ? savedCount : 0));
   return true;
 }
 
@@ -7853,15 +7929,17 @@ static bool localHsenStartSelected(char *errbuf, size_t errbufsz)
 
 static void localHsenDialogOpen(bool rescan)
 {
-  int btnTop, rowTop;
+  int btnTop, headerTop, rowTop, noticeRows;
   unsigned char rows;
   char sbuf[64], lbuf[96], ipbuf[72];
   bool discovered = true;
   if (rescan) discovered = localHsenDiscoverInterfaces(true);
+  if (rescan && discovered && localHsenConfigCleaned) settsSave();
   bool running = localHsenManagedRunning();
   localHsenResetUiNames();
   rows = (localHsenIfCount ? localHsenIfCount : 1);
-  GLWin.CreateWin(-1, -1, 760, 186 + (rows * 22), "CONFIGURE LOCAL SENSORS (hsen)", true, false);
+  noticeRows = (localHsenConfigNotice[0] ? 1 : 0);
+  GLWin.CreateWin(-1, -1, 760, 186 + (noticeRows * 16) + (rows * 22), "CONFIGURE LOCAL SENSORS (hsen)", true, false);
   GLWin.AddLabel(10, 10, "Local sensors (hsen) capture packets on this computer.");
   GLWin.AddLabel(10, 24, "Choose adapters, set sensor IDs, then start or stop them.");
   GLWin.AddLabel(10, 48, "Target Host: 127.0.0.1");
@@ -7870,11 +7948,17 @@ static void localHsenDialogOpen(bool rescan)
   GLWin.AddLabel(138, 72, "Promiscuous:");
   localHsenUiPromisc = GLWin.AddCheck(236, 67, localHsenWindowsPromisc);
   GLWin.AddLabel(286, 72, "Ethernet preselected, WLAN/other visible.");
-  GLWin.AddLabel(10, 96, "Use");
-  GLWin.AddLabel(48, 96, "Sensor");
-  GLWin.AddLabel(104, 96, "Type / Interface");
-  GLWin.AddLabel(442, 96, "Current IPv4");
-  rowTop = 112;
+  headerTop = 96;
+  if (localHsenConfigNotice[0])
+  {
+    GLWin.AddLabel(10, 92, localHsenConfigNotice);
+    headerTop += 16;
+  }
+  GLWin.AddLabel(10, headerTop, "Use");
+  GLWin.AddLabel(48, headerTop, "Sensor");
+  GLWin.AddLabel(104, headerTop, "Type / Interface");
+  GLWin.AddLabel(442, headerTop, "Current IPv4");
+  rowTop = headerTop + 16;
   if (!localHsenIfCount)
   {
     GLWin.AddLabel(10, rowTop, (discovered ? "No interfaces found." : "Interface scan failed. Check hsen."));
@@ -7890,7 +7974,7 @@ static void localHsenDialogOpen(bool rescan)
     GLWin.AddLabel(442, rowTop, ipbuf);
     rowTop += 22;
   }
-  btnTop = 132 + (rows * 22);
+  btnTop = headerTop + 36 + (rows * 22);
   GLResult[0] = HSD_HSENRUN;
   GLWin.AddButton(10, btnTop, GLWIN_MISC1, "Refresh");
   GLWin.AddButton(120, btnTop, GLWIN_OK, "Save");
@@ -7901,6 +7985,7 @@ static void localHsenAutostartMaybe()
 {
   if (!localHsenWindowsAutostart) return;
   if (!localHsenDiscoverInterfaces(true)) return;
+  if (localHsenConfigCleaned) settsSave();
   localHsenStartSelected();
 }
 

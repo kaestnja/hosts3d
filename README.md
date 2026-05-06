@@ -344,6 +344,7 @@ Notes:
 - `Configure Local Sensors (hsen)` now uses the same GUI on Windows and Linux.
 - Open it by right-clicking in the 3D view and choosing `Configure Local Sensors (hsen)`.
 - Interface discovery is done by calling `hsen -l`.
+- Saved local sensor interfaces are reconciled with the current `hsen -l` result, so stale adapter entries from a copied `settings.ini` are removed before local sensors start.
 - Target host for local GUI-managed sensors is fixed to `127.0.0.1`.
 - Ethernet adapters are preselected by default; WLAN and other adapters are listed but start deselected.
 - `Save` stores the current selection.
@@ -774,6 +775,7 @@ The `About Hosts3D` window shows the current version, continuation status, the G
 
 ### `Configure Local Sensors (hsen)`
 - discovers interfaces via `hsen -l`
+- removes stale saved local sensor entries that no longer appear in `hsen -l`
 - shows Ethernet/WLAN/Other adapters in a selection dialog
 - shows the current IPv4 addresses of each discovered adapter to help choose the right local sensor
 - uses `Refresh`, `Save`, and a combined `Start` / `Stop` button

@@ -15,3 +15,4 @@
 ## Notes
 - Existing rendering remains on the current OpenGL fixed-function path; this release updates the windowing/input/runtime layer, not the renderer architecture.
 - The migration was smoke-tested successfully after the port.
+- Local `hsen` interface settings are reconciled with the current `hsen -l` discovery result, preventing stale adapter selections from a copied data folder from being reused.
