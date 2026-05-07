@@ -21,6 +21,13 @@ This README is organized for practical use:
 4. adjust settings and controls
 5. use the later sections as reference
 
+## Planning / Design Notes
+
+Current planning notes for capture and sensor-management work live in separate Markdown files so they can evolve without overloading the user-facing runtime documentation:
+
+- `Todos.md`: general capture, HSEN sensor-management, deployment, and network-device mirroring planning.
+- `scalance_xr328_snmp_mirroring_abfrage.md`: device-specific SNMP read-only mirroring discovery plan for the Siemens SCALANCE XR328-4C WG.
+
 ## Quick Start
 If your main goal is to get the project running again, use this order:
 

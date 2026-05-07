@@ -35,6 +35,10 @@ These files already existed before this handover and remain important:
   - packaging/runtime handoff for Windows release output
 - `README-runtime-linux.md`
   - packaging/runtime handoff for Linux release output
+- `Todos.md`
+  - active planning notes for general capture infrastructure, HSEN sensor management/deployment, and network-device mirroring capabilities
+- `scalance_xr328_snmp_mirroring_abfrage.md`
+  - device-specific read-only SNMP mirroring discovery plan for Siemens SCALANCE XR328-4C WG; keep detailed SCALANCE OIDs and implementation steps there, not in the general todo file
 - `testing/sim-hsen.ps1`
   - preferred synthetic packet sender for Windows visualization tests; now includes focused TCP/ICMP/ARP/discovery modes, optional wide host spread, and `CenterIp`
 - `testing/sim-hsen.py`
