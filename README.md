@@ -174,6 +174,22 @@ Notes:
 - Runtime binaries under `Release/` and `Debug/` are local build outputs and are not intended to stay tracked in Git.
 - Distributable binaries should be shipped as release packages/assets instead.
 
+## Static Analysis
+
+The repository includes a local `clang-tidy` SARIF helper for quick VS Code review:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\run-clang-tidy-sarif.ps1
+```
+
+The script scans the main C++ sources and writes:
+
+```text
+build\sarif\clang-tidy.sarif
+```
+
+Open that file with a SARIF viewer to inspect warnings inline. The output stays under `build/`, so generated reports are local build artifacts and are not committed.
+
 ### Windows Packaging
 Build both Windows runtime pairs and create both public release ZIPs:
 ```powershell

@@ -32,6 +32,9 @@ MyLL::MyLL()
 {
   pFront = 0;
   pBack = 0;
+  pCurr[0] = 0;
+  pCurr[1] = 0;
+  pCurr[2] = 0;
   wCnt = 0;
   dCnt = 0;
 }
@@ -44,11 +47,13 @@ unsigned int MyLL::Num()
 
 void MyLL::Start(unsigned char pc)
 {
+  if (pc >= 3) return;
   pCurr[pc] = pFront;
 }
 
 void MyLL::End(unsigned char pc)
 {
+  if (pc >= 3) return;
   pCurr[pc] = pBack;
 }
 
@@ -70,17 +75,20 @@ void *MyLL::Write(void *dat)
 
 void *MyLL::Read(unsigned char pc)
 {
+  if (pc >= 3) return 0;
   if (pCurr[pc]) return pCurr[pc]->Data;
   return 0;
 }
 
 void MyLL::Next(unsigned char pc)
 {
+  if (pc >= 3) return;
   if (pCurr[pc]) pCurr[pc] = pCurr[pc]->Next;
 }
 
 void MyLL::Prev(unsigned char pc)
 {
+  if (pc >= 3) return;
   if (pCurr[pc]) pCurr[pc] = pCurr[pc]->Prev;
 }
 
@@ -97,18 +105,44 @@ void *MyLL::Find(unsigned short itm)
 
 void MyLL::Delete(unsigned char pc)
 {
-  dCnt++;
+  if (pc >= 3) return;
   Item *tp = pCurr[pc];
-  Next(pc);
+  if (!tp) return;
+  Item *next = tp->Next;
+  dCnt++;
+  pCurr[pc] = next;
+  for (unsigned char cnt = 0; cnt < 3; cnt++)
+  {
+    if (pCurr[cnt] == tp) pCurr[cnt] = next;
+  }
   (tp->Prev ? tp->Prev->Next : pFront) = tp->Next;
   (tp->Next ? tp->Next->Prev : pBack) = tp->Prev;
   delete tp;
+  if (!Num())
+  {
+    pFront = 0;
+    pBack = 0;
+    pCurr[0] = 0;
+    pCurr[1] = 0;
+    pCurr[2] = 0;
+  }
 }
 
 void MyLL::Destroy()
 {
-  Start(0);
-  while (pCurr[0]) Delete(0);
+  Item *tp = pFront;
+  while (tp)
+  {
+    Item *next = tp->Next;
+    delete tp;
+    tp = next;
+  }
+  pFront = 0;
+  pBack = 0;
+  pCurr[0] = 0;
+  pCurr[1] = 0;
+  pCurr[2] = 0;
+  dCnt = wCnt;
 }
 
 MyLL::~MyLL()

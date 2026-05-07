@@ -1514,7 +1514,7 @@ void MyGLWin::Close(bool all)
 //mouse left-click object selected
 int MyGLWin::Select(bool btnup)
 {
-  GLint hits, vpt[4];
+  GLint vpt[4];
   GLuint selbuf[4];
   glGetIntegerv(GL_VIEWPORT, vpt);
   glSelectBuffer(4, selbuf);
@@ -1536,7 +1536,8 @@ int MyGLWin::Select(bool btnup)
   glMatrixMode(GL_MODELVIEW);
   glPopMatrix();
   glEnable(GL_DEPTH_TEST);
-  if (!(hits = glRenderMode(GL_RENDER)))
+  GLint hits = glRenderMode(GL_RENDER);
+  if (!hits)
   {
     if (btnup && menuY) Close();
     return 0;
@@ -1607,7 +1608,9 @@ int MyGLWin::Select(bool btnup)
               ls = (glls_obj *)tp;
               if (ls->name == ((selected % 10000) / 100))
               {
-                strcpy(ls->lin->text, ls->items[sel - GLWIN_ITEM]);  //set linked input object text
+                unsigned int maxChars = (ls->lin->max < (sizeof(ls->lin->text) - 1) ? ls->lin->max : (sizeof(ls->lin->text) - 1));
+                strncpy(ls->lin->text, ls->items[sel - GLWIN_ITEM], maxChars);  //set linked input object text
+                ls->lin->text[maxChars] = '\0';
                 ls->lin->cursor = strlen(ls->lin->text);
                 ls->lin->first = (ls->lin->cursor > ls->lin->cwidth ? ls->lin->cursor - ls->lin->cwidth : 0);
                 currScroll = (ls->pwn->name * 10000) + (ls->name * 100);  //set scroll object focus (for mouse wheel)
