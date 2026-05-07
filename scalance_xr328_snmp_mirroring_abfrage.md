@@ -858,10 +858,10 @@ Der Windows-Buildweg fuer lokale Net-SNMP-Werkzeuge ist im Repository vorbereite
 ```text
 compile-net-snmp-windows.bat NET_SNMP_SOURCE_ROOT
 third_party/net-snmp/README.md
-third_party/openssl/windows/<arch>/
+third_party/openssl/windows/<arch>/  (lokal durch vcpkg erzeugt, nicht versioniert)
 ```
 
-Der getestete Build erzeugt `snmpget.exe`, `snmpwalk.exe` und `snmpset.exe` fuer `x64` und `x86` unter `Release/windows/<arch>/`. OpenSSL wird statisch gelinkt; `dumpbin /dependents` zeigte nur Windows-System-DLLs, keine OpenSSL- oder MSVC-Runtime-DLLs.
+Der getestete Build ruft vcpkg fuer `openssl:x64-windows-static` und `openssl:x86-windows-static` auf, kopiert die benoetigten Header und Libraries in das lokale `third_party/openssl/windows/<arch>`-Layout und erzeugt danach `snmpget.exe`, `snmpwalk.exe` und `snmpset.exe` fuer `x64` und `x86` unter `Release/windows/<arch>/`. OpenSSL wird statisch gelinkt; `dumpbin /dependents` zeigte nur Windows-System-DLLs, keine OpenSSL- oder MSVC-Runtime-DLLs.
 
 Beispiel mit SNMPv3 und Umgebungsvariablen, um Credentials nicht unnoetig in der Shell-History abzulegen:
 

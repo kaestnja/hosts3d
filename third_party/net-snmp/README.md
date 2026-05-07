@@ -14,9 +14,10 @@ in the Net-SNMP checkout:
 - OpenSSL enabled for SNMPv3 SHA/AES support
 - default MIB loading disabled because Hosts3D uses numeric OIDs
 
-## Required OpenSSL layout
+## OpenSSL input layout
 
-Provide MSVC-built OpenSSL headers and libraries below:
+`compile-net-snmp-windows.bat` prepares this layout automatically via vcpkg.
+The files are local build inputs and are intentionally ignored by Git:
 
 ```text
 third_party\openssl\windows\x64\
@@ -30,36 +31,37 @@ third_party\openssl\windows\x86\
   lib\libssl_static.lib
 ```
 
-The batch also accepts `libcrypto.lib` and `libssl.lib`; if those exist but the
-`*_static.lib` names are missing, it creates the names Net-SNMP's MSVC pragma
-expects.
-
 Do not use the Git-SDK/MSYS2 MinGW OpenSSL libraries for this MSVC build. Those
 are `.a` / `.dll.a` libraries and belong to the MinGW toolchain, while this
 batch builds Net-SNMP with `cl.exe` and `link.exe`.
 
-## Practical ways to provide OpenSSL
+## vcpkg OpenSSL preparation
 
-Option A: vcpkg static triplets
+The batch finds `vcpkg.exe` in this order:
+
+- `%VCPKG_ROOT%\vcpkg.exe`
+- `..\..\microsoft\vcpkg\vcpkg.exe` relative to the Hosts3D repository
+- `vcpkg.exe` on `PATH`
+
+It then runs:
 
 ```bat
 vcpkg install openssl:x64-windows-static openssl:x86-windows-static
 ```
 
-Then copy each installed tree into the layout above, for example:
+After vcpkg completes, the batch copies:
 
 ```text
 <vcpkg>\installed\x64-windows-static\include -> third_party\openssl\windows\x64\include
-<vcpkg>\installed\x64-windows-static\lib     -> third_party\openssl\windows\x64\lib
+<vcpkg>\installed\x64-windows-static\lib\libcrypto.lib -> third_party\openssl\windows\x64\lib\libcrypto_static.lib
+<vcpkg>\installed\x64-windows-static\lib\libssl.lib    -> third_party\openssl\windows\x64\lib\libssl_static.lib
 <vcpkg>\installed\x86-windows-static\include -> third_party\openssl\windows\x86\include
-<vcpkg>\installed\x86-windows-static\lib     -> third_party\openssl\windows\x86\lib
+<vcpkg>\installed\x86-windows-static\lib\libcrypto.lib -> third_party\openssl\windows\x86\lib\libcrypto_static.lib
+<vcpkg>\installed\x86-windows-static\lib\libssl.lib    -> third_party\openssl\windows\x86\lib\libssl_static.lib
 ```
 
-Option B: prebuilt MSVC OpenSSL
-
-Use a package that provides Visual Studio `.lib` files for both x64 and x86,
-preferably static libraries built with the static runtime. Place its `include`
-and static `lib` directories into the same layout.
+The script verifies `opensslv.h`, `libcrypto_static.lib`, and
+`libssl_static.lib` for both architectures before starting the Net-SNMP build.
 
 ## Net-SNMP source changes
 

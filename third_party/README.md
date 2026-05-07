@@ -18,12 +18,7 @@ third_party/
     bin/windows/x64/Packet.dll       (optional)
   openssl/
     COPYING.OpenSSL
-    windows/x86/include/openssl/opensslv.h
-    windows/x86/lib/libcrypto_static.lib
-    windows/x86/lib/libssl_static.lib
-    windows/x64/include/openssl/opensslv.h
-    windows/x64/lib/libcrypto_static.lib
-    windows/x64/lib/libssl_static.lib
+    windows/                         (local generated OpenSSL inputs, ignored)
   net-snmp/
     README.md
 ```
@@ -66,7 +61,8 @@ Windows scripts place binaries in:
 Both Windows build scripts also copy `libwinpthread-1.dll` from the active MinGW `g++` toolchain directory into the output dir when found.
 
 `compile-net-snmp-windows.bat` builds optional SNMP command line helpers from a separate Net-SNMP checkout and copies `snmpget.exe`, `snmpwalk.exe`, and `snmpset.exe` into `Release/windows/<arch>/`.
-It uses MSVC, Net-SNMP's Win32 `nmake` build, and the MSVC OpenSSL inputs under `third_party/openssl/windows/<arch>/`.
+It uses MSVC, Net-SNMP's Win32 `nmake` build, and static OpenSSL inputs prepared through vcpkg under `third_party/openssl/windows/<arch>/`.
+Those OpenSSL inputs are generated local files and are not tracked in Git.
 
 `compile-hosts3d.bat` and `compile-hsen.bat` now accept an explicit arch:
 - `compile-hosts3d.bat Release x86`

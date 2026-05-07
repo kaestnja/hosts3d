@@ -185,7 +185,7 @@ Optionally build the Net-SNMP command line helpers used by the SCALANCE mirror-c
 .\compile-net-snmp-windows.bat C:\path\to\net-snmp
 ```
 
-This builds `snmpget.exe`, `snmpwalk.exe`, and `snmpset.exe` for `x64` and `x86` using MSVC, static OpenSSL inputs from `third_party\openssl\windows\<arch>`, and Net-SNMP's Win32 `nmake` build. The resulting tools are copied to `Release\windows\<arch>\`. If present there, `package-release-windows.bat` includes them in the flat release ZIP.
+This first ensures static OpenSSL inputs with vcpkg (`openssl:x64-windows-static` and `openssl:x86-windows-static`), copies them into the local ignored `third_party\openssl\windows\<arch>` layout, and then builds `snmpget.exe`, `snmpwalk.exe`, and `snmpset.exe` for `x64` and `x86` using MSVC and Net-SNMP's Win32 `nmake` build. The resulting tools are copied to `Release\windows\<arch>\`. If present there, `package-release-windows.bat` includes them in the flat release ZIP.
 
 Create a public release ZIP without bundled Npcap DLLs:
 ```powershell
@@ -246,7 +246,7 @@ set "HSEN_IFACE=\Device\NPF_{E4ED794E-A66F-451C-851E-91226CD96BA4}"
 
 ### Optional Net-SNMP helper tools
 - `compile-net-snmp-windows.bat` builds `snmpget.exe`, `snmpwalk.exe`, and `snmpset.exe` from a separate Net-SNMP checkout.
-- The build uses MSVC and static OpenSSL inputs under `third_party\openssl\windows\<arch>`.
+- The build uses MSVC and prepares static OpenSSL inputs through vcpkg under the ignored local path `third_party\openssl\windows\<arch>`.
 - The current verified build produces tools that depend only on Windows system DLLs, not on OpenSSL DLLs or the MSVC runtime DLLs.
 
 ### Firewall

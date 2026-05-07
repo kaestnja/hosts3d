@@ -15,6 +15,7 @@ sync-built-x64-binaries.local.ps1
 
 # Local helper binaries (kept locally, not versioned)
 Tools/Wireshark/WiresharkPortable64_4.6.4.paf.exe
+third_party/openssl/windows/
 
 # Machine-local Hosts3D runtime data
 **/.hosts3d/

@@ -71,12 +71,16 @@ set "CONFIG=Release"
 set "SNMP_TARGETS=snmpget snmpwalk snmpset"
 set "THIRD_PARTY_DIR=%~dp0third_party"
 set "OPENSSL_BASE=%THIRD_PARTY_DIR%\openssl\windows"
+set "VCPKG_EXE="
 
 echo Net-SNMP source: "%NETSNMP_SRC%"
 echo Perl: "%PERL_EXE%"
 echo Visual Studio: "%VSROOT%"
 echo OpenSSL base: "%OPENSSL_BASE%"
 echo.
+
+call :ensure_openssl_inputs
+if errorlevel 1 goto :fail
 
 echo === Net-SNMP %CONFIG% x64 ===
 call :build_arch x64
@@ -205,6 +209,115 @@ if exist "lib\release\netsnmp.lib" del /Q "lib\release\netsnmp.lib" >NUL 2>NUL
 if exist "bin\release\snmpget.exe" del /Q "bin\release\snmpget.exe" >NUL 2>NUL
 if exist "bin\release\snmpwalk.exe" del /Q "bin\release\snmpwalk.exe" >NUL 2>NUL
 if exist "bin\release\snmpset.exe" del /Q "bin\release\snmpset.exe" >NUL 2>NUL
+exit /b 0
+
+:ensure_openssl_inputs
+call :findvcpkg
+if errorlevel 1 exit /b 1
+
+echo Ensuring MSVC OpenSSL inputs via vcpkg...
+"%VCPKG_EXE%" install openssl:x64-windows-static openssl:x86-windows-static
+if errorlevel 1 (
+  echo vcpkg failed to install static OpenSSL packages.
+  exit /b 1
+)
+
+call :copy_vcpkg_openssl x64 x64-windows-static
+if errorlevel 1 exit /b 1
+call :copy_vcpkg_openssl x86 x86-windows-static
+if errorlevel 1 exit /b 1
+
+call :verify_openssl_copy x64
+if errorlevel 1 exit /b 1
+call :verify_openssl_copy x86
+if errorlevel 1 exit /b 1
+exit /b 0
+
+:findvcpkg
+if defined VCPKG_ROOT if exist "%VCPKG_ROOT%\vcpkg.exe" (
+  set "VCPKG_EXE=%VCPKG_ROOT%\vcpkg.exe"
+  exit /b 0
+)
+if exist "%~dp0..\..\microsoft\vcpkg\vcpkg.exe" (
+  for %%v in ("%~dp0..\..\microsoft\vcpkg") do (
+    set "VCPKG_ROOT=%%~fv"
+    set "VCPKG_EXE=%%~fv\vcpkg.exe"
+  )
+  exit /b 0
+)
+for /f "delims=" %%v in ('where vcpkg.exe 2^>NUL') do (
+  if not defined VCPKG_EXE set "VCPKG_EXE=%%v"
+)
+if defined VCPKG_EXE (
+  for %%v in ("%VCPKG_EXE%\..") do set "VCPKG_ROOT=%%~fv"
+  exit /b 0
+)
+echo Missing vcpkg.
+echo Install or clone vcpkg, then either set VCPKG_ROOT or place it at:
+echo   "%~dp0..\..\microsoft\vcpkg"
+echo Expected command:
+echo   "%~dp0..\..\microsoft\vcpkg\vcpkg.exe" install openssl:x64-windows-static openssl:x86-windows-static
+exit /b 1
+
+:copy_vcpkg_openssl
+set "OPENSSL_ARCH=%~1"
+set "VCPKG_TRIPLET=%~2"
+set "VCPKG_TRIPLET_ROOT=%VCPKG_ROOT%\installed\%VCPKG_TRIPLET%"
+set "OPENSSL_ROOT=%OPENSSL_BASE%\%OPENSSL_ARCH%"
+
+if not exist "%VCPKG_TRIPLET_ROOT%\include\openssl\opensslv.h" (
+  echo Missing vcpkg OpenSSL headers for %VCPKG_TRIPLET%.
+  echo Expected "%VCPKG_TRIPLET_ROOT%\include\openssl\opensslv.h"
+  exit /b 1
+)
+if not exist "%VCPKG_TRIPLET_ROOT%\lib\libcrypto.lib" (
+  echo Missing vcpkg OpenSSL libcrypto for %VCPKG_TRIPLET%.
+  echo Expected "%VCPKG_TRIPLET_ROOT%\lib\libcrypto.lib"
+  exit /b 1
+)
+if not exist "%VCPKG_TRIPLET_ROOT%\lib\libssl.lib" (
+  echo Missing vcpkg OpenSSL libssl for %VCPKG_TRIPLET%.
+  echo Expected "%VCPKG_TRIPLET_ROOT%\lib\libssl.lib"
+  exit /b 1
+)
+
+if not exist "%OPENSSL_ROOT%\include" mkdir "%OPENSSL_ROOT%\include"
+if not exist "%OPENSSL_ROOT%\lib" mkdir "%OPENSSL_ROOT%\lib"
+
+robocopy "%VCPKG_TRIPLET_ROOT%\include" "%OPENSSL_ROOT%\include" /E >NUL
+if errorlevel 8 (
+  echo Failed to copy OpenSSL headers for %OPENSSL_ARCH%.
+  exit /b 1
+)
+copy /Y "%VCPKG_TRIPLET_ROOT%\lib\libcrypto.lib" "%OPENSSL_ROOT%\lib\libcrypto_static.lib" >NUL
+if errorlevel 1 (
+  echo Failed to copy libcrypto_static.lib for %OPENSSL_ARCH%.
+  exit /b 1
+)
+copy /Y "%VCPKG_TRIPLET_ROOT%\lib\libssl.lib" "%OPENSSL_ROOT%\lib\libssl_static.lib" >NUL
+if errorlevel 1 (
+  echo Failed to copy libssl_static.lib for %OPENSSL_ARCH%.
+  exit /b 1
+)
+echo OpenSSL %OPENSSL_ARCH% copied from vcpkg triplet %VCPKG_TRIPLET%.
+exit /b 0
+
+:verify_openssl_copy
+set "OPENSSL_ARCH=%~1"
+set "OPENSSL_ROOT=%OPENSSL_BASE%\%OPENSSL_ARCH%"
+if not exist "%OPENSSL_ROOT%\include\openssl\opensslv.h" (
+  echo Missing copied "%OPENSSL_ROOT%\include\openssl\opensslv.h".
+  exit /b 1
+)
+if not exist "%OPENSSL_ROOT%\lib\libcrypto_static.lib" (
+  echo Missing copied "%OPENSSL_ROOT%\lib\libcrypto_static.lib".
+  exit /b 1
+)
+if not exist "%OPENSSL_ROOT%\lib\libssl_static.lib" (
+  echo Missing copied "%OPENSSL_ROOT%\lib\libssl_static.lib".
+  exit /b 1
+)
+echo Verified OpenSSL %OPENSSL_ARCH% inputs below "%OPENSSL_ROOT%".
 exit /b 0
 
 :find_openssl

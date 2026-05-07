@@ -42,7 +42,7 @@ These files already existed before this handover and remain important:
 - `scripts/scalance_xr328_mirror_check.py`
   - first external JSON prototype for SCALANCE mirroring checks; keep this as the contract before wiring a Mirror Check into the Hosts3D local hsen UI or adding controlled switch-management operations
 - `compile-net-snmp-windows.bat`
-  - optional Windows helper build for Net-SNMP CLI tools; uses a separate Net-SNMP checkout plus MSVC OpenSSL inputs under `third_party/openssl/windows/<arch>` and copies `snmpget.exe`, `snmpwalk.exe`, and `snmpset.exe` to `Release/windows/<arch>`
+  - optional Windows helper build for Net-SNMP CLI tools; uses a separate Net-SNMP checkout, prepares MSVC OpenSSL inputs via vcpkg under ignored `third_party/openssl/windows/<arch>`, and copies `snmpget.exe`, `snmpwalk.exe`, and `snmpset.exe` to `Release/windows/<arch>`
 - `third_party/net-snmp/README.md`
   - documents the local Net-SNMP/OpenSSL build inputs and the verified dependency profile for the generated tools
 - `testing/sim-hsen.ps1`
