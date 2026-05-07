@@ -4,9 +4,9 @@
 
 Dieses Dokument dient als kompakter technischer Arbeitsauftrag fuer Codex in Visual Studio Code.
 
-Ziel ist die Ermittlung und spaetere Implementierung einer reinen SNMP-Zustandsabfrage fuer einen Siemens SCALANCE XR328-4C WG Switch. Die Abfrage soll Layer-2-Port-Mirroring, Portzuordnung, gelernte MAC-Adressen und optional indirekte Teilnehmerinformationen wie IP-Adresse, Hostname und LLDP-Nachbarn erfassen.
+Ziel ist die Ermittlung und spaetere Implementierung einer SNMP-Zustandsabfrage fuer einen Siemens SCALANCE XR328-4C WG Switch. Die Abfrage soll Layer-2-Port-Mirroring, Portzuordnung, gelernte MAC-Adressen und optional indirekte Teilnehmerinformationen wie IP-Adresse, Hostname und LLDP-Nachbarn erfassen.
 
-Wichtig: Das Tool soll nur lesend arbeiten. Keine SNMP-SET-Operationen implementieren, solange dies nicht ausdruecklich angefordert wird.
+Wichtig: Der erste Prototyp soll lesend arbeiten, damit OIDs, Datenmodell und JSON-Ausgabe gegen reale Switch-Zustaende validiert werden koennen. Spaetere Verwaltungsfunktionen duerfen auch Konfigurationen aendern, wenn Zweck, Umfang, Rechte und Rueckfallweg bewusst festgelegt sind.
 
 ---
 
@@ -87,13 +87,14 @@ Die Siemens-Mirroring-OIDs liefern nach aktuellem Kenntnisstand nur Informatione
 
 ---
 
-## Sicherheitsvorgaben fuer die Implementierung
+## Betriebs- und Berechtigungsvorgaben
 
-- Bevorzugt SNMPv3 mit `authPriv` verwenden.
-- SNMPv1/v2c nur verwenden, wenn dies technisch erforderlich oder explizit konfiguriert ist.
-- Keine Default-Communitys voraussetzen.
-- Keine SNMP-Credentials in Logs, Fehlermeldungen oder JSON-Ausgaben schreiben.
-- Keine SNMP-SETs implementieren.
+- Fuer produktionsnahe Umgebungen bevorzugt SNMPv3 mit `authPriv` verwenden.
+- SNMPv1/v2c bewusst erlauben, wenn dies technisch erforderlich, im Labor sinnvoll oder am Geraet nur so verfuegbar ist.
+- Default-Communitys nicht still voraussetzen; Communitys und Benutzer muessen konfigurierbar sein.
+- SNMP-Credentials nicht unnoetig in Logs, Fehlermeldungen oder JSON-Ausgaben schreiben.
+- SNMP-SETs sind nicht Teil des ersten Diagnose-Prototyps, aber fuer spaetere Mirror-Port-Verwaltung ausdruecklich moeglich.
+- Least Privilege bedeutet: so wenig Rechte wie praktikabel, aber Schreib- und Konfigurationsrechte sind erlaubt, wenn sie fuer die Aufgabe benoetigt werden.
 - Timeouts und Retries begrenzen.
 - Nicht vorhandene OIDs sauber als `not_supported` melden.
 - Leere Tabellen sauber als `empty_table` melden.
@@ -816,6 +817,77 @@ snmpwalk -v3 -l authPriv -u USER -a SHA -A AUTHPASS -x AES -X PRIVPASS SWITCH_IP
 
 ---
 
+## Beschaffungs- und Implementierungswege fuer SNMP
+
+Die SNMP-Funktionalitaet ist genormt. Fuer Hosts3D ist deshalb nicht entscheidend, ob die Daten aus Net-SNMP, einem anderen CLI-Werkzeug, einer Bibliothek oder einem kleinen Verwaltungsdienst kommen. Entscheidend ist ein stabiles, einheitliches Ergebnisformat, das Hosts3D, `hsen` oder ein separates Verwaltungstool verwenden koennen.
+
+Parallel zu pruefende Wege:
+
+1. Net-SNMP als externes Werkzeug:
+   - Offizielle Quellen und aktuelle Build-/Binary-Lage pruefen.
+   - Falls Windows-Binaries fehlen oder veraltet sind, eigenen reproduzierbaren Build pruefen.
+   - Optional ein lokal abgelegtes Release-Artefakt verwenden und den Anwenderpfad dokumentieren.
+2. Funktional aequivalente SNMP-Werkzeuge:
+   - Nicht nur nach `net-snmp` suchen, sondern nach SNMPv1/v2c/v3 CLI-Tools mit `get`, `walk` und spaeter optional `set`.
+   - Windows-Beschaffung, Lizenz, Pflegezustand und Scriptbarkeit bewerten.
+3. Bibliothek oder internes Modul:
+   - Fuer spaetere UI-nahe Integration denkbar, wenn CLI-Abhaengigkeiten zu unkomfortabel werden.
+   - Muss das gleiche JSON- oder API-Ergebnis liefern wie der externe Prototyp.
+4. Separates Verwaltungs-CLI:
+   - Kann Switch-Zustaende abfragen und spaeter Mirror-Konfigurationen setzen.
+   - Hosts3D muss dann nicht selbst SNMP sprechen, sondern nur das definierte Ergebnisformat konsumieren.
+
+Sobald ein Weg robust genug ist, werden die anderen Wege in der Dokumentation als Alternativen festgehalten, aber nicht parallel weiter ausgebaut.
+
+---
+
+## Prototyp im Repository
+
+Ein erster lesender Prototyp liegt unter:
+
+```text
+scripts/scalance_xr328_mirror_check.py
+```
+
+Der Prototyp nutzt Net-SNMP (`snmpget` und `snmpwalk`) als externe Werkzeuge und gibt JSON aus. Er ist bewusst als Diagnose- und Vertragswerkzeug gebaut: erst lesen und Format stabilisieren, danach koennen kontrollierte Verwaltungsfunktionen wie SNMP-SET, SSH-CLI oder API-basierte Switch-Aenderungen folgen.
+
+Die Net-SNMP-Werkzeuge muessen nicht zwingend systemweit installiert sein. Vergleichbar mit der GLFW3-Laufzeitloesung ist auch ein lokaler Release-Pfad denkbar: `snmpget.exe`, `snmpwalk.exe` und ihre benoetigten DLLs liegen dann neben dem Verwaltungswerkzeug oder in einem dokumentierten Unterordner des Release-Pakets. Der aktuelle Prototyp kann solche lokalen Werkzeuge ueber `--snmpget` und `--snmpwalk` explizit verwenden; ohne diese Angaben sucht er die Befehle wie ueblich ueber die Kommandoauflösung des Systems. Wenn kein passendes Werkzeug gefunden wird, meldet das Tool dies im JSON-Statusmodell als `not_implemented`.
+
+Der Windows-Buildweg fuer lokale Net-SNMP-Werkzeuge ist im Repository vorbereitet:
+
+```text
+compile-net-snmp-windows.bat NET_SNMP_SOURCE_ROOT
+third_party/net-snmp/README.md
+third_party/openssl/windows/<arch>/
+```
+
+Der getestete Build erzeugt `snmpget.exe`, `snmpwalk.exe` und `snmpset.exe` fuer `x64` und `x86` unter `Release/windows/<arch>/`. OpenSSL wird statisch gelinkt; `dumpbin /dependents` zeigte nur Windows-System-DLLs, keine OpenSSL- oder MSVC-Runtime-DLLs.
+
+Beispiel mit SNMPv3 und Umgebungsvariablen, um Credentials nicht unnoetig in der Shell-History abzulegen:
+
+```bash
+export SNMP_USER=USER
+export SNMP_AUTH_PASS=AUTHPASS
+export SNMP_PRIV_PASS=PRIVPASS
+python3 scripts/scalance_xr328_mirror_check.py SWITCH_IP --pretty
+```
+
+Beispiel mit SNMPv2c nur fuer Laborbetrieb:
+
+```bash
+SNMP_COMMUNITY=COMMUNITY python3 scripts/scalance_xr328_mirror_check.py SWITCH_IP --version 2c --pretty
+```
+
+Aktuelle Grenzen des Prototyps:
+
+- Er liest bereits Device Identity, IF-MIB, klassische Siemens-Mirroring-OIDs, optionale erweiterte Siemens-Mirroring-Tabellen, Bridge-FDB und LLDP-Rohdaten.
+- Er korreliert Bridge-FDB-MACs ueber Bridge-Port zu `ifIndex`.
+- LLDP wird im ersten Schritt nur als Rohdatenzaehlung erfasst; die Port-zu-Nachbar-Korrelation ist ein naechster Ausbauschritt.
+- IP-/Hostname-Korrelationen aus Gateway-ARP, DHCP, DNS oder Asset-Datenbank sind noch nicht implementiert.
+- Das Tool ist als Diagnose- und JSON-Vertragsgrundlage fuer eine spaetere Hosts3D-UI-Integration gedacht.
+
+---
+
 ## Gewuenschte Programmausgabe
 
 Das Tool soll bevorzugt JSON ausgeben. Die JSON-Struktur soll maschinenlesbar und fuer spaetere Automatisierung stabil sein.
@@ -982,7 +1054,7 @@ Nachteile:
 Empfehlung fuer den ersten Prototyp:
 
 ```text
-Python-Wrapper um Net-SNMP, Ausgabe als JSON, keine Schreiboperationen.
+Python-Wrapper um Net-SNMP, Ausgabe als JSON, zunaechst ohne Schreiboperationen.
 ```
 
 ---
@@ -1010,7 +1082,7 @@ Zu pruefen:
 
 Das Tool gilt als brauchbarer Prototyp, wenn es folgende Anforderungen erfuellt:
 
-1. Es arbeitet ohne SNMP-SETs.
+1. Es arbeitet im ersten Schritt ohne SNMP-SETs und schafft eine stabile Grundlage fuer spaetere Schreiboperationen.
 2. Es unterstuetzt SNMPv3 authPriv.
 3. Es kann den Siemens-Mirroring-Basiszweig automatisch testen.
 4. Es dekodiert `enabled(1)` und `disabled(2)` korrekt.
@@ -1022,7 +1094,7 @@ Das Tool gilt als brauchbarer Prototyp, wenn es folgende Anforderungen erfuellt:
 10. Es kennzeichnet IP- und Hostname-Zuordnungen als indirekte Korrelationen.
 11. Es meldet nicht unterstuetzte OIDs sauber.
 12. Es liefert JSON als maschinenlesbare Ausgabe.
-13. Es gibt keine Credentials aus.
+13. Es gibt Credentials nicht unnoetig aus.
 14. Es verwendet in Script-Ausgaben nur ASCII-Zeichen.
 
 ---
@@ -1033,64 +1105,64 @@ Das Tool gilt als brauchbarer Prototyp, wenn es folgende Anforderungen erfuellt:
 
 Implementiere:
 
-- Konfigurationsaufnahme fuer Host, Port, SNMP-Version, Timeout, Retries
-- SNMPv3 authPriv Parameter
-- `snmpget` und `snmpwalk` Hilfsfunktionen
-- Saubere Fehlerklassifikation
-- Keine Ausgabe von Credentials
+- [x] Konfigurationsaufnahme fuer Host, Port, SNMP-Version, Timeout, Retries
+- [x] SNMPv3 authPriv Parameter
+- [x] `snmpget` und `snmpwalk` Hilfsfunktionen
+- [x] Saubere Fehlerklassifikation fuer Basispfade
+- [x] Keine unnoetige Ausgabe von Credentials
 
 ### Schritt 2: Interface-Discovery
 
 Implementiere:
 
-- Lesen von `sysDescr`, `sysObjectID`, `sysName`
-- Walk von `ifDescr`, `ifName`, `ifAlias`, `ifAdminStatus`, `ifOperStatus`
-- Aufbau einer internen `ifIndex`-Map
+- [x] Lesen von `sysDescr`, `sysObjectID`, `sysName`
+- [x] Walk von `ifDescr`, `ifName`, `ifAlias`, `ifAdminStatus`, `ifOperStatus`
+- [x] Aufbau einer internen `ifIndex`-Map
 
 ### Schritt 3: Siemens-Mirroring klassisch
 
 Implementiere:
 
-- Lesen von `snMspsConfigMirrorStatus.0`
-- Lesen von `snMspsConfigMirrorToPort.0`
-- Walk von `snMspsConfigMirrorCtrlIngressMirroring`
-- Walk von `snMspsConfigMirrorCtrlEgressMirroring`
-- Dekodierung von enabled/disabled
-- Mapping der Indizes auf Interface-Daten
+- [x] Lesen von `snMspsConfigMirrorStatus.0`
+- [x] Lesen von `snMspsConfigMirrorToPort.0`
+- [x] Walk von `snMspsConfigMirrorCtrlIngressMirroring`
+- [x] Walk von `snMspsConfigMirrorCtrlEgressMirroring`
+- [x] Dekodierung von enabled/disabled
+- [x] Mapping der Indizes auf Interface-Daten
 
 ### Schritt 4: Bridge-FDB
 
 Implementiere:
 
-- Walk von `dot1dTpFdbAddress`
-- Walk von `dot1dTpFdbPort`
-- Walk von `dot1dBasePortIfIndex`
-- Zuordnung MAC -> Bridge-Port -> ifIndex -> Portname
+- [x] Walk von `dot1dTpFdbAddress`
+- [x] Walk von `dot1dTpFdbPort`
+- [x] Walk von `dot1dBasePortIfIndex`
+- [x] Zuordnung MAC -> Bridge-Port -> ifIndex -> Portname anhand der FDB-OID-Suffixe
 
 ### Schritt 5: LLDP optional
 
 Implementiere:
 
-- Walk von `lldpRemTable`
-- Zuordnung zu lokalen Ports
-- Ausgabe von Chassis-ID, Port-ID, Systemname, Beschreibung, Management-Adresse falls vorhanden
+- [x] Walk von `lldpRemTable`
+- [ ] Zuordnung zu lokalen Ports
+- [ ] Ausgabe von Chassis-ID, Port-ID, Systemname, Beschreibung, Management-Adresse falls vorhanden
 
 ### Schritt 6: Erweiterte Mirroring-Tabellen optional
 
 Implementiere:
 
-- Walk der Tabellen unter `1.3.6.1.4.1.4329.20.1.1.1.1.1.6.6`, `.6.7`, `.6.9`
-- Falls nicht vorhanden: `not_supported`
-- Falls leer: `empty_table`
-- Falls vorhanden: Sessions, Source-IDs, Source-Mode und Destination ausgeben
+- [x] Walk der Tabellen unter `1.3.6.1.4.1.4329.20.1.1.1.1.1.6.6`, `.6.7`, `.6.9`
+- [x] Falls nicht vorhanden: `not_supported`
+- [x] Falls leer: `empty_table`
+- [ ] Falls vorhanden: Sessions, Source-IDs, Source-Mode und Destination strukturiert ausgeben
 
 ### Schritt 7: Ausgabeformat
 
 Implementiere:
 
-- Stabile JSON-Ausgabe
-- Optional zusaetzlich tabellarische ASCII-Ausgabe fuer Menschen
-- In der JSON-Ausgabe direkte Messwerte und indirekte Korrelationen trennen
+- [x] Stabile JSON-Ausgabe
+- [ ] Optional zusaetzlich tabellarische ASCII-Ausgabe fuer Menschen
+- [x] In der JSON-Ausgabe direkte Messwerte und indirekte Korrelationen trennen
 
 ---
 

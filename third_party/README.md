@@ -16,6 +16,16 @@ third_party/
     bin/windows/x86/Packet.dll       (optional)
     bin/windows/x64/wpcap.dll        (optional)
     bin/windows/x64/Packet.dll       (optional)
+  openssl/
+    COPYING.OpenSSL
+    windows/x86/include/openssl/opensslv.h
+    windows/x86/lib/libcrypto_static.lib
+    windows/x86/lib/libssl_static.lib
+    windows/x64/include/openssl/opensslv.h
+    windows/x64/lib/libcrypto_static.lib
+    windows/x64/lib/libssl_static.lib
+  net-snmp/
+    README.md
 ```
 
 ## What to search/copy from old folders
@@ -55,6 +65,9 @@ Windows scripts place binaries in:
 
 Both Windows build scripts also copy `libwinpthread-1.dll` from the active MinGW `g++` toolchain directory into the output dir when found.
 
+`compile-net-snmp-windows.bat` builds optional SNMP command line helpers from a separate Net-SNMP checkout and copies `snmpget.exe`, `snmpwalk.exe`, and `snmpset.exe` into `Release/windows/<arch>/`.
+It uses MSVC, Net-SNMP's Win32 `nmake` build, and the MSVC OpenSSL inputs under `third_party/openssl/windows/<arch>/`.
+
 `compile-hosts3d.bat` and `compile-hsen.bat` now accept an explicit arch:
 - `compile-hosts3d.bat Release x86`
 - `compile-hosts3d.bat Release x64`
@@ -70,3 +83,8 @@ For `hsen.exe`, if `third_party/wpcap/bin/windows/<arch>/` does not contain thes
 ## Runtime note for packet capture
 
 `hsen.exe` can be compiled with local SDK files, but live interface capture on Windows still typically requires Npcap driver/service installed and running.
+
+## Runtime note for SNMP helpers
+
+The optional Net-SNMP helpers are administrative tools for switch diagnostics and later mirror-port management.
+The verified Windows build links Net-SNMP, OpenSSL, and the MSVC runtime statically, so the resulting `snmpget.exe`, `snmpwalk.exe`, and `snmpset.exe` do not need OpenSSL DLLs beside them.

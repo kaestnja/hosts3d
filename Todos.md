@@ -7,7 +7,7 @@ Hosts3D soll Capture-Infrastruktur nicht nur lokal starten koennen, sondern pers
 1. Verwaltung und Ausrollen der HSEN Sensoren.
 2. Verwalten und Pruefen der Mirroring-Faehigkeiten von Netzwerkgeraeten.
 
-Beide Bereiche sollen zunaechst beobachtend und assistierend gedacht werden. Automatische Aenderungen an entfernten Systemen, Switches oder Sensor-Hosts sollen nur nach ausdruecklicher Freigabe erfolgen.
+Beide Bereiche sollen zunaechst beobachtend und assistierend gedacht werden. Verwaltende Aenderungen an entfernten Systemen, Switches oder Sensor-Hosts sind spaeter ausdruecklich Teil des Zielbilds, sollen aber nachvollziehbar, begrenzt und mit bewusst gewaehlten Rechten erfolgen.
 
 ## Teil 1: Allgemeine Capture- und Sensor-Verwaltung
 
@@ -38,17 +38,18 @@ Moegliche Software-Erweiterungen:
 - Optional einen "readiness check" anbieten, der ohne dauerhafte Aenderung prueft, ob Capture starten koennte.
 - Start/Stop/Restart nur fuer Sensoren anbieten, deren Verwaltungsmodus explizit bekannt ist.
 
-Sicherheitsvorgaben:
+Betriebs- und Berechtigungsvorgaben:
 
-- Keine Passwoerter oder Tokens im Klartext in Logs schreiben.
+- Passwoerter oder Tokens nicht unnoetig im Klartext in Logs schreiben.
 - Keine implizite Remote-Installation ohne explizite Aktion.
-- Lokale Capture-Rechte weiterhin eng begrenzen, z. B. Linux `setcap` fuer `hsen` statt dauerhaft root.
+- Lokale Capture-Rechte nach Least-Privilege vergeben: so wenig Rechte wie praktikabel, aber ausreichend fuer die gewuenschte Capture- oder Verwaltungsaufgabe.
+- Beispiele: Linux `setcap` fuer reinen Capture-Betrieb bevorzugen, root oder Administratorrechte aber zulassen, wenn Installation, Service-Verwaltung oder Geraetekonfiguration sie tatsaechlich erfordern.
 - Sensor-Kommunikation und Verwaltungszugriffe getrennt betrachten.
 - Alle automatisch ermittelten Zustaende mit Zeitstempel und Quelle kennzeichnen.
 
 ### Mirroring-Faehigkeiten von Netzwerkgeraeten verwalten
 
-Ziel ist eine Ansicht, ob und wie Netzwerkgeraete Capture-Traffic fuer HSEN Sensoren bereitstellen koennen. Dabei geht es zunaechst um Read-only-Erkennung und Plausibilisierung, nicht um automatische Switch-Konfiguration.
+Ziel ist eine Ansicht, ob und wie Netzwerkgeraete Capture-Traffic fuer HSEN Sensoren bereitstellen koennen. Dabei geht es zunaechst um Erkennung und Plausibilisierung; spaeter soll daraus auch bewusst gesteuerte Switch-Konfiguration entstehen koennen.
 
 Zu klaerende Punkte:
 
@@ -68,14 +69,22 @@ Moegliche Software-Erweiterungen:
 - Neues Datenmodell fuer "Capture Sources", "Capture Sensors" und "Mirror Providers".
 - Im Local HSEN Editor einen Bereich "Capture vorbereiten" oder "Mirror Check" ergaenzen.
 - Fuer ein ausgewaehltes Sensor-Interface anzeigen, welche Switchports als Mirror-Zielport in Frage kommen.
-- Read-only SNMP-Abfragen fuer bekannte Geraeteklassen als Diagnose-Script oder internes Modul bereitstellen.
+- Zunaechst lesende SNMP-Abfragen fuer bekannte Geraeteklassen als Diagnose-Script oder internes Modul bereitstellen.
 - Ergebnisformat fuer Switch-Abfragen definieren, z. B. JSON mit sicheren Werten und abgeleiteten Korrelationen.
 - Warnungen anzeigen, wenn ein Sensor aktiv ist, aber am Switch kein passendes Mirroring sichtbar ist.
 - Warnungen anzeigen, wenn Mirroring aktiv ist, aber der Zielport nicht zum erwarteten Sensor passt.
 
+Konkreter erster Umsetzungspfad:
+
+1. Geraetespezifische lesende Diagnose als externes JSON-Tool bereitstellen.
+2. JSON-Struktur gegen reale Switch-Ausgaben stabilisieren.
+3. Parallel Beschaffungs- und Implementierungswege fuer SNMP pruefen: Net-SNMP-Binary, eigener reproduzierbarer Build, funktional gleichwertiges SNMP-CLI, Bibliothek oder separates Verwaltungs-CLI.
+4. Danach im Local HSEN Editor nur eine leichte UI-Integration ergaenzen: "Mirror Check" ausfuehren, letzte JSON-Datei anzeigen oder zusammenfassen, Credentials nicht unnoetig dauerhaft in Hosts3D speichern.
+5. Nach erfolgreicher Diagnosephase verwaltete Switch-Aenderungen planen, z. B. SNMP-SET, SSH-Konfiguration oder API-basierte Mirror-Port-Konfiguration.
+
 Abgrenzung:
 
-- SNMP-SET, SSH-Konfiguration oder API-basierte Switch-Aenderungen sind ein spaeterer Schritt.
+- SNMP-SET, SSH-Konfiguration oder API-basierte Switch-Aenderungen sind ein spaeterer, aber ausdruecklich gewuenschter Schritt.
 - Hersteller-Private-MIBs muessen geraete- und firmwarebezogen validiert werden.
 - Korrelationen zwischen MAC, IP und Hostname sind Hinweise, keine Beweise.
 
@@ -86,3 +95,4 @@ Geraetespezifische Recherche, OID-Listen, Validierungsschritte und konkrete Impl
 Aktueller spezifischer Auftrag:
 
 - `scalance_xr328_snmp_mirroring_abfrage.md`: SNMP-Zustandsabfrage fuer Siemens SCALANCE XR328-4C WG.
+- `scripts/scalance_xr328_mirror_check.py`: erster lesender Prototyp fuer die JSON-Diagnose des SCALANCE-Mirroring-Zustands.

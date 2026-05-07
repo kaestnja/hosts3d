@@ -26,7 +26,9 @@ This README is organized for practical use:
 Current planning notes for capture and sensor-management work live in separate Markdown files so they can evolve without overloading the user-facing runtime documentation:
 
 - `Todos.md`: general capture, HSEN sensor-management, deployment, and network-device mirroring planning.
-- `scalance_xr328_snmp_mirroring_abfrage.md`: device-specific SNMP read-only mirroring discovery plan for the Siemens SCALANCE XR328-4C WG.
+- `scalance_xr328_snmp_mirroring_abfrage.md`: device-specific SNMP mirroring discovery and later management plan for the Siemens SCALANCE XR328-4C WG.
+
+The first experimental device-specific helper is `scripts/scalance_xr328_mirror_check.py`. It shells out to Net-SNMP (`snmpget`/`snmpwalk`) and emits JSON; it is intended as an initial diagnostic contract before any Hosts3D UI integration or controlled switch-management work.
 
 ## Quick Start
 If your main goal is to get the project running again, use this order:
@@ -178,6 +180,13 @@ Build both Windows runtime pairs and create both public release ZIPs:
 .\compile-all-windows.bat Release --package
 ```
 
+Optionally build the Net-SNMP command line helpers used by the SCALANCE mirror-check prototype:
+```powershell
+.\compile-net-snmp-windows.bat C:\path\to\net-snmp
+```
+
+This builds `snmpget.exe`, `snmpwalk.exe`, and `snmpset.exe` for `x64` and `x86` using MSVC, static OpenSSL inputs from `third_party\openssl\windows\<arch>`, and Net-SNMP's Win32 `nmake` build. The resulting tools are copied to `Release\windows\<arch>\`. If present there, `package-release-windows.bat` includes them in the flat release ZIP.
+
 Create a public release ZIP without bundled Npcap DLLs:
 ```powershell
 .\package-release-windows.bat Release x64
@@ -234,6 +243,11 @@ set "HSEN_IFACE=\Device\NPF_{E4ED794E-A66F-451C-851E-91226CD96BA4}"
 - `wpcap.dll` and `Packet.dll` are copied from local `third_party` first.
 - If missing there, scripts can copy from installed Npcap system paths.
 - Public release ZIPs can be packaged without these DLLs; use a private/local `with-npcap` package only when you explicitly want to carry them for testing.
+
+### Optional Net-SNMP helper tools
+- `compile-net-snmp-windows.bat` builds `snmpget.exe`, `snmpwalk.exe`, and `snmpset.exe` from a separate Net-SNMP checkout.
+- The build uses MSVC and static OpenSSL inputs under `third_party\openssl\windows\<arch>`.
+- The current verified build produces tools that depend only on Windows system DLLs, not on OpenSSL DLLs or the MSVC runtime DLLs.
 
 ### Firewall
 `hsen` communicates with `Hosts3D` over UDP port `10111`.

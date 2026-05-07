@@ -38,7 +38,13 @@ These files already existed before this handover and remain important:
 - `Todos.md`
   - active planning notes for general capture infrastructure, HSEN sensor management/deployment, and network-device mirroring capabilities
 - `scalance_xr328_snmp_mirroring_abfrage.md`
-  - device-specific read-only SNMP mirroring discovery plan for Siemens SCALANCE XR328-4C WG; keep detailed SCALANCE OIDs and implementation steps there, not in the general todo file
+  - device-specific SNMP mirroring discovery and later management plan for Siemens SCALANCE XR328-4C WG; keep detailed SCALANCE OIDs and implementation steps there, not in the general todo file
+- `scripts/scalance_xr328_mirror_check.py`
+  - first external JSON prototype for SCALANCE mirroring checks; keep this as the contract before wiring a Mirror Check into the Hosts3D local hsen UI or adding controlled switch-management operations
+- `compile-net-snmp-windows.bat`
+  - optional Windows helper build for Net-SNMP CLI tools; uses a separate Net-SNMP checkout plus MSVC OpenSSL inputs under `third_party/openssl/windows/<arch>` and copies `snmpget.exe`, `snmpwalk.exe`, and `snmpset.exe` to `Release/windows/<arch>`
+- `third_party/net-snmp/README.md`
+  - documents the local Net-SNMP/OpenSSL build inputs and the verified dependency profile for the generated tools
 - `testing/sim-hsen.ps1`
   - preferred synthetic packet sender for Windows visualization tests; now includes focused TCP/ICMP/ARP/discovery modes, optional wide host spread, and `CenterIp`
 - `testing/sim-hsen.py`

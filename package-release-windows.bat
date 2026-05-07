@@ -66,6 +66,10 @@ for %%f in (Hosts3D.exe hsen.exe glfw3.dll libwinpthread-1.dll) do (
   copy /Y "%RUNDIR%\%%f" "%STAGEDIR%\%%f" >NUL
 )
 
+for %%f in (snmpget.exe snmpwalk.exe snmpset.exe) do (
+  if exist "%RUNDIR%\%%f" copy /Y "%RUNDIR%\%%f" "%STAGEDIR%\%%f" >NUL
+)
+
 if "%INCLUDE_NPCAP%"=="1" (
   for %%f in (Packet.dll wpcap.dll) do (
     if not exist "%RUNDIR%\%%f" (

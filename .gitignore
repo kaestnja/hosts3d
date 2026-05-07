@@ -5,6 +5,8 @@ build/
 Release/
 Debug/
 .vs/
+__pycache__/
+*.pyc
 
 # Machine-local runtime/helper config
 start-hsenW.local.bat

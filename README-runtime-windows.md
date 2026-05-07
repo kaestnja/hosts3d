@@ -20,6 +20,11 @@ Private/local test packages may additionally include:
 - `Packet.dll`
 - `wpcap.dll`
 
+Packages built after the optional Net-SNMP helper step may additionally include:
+- `snmpget.exe`
+- `snmpwalk.exe`
+- `snmpset.exe`
+
 ## First Start
 1. Start `Hosts3D.exe`
 2. Right-click in the 3D view and choose `Configure Local Sensors (hsen)`
@@ -63,6 +68,7 @@ Expected demo artifact lifetime:
 - The PowerShell demo works with bundled Windows PowerShell or PowerShell 7.
 - The Python demo requires Python 3 or the `py` launcher to be installed.
 - Public release ZIPs may omit `wpcap.dll` and `Packet.dll`. In that case, install Npcap on the target machine before using `hsen` or `Configure Local Sensors (hsen)`.
+- `snmpget.exe`, `snmpwalk.exe`, and `snmpset.exe` are optional administrative helpers for SNMP-based switch diagnostics and later mirror-port management. If present, they are self-contained command line tools built with static OpenSSL and static MSVC runtime linkage.
 
 ## License
 Hosts3D is distributed under the GNU General Public License. See `COPYING`.
