@@ -25,6 +25,11 @@ $textNames = [System.Collections.Generic.HashSet[string]]::new([System.StringCom
     "LICENSE", "README", "requirements.txt"
 ) | ForEach-Object { [void]$textNames.Add($_) }
 
+$ignoredTextNames = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+@(
+    "controls.txt", "settings.ini"
+) | ForEach-Object { [void]$ignoredTextNames.Add($_) }
+
 $binaryContentExtensions = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
 @(
     ".pdf"
@@ -39,6 +44,9 @@ $skipDirs = [System.Collections.Generic.HashSet[string]]::new([System.StringComp
 function Test-IsTextCandidate {
     param([System.IO.FileInfo]$File)
 
+    if ($ignoredTextNames.Contains($File.Name)) {
+        return $false
+    }
     if ($binaryContentExtensions.Contains($File.Extension)) {
         return $false
     }

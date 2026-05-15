@@ -851,7 +851,7 @@ scripts/scalance_xr328_mirror_check.py
 
 Der Prototyp nutzt Net-SNMP (`snmpget` und `snmpwalk`) als externe Werkzeuge und gibt JSON aus. Er ist bewusst als Diagnose- und Vertragswerkzeug gebaut: erst lesen und Format stabilisieren, danach koennen kontrollierte Verwaltungsfunktionen wie SNMP-SET, SSH-CLI oder API-basierte Switch-Aenderungen folgen.
 
-Die Net-SNMP-Werkzeuge muessen nicht zwingend systemweit installiert sein. Vergleichbar mit der GLFW3-Laufzeitloesung ist auch ein lokaler Release-Pfad denkbar: `snmpget.exe`, `snmpwalk.exe` und ihre benoetigten DLLs liegen dann neben dem Verwaltungswerkzeug oder in einem dokumentierten Unterordner des Release-Pakets. Der aktuelle Prototyp kann solche lokalen Werkzeuge ueber `--snmpget` und `--snmpwalk` explizit verwenden; ohne diese Angaben sucht er die Befehle wie ueblich ueber die Kommandoauflösung des Systems. Wenn kein passendes Werkzeug gefunden wird, meldet das Tool dies im JSON-Statusmodell als `not_implemented`.
+Die Net-SNMP-Werkzeuge muessen nicht zwingend systemweit installiert sein. Vergleichbar mit der GLFW3-Laufzeitloesung ist auch ein lokaler Release-Pfad denkbar: `snmpget.exe`, `snmpwalk.exe` und ihre benoetigten DLLs liegen dann neben dem Verwaltungswerkzeug oder in einem dokumentierten Unterordner des Release-Pakets. Der aktuelle Prototyp kann solche lokalen Werkzeuge ueber `--snmpget` und `--snmpwalk` explizit verwenden; ohne diese Angaben sucht er die Befehle wie ueblich ueber die Kommandoaufloesung des Systems. Wenn kein passendes Werkzeug gefunden wird, meldet das Tool dies im JSON-Statusmodell als `not_implemented`.
 
 Der Windows-Buildweg fuer lokale Net-SNMP-Werkzeuge ist im Repository vorbereitet:
 
