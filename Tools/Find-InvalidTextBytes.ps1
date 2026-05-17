@@ -1,14 +1,19 @@
 
 # usage sample:
-# pwsh -NoProfile -ExecutionPolicy Bypass -File "C:\Users\kaestnja\source\repos\github.com\kaestnja\hosts3d\Tools\Find-InvalidTextBytes.ps1" -Root "C:\Users\kaestnja\source\repos\github.com\kaestnja\hosts3d"
+# pwsh -NoProfile -ExecutionPolicy Bypass -File "C:\Temp\_SecLab\SpezialTests\Find-InvalidTextBytes.ps1" -Root "C:\Temp\_SecLab"
+# pwsh -NoProfile -ExecutionPolicy Bypass -File "C:\Temp\_SecLab\SpezialTests\Find-InvalidTextBytes.ps1" -Root "C:\Temp\_SecLab" -ReportBom
 
 param(
     [string]$Root = ".",
     [switch]$TrackedOnly,
-    [switch]$Json
+    [switch]$Json,
+    [switch]$ReportBom
 )
 
 $ErrorActionPreference = "Stop"
+
+# Set to $true if German umlauts and eszett should be reported as findings.
+$ProcessGermanUmlauts = $false
 
 $textExtensions = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
 @(
@@ -27,7 +32,8 @@ $textNames = [System.Collections.Generic.HashSet[string]]::new([System.StringCom
 
 $ignoredTextNames = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
 @(
-    "controls.txt", "settings.ini"
+    "controls.txt", "settings.ini",
+    "Find-InvalidTextBytes.ps1", "Repair-InvalidTextBytes.ps1"
 ) | ForEach-Object { [void]$ignoredTextNames.Add($_) }
 
 $binaryContentExtensions = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
@@ -116,6 +122,72 @@ function Get-InvalidCharacterAt {
     }
 }
 
+function Format-LineTextForOutput {
+    param([string]$Text)
+
+    if ([string]::IsNullOrEmpty($Text)) {
+        return ""
+    }
+
+    $builder = [System.Text.StringBuilder]::new()
+    foreach ($character in $Text.ToCharArray()) {
+        $codePoint = [int][char]$character
+        if ($codePoint -eq 9) {
+            [void]$builder.Append("`t")
+        } elseif ($codePoint -eq 0xFEFF) {
+            [void]$builder.Append("\uFEFF")
+        } elseif ($codePoint -lt 32 -or ($codePoint -ge 127 -and $codePoint -le 159)) {
+            [void]$builder.Append(("\x{0:X2}" -f $codePoint))
+        } else {
+            [void]$builder.Append($character)
+        }
+    }
+
+    return $builder.ToString()
+}
+
+function Decode-LineBytes {
+    param([byte[]]$LineBytes)
+
+    if ($LineBytes.Length -eq 0) {
+        return ""
+    }
+
+    try {
+        $utf8 = [System.Text.UTF8Encoding]::new($false, $true)
+        return $utf8.GetString($LineBytes)
+    } catch {
+        try {
+            $windows1252 = [System.Text.Encoding]::GetEncoding(1252)
+            return $windows1252.GetString($LineBytes)
+        } catch {
+            return [System.Text.Encoding]::Latin1.GetString($LineBytes)
+        }
+    }
+}
+
+function Get-LineTextAt {
+    param(
+        [byte[]]$Bytes,
+        [int]$LineStart,
+        [int]$Index
+    )
+
+    $lineEnd = $Index
+    while ($lineEnd -lt $Bytes.Length -and $Bytes[$lineEnd] -ne 10 -and $Bytes[$lineEnd] -ne 13) {
+        $lineEnd++
+    }
+
+    $length = $lineEnd - $LineStart
+    if ($length -le 0) {
+        return ""
+    }
+
+    $lineBytes = [byte[]]::new($length)
+    [Array]::Copy($Bytes, $LineStart, $lineBytes, 0, $length)
+    return Format-LineTextForOutput (Decode-LineBytes $lineBytes)
+}
+
 function Test-AllowedTextByte {
     param([byte]$Byte)
 
@@ -128,15 +200,109 @@ function Test-AllowedTextByte {
     return $false
 }
 
-function Find-InvalidPathBytes {
-    param([string]$RelativePath)
+function Get-GermanUmlautLengthAt {
+    param(
+        [byte[]]$Bytes,
+        [int]$Index
+    )
 
-    $bytes = [System.Text.Encoding]::UTF8.GetBytes($RelativePath)
+    if ($ProcessGermanUmlauts) {
+        return 0
+    }
+
+    # UTF-8: ae, oe, ue, Ae, Oe, Ue, eszett.
+    if ($Index + 1 -lt $Bytes.Length) {
+        if (
+            $Bytes[$Index] -eq 0xC3 -and
+            @(
+                0xA4, 0xB6, 0xBC,
+                0x84, 0x96, 0x9C,
+                0x9F
+            ) -contains $Bytes[$Index + 1]
+        ) {
+            return 2
+        }
+    }
+
+    return 0
+}
+
+function Get-IgnoredBomLengthAt {
+    param(
+        [byte[]]$Bytes,
+        [int]$Index
+    )
+
+    if ($ReportBom -or $Index -ne 0) {
+        return 0
+    }
+
+    # UTF-32 BOMs first because UTF-32LE starts with the UTF-16LE BOM bytes.
+    if (
+        $Bytes.Length -ge 4 -and
+        $Bytes[0] -eq 0xFF -and
+        $Bytes[1] -eq 0xFE -and
+        $Bytes[2] -eq 0x00 -and
+        $Bytes[3] -eq 0x00
+    ) {
+        return 4
+    }
+    if (
+        $Bytes.Length -ge 4 -and
+        $Bytes[0] -eq 0x00 -and
+        $Bytes[1] -eq 0x00 -and
+        $Bytes[2] -eq 0xFE -and
+        $Bytes[3] -eq 0xFF
+    ) {
+        return 4
+    }
+
+    if (
+        $Bytes.Length -ge 3 -and
+        $Bytes[0] -eq 0xEF -and
+        $Bytes[1] -eq 0xBB -and
+        $Bytes[2] -eq 0xBF
+    ) {
+        return 3
+    }
+
+    if (
+        $Bytes.Length -ge 2 -and
+        $Bytes[0] -eq 0xFF -and
+        $Bytes[1] -eq 0xFE
+    ) {
+        return 2
+    }
+    if (
+        $Bytes.Length -ge 2 -and
+        $Bytes[0] -eq 0xFE -and
+        $Bytes[1] -eq 0xFF
+    ) {
+        return 2
+    }
+
+    return 0
+}
+
+function Find-InvalidPathBytes {
+    param(
+        [string]$RelativePath,
+        [string]$FullPath
+    )
+
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes($FullPath)
     $bad = New-Object System.Collections.Generic.List[object]
     $invalidCharacters = [ordered]@{}
 
     for ($i = 0; $i -lt $bytes.Length; $i++) {
         $b = $bytes[$i]
+
+        $germanUmlautLength = Get-GermanUmlautLengthAt $bytes $i
+        if ($germanUmlautLength -gt 0) {
+            $i += ($germanUmlautLength - 1)
+            continue
+        }
+
         if (-not (Test-AllowedTextByte $b)) {
             $invalidCharacter = Get-InvalidCharacterAt $bytes $i
             if ($invalidCharacter.Length -gt 1 -or $b -lt 0x80 -or $b -gt 0xBF) {
@@ -156,7 +322,8 @@ function Find-InvalidPathBytes {
 
     if ($bad.Count -gt 0) {
         [pscustomobject]@{
-            Path = $RelativePath
+            Path = $FullPath
+            RelativePath = $RelativePath
             InvalidByteCount = $bad.Count
             InvalidCharacters = @($invalidCharacters.Keys)
             FirstFindings = @($bad | Select-Object -First 10)
@@ -170,6 +337,11 @@ function Test-AllowedTextSequenceAt {
         [int]$Index,
         [string]$RelativePath
     )
+
+    $germanUmlautLength = Get-GermanUmlautLengthAt $Bytes $Index
+    if ($germanUmlautLength -gt 0) {
+        return $germanUmlautLength
+    }
 
     # Temperature unit "deg C" written as UTF-8 degree sign plus ASCII C.
     if (
@@ -229,7 +401,7 @@ $scannedFiles = $files | Where-Object {
 
 $pathFindings = foreach ($file in $scannedFiles) {
     $relative = [System.IO.Path]::GetRelativePath($rootPath, $file.FullName)
-    Find-InvalidPathBytes $relative
+    Find-InvalidPathBytes $relative $file.FullName
 }
 
 $files = $scannedFiles | Where-Object { Test-IsTextCandidate $_ }
@@ -239,14 +411,23 @@ $findings = foreach ($file in $files) {
     $relativePath = [System.IO.Path]::GetRelativePath($rootPath, $file.FullName)
     $line = 1
     $column = 0
+    $lineStart = 0
     $bad = New-Object System.Collections.Generic.List[object]
     $invalidCharacters = [ordered]@{}
 
     for ($i = 0; $i -lt $bytes.Length; $i++) {
         $b = $bytes[$i]
+
+        $ignoredBomLength = Get-IgnoredBomLengthAt $bytes $i
+        if ($ignoredBomLength -gt 0) {
+            $i += ($ignoredBomLength - 1)
+            continue
+        }
+
         if ($b -eq 10) {
             $line++
             $column = 0
+            $lineStart = $i + 1
             continue
         }
         $column++
@@ -272,6 +453,7 @@ $findings = foreach ($file in $files) {
                 Column = $column
                 Byte = ("0x{0:X2}" -f $b)
                 Shown = (Format-Byte $b)
+                LineText = (Get-LineTextAt $bytes $lineStart $i)
                 Character = $invalidCharacter.Text
                 CharacterBytes = $invalidCharacter.Bytes
             })
@@ -280,7 +462,8 @@ $findings = foreach ($file in $files) {
 
     if ($bad.Count -gt 0) {
         [pscustomobject]@{
-            Path = $relativePath
+            Path = $file.FullName
+            RelativePath = $relativePath
             Length = $bytes.Length
             InvalidByteCount = $bad.Count
             InvalidCharacters = @($invalidCharacters.Keys)
@@ -291,6 +474,8 @@ $findings = foreach ($file in $files) {
 
 if ($Json) {
     [pscustomobject]@{
+        ReportBom = [bool]$ReportBom
+        ProcessGermanUmlauts = [bool]$ProcessGermanUmlauts
         InvalidPaths = @($pathFindings)
         InvalidContents = @($findings)
     } | ConvertTo-Json -Depth 5
@@ -320,8 +505,13 @@ if ($findings) {
 foreach ($finding in $findings) {
     Write-Output ("{0} ({1} bytes): {2} invalid byte(s)" -f $finding.Path, $finding.Length, $finding.InvalidByteCount)
     Write-Output ("  invalid chars: {0}" -f (($finding.InvalidCharacters | Select-Object -First 20) -join ", "))
+    $lastPrintedLine = $null
     foreach ($item in $finding.FirstFindings) {
         Write-Output ("  line {0}, col {1}, offset {2}: {3} ({4})" -f $item.Line, $item.Column, $item.Offset, $item.Byte, $item.CharacterBytes)
+        if ($lastPrintedLine -ne $item.Line) {
+            Write-Output ("    text: {0}" -f $item.LineText)
+            $lastPrintedLine = $item.Line
+        }
     }
 }
 
