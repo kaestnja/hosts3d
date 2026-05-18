@@ -1,26 +1,29 @@
 @echo off
-rem Stage the Windows runtime files and create a distributable release ZIP plus SHA256 file.
-rem Defaults to a public ZIP without Packet.dll/wpcap.dll; use with-npcap for private test packages.
+rem Stage all requested Windows runtime files and create distributable release ZIPs plus SHA256 files.
+rem Defaults to Release x64+x86 without Packet.dll/wpcap.dll.
 rem Uses the already-built runtime from Release\windows\<arch>.
+rem Normal release flow uses compile-all-windows.bat, which calls this script after building.
+rem Use this script directly only to repackage already-built runtimes.
+rem Examples: package-all-windows.bat
+rem           package-all-windows.bat with-npcap
 setlocal EnableExtensions
 cd /d "%~dp0"
 
 set "CONFIG=Release"
-set "ARCH=x86"
+set "ARCHES=x64 x86"
 set "INCLUDE_NPCAP=0"
 
 :parse_args
 if "%~1"=="" goto :args_done
-if /I "%~1"=="Release" set "CONFIG=Release" & shift & goto :parse_args
+if /I "%~1"=="--help" call :usage & exit /b 0
+if /I "%~1"=="/?" call :usage & exit /b 0
 if /I "%~1"=="Debug" set "CONFIG=Debug" & shift & goto :parse_args
-if /I "%~1"=="x86" set "ARCH=x86" & shift & goto :parse_args
-if /I "%~1"=="x64" set "ARCH=x64" & shift & goto :parse_args
-if /I "%~1"=="arm64" set "ARCH=arm64" & shift & goto :parse_args
+if /I "%~1"=="x64" set "ARCHES=x64" & shift & goto :parse_args
+if /I "%~1"=="x86" set "ARCHES=x86" & shift & goto :parse_args
+if /I "%~1"=="arm64" set "ARCHES=arm64" & shift & goto :parse_args
 if /I "%~1"=="with-npcap" set "INCLUDE_NPCAP=1" & shift & goto :parse_args
-if /I "%~1"=="public" set "INCLUDE_NPCAP=0" & shift & goto :parse_args
-echo Usage: %~nx0 [Release^|Debug] [x86^|x64^|arm64] [public^|with-npcap]
-echo Defaults: Release x86 public
-goto :fail
+call :usage
+exit /b 1
 
 :args_done
 
@@ -32,6 +35,22 @@ if not defined VERSION (
   goto :fail
 )
 
+set "NPCAP_LABEL=without-npcap"
+if "%INCLUDE_NPCAP%"=="1" set "NPCAP_LABEL=with-npcap"
+echo Packaging Windows release assets: %CONFIG% %ARCHES% %NPCAP_LABEL%
+for %%a in (%ARCHES%) do (
+  echo.
+  echo === Package %CONFIG% %%a ===
+  call :package_arch %%a
+  if errorlevel 1 goto :fail
+)
+
+echo.
+echo Packaged requested Windows release assets successfully.
+exit /b 0
+
+:package_arch
+set "ARCH=%~1"
 set "RUNDIR=%CONFIG%\windows\%ARCH%"
 set "DISTDIR=Release\dist"
 set "PKGNAME=hosts3d-%VERSION%-windows-%ARCH%"
@@ -43,12 +62,12 @@ set "HASHPATH=%DISTDIR%\%PKGNAME%-SHA256.txt"
 if not exist "%RUNDIR%\Hosts3D.exe" (
   echo Missing "%RUNDIR%\Hosts3D.exe"
   echo Build the Windows runtime first.
-  goto :fail
+  exit /b 1
 )
 if not exist "%RUNDIR%\hsen.exe" (
   echo Missing "%RUNDIR%\hsen.exe"
   echo Build the Windows runtime first.
-  goto :fail
+  exit /b 1
 )
 
 if not exist "%DISTDIR%" mkdir "%DISTDIR%"
@@ -61,7 +80,7 @@ mkdir "%STAGEDIR%"
 for %%f in (Hosts3D.exe hsen.exe glfw3.dll libwinpthread-1.dll) do (
   if not exist "%RUNDIR%\%%f" (
     echo Missing "%RUNDIR%\%%f"
-    goto :fail
+    exit /b 1
   )
   copy /Y "%RUNDIR%\%%f" "%STAGEDIR%\%%f" >NUL
 )
@@ -74,7 +93,7 @@ if "%INCLUDE_NPCAP%"=="1" (
   for %%f in (Packet.dll wpcap.dll) do (
     if not exist "%RUNDIR%\%%f" (
       echo Missing "%RUNDIR%\%%f"
-      goto :fail
+      exit /b 1
     )
     copy /Y "%RUNDIR%\%%f" "%STAGEDIR%\%%f" >NUL
   )
@@ -89,7 +108,7 @@ for %%f in (sim-hsen.ps1 sim-hsen.py demo-hsen.ps1 demo-hsen.py) do (
 )
 
 powershell -NoProfile -Command "Add-Type -AssemblyName System.IO.Compression.FileSystem; if (Test-Path '%ZIPPATH%') { Remove-Item '%ZIPPATH%' -Force }; [System.IO.Compression.ZipFile]::CreateFromDirectory('%STAGEDIR%', '%ZIPPATH%')"
-if errorlevel 1 goto :fail
+if errorlevel 1 exit /b 1
 
 set "HASH="
 for /f "skip=1 tokens=* delims=" %%i in ('certutil -hashfile "%ZIPPATH%" SHA256 ^| findstr /R "^[0-9A-F ][0-9A-F ]*$"') do (
@@ -98,16 +117,25 @@ for /f "skip=1 tokens=* delims=" %%i in ('certutil -hashfile "%ZIPPATH%" SHA256 
 set "HASH=%HASH: =%"
 if not defined HASH (
   echo Failed to calculate SHA256 for "%ZIPPATH%"
-  goto :fail
+  exit /b 1
 )
 > "%HASHPATH%" <NUL set /p ="%HASH%  %PKGNAME%.zip"
 
 echo Created "%ZIPPATH%"
 echo Created "%HASHPATH%"
-goto :success
+exit /b 0
 
 :fail
+echo.
+echo Packaging failed.
 exit /b 1
 
-:success
+:usage
+echo Usage: %~nx0 [Debug] [x64^|x86^|arm64] [with-npcap]
+echo Defaults: Release x64+x86 without Npcap DLLs
+echo Examples:
+echo   %~nx0
+echo   %~nx0 x64
+echo   %~nx0 with-npcap
+echo   %~nx0 Debug x64
 exit /b 0

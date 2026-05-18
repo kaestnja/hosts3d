@@ -20,7 +20,8 @@ Quick script builds:
     ./compile-hsen [Release|Debug]
     ./compile-mac-hosts3d [Release|Debug]
     ./package-release-linux [Release|Debug] [arm64|x64|x86]
-    compile-all-windows.bat [Release|Debug] [all|x86|x64|arm64] [--package] [public|with-npcap]
+    compile-all-windows.bat [Debug] [x86|x64|arm64] [with-npcap] [no-package]
+    package-all-windows.bat [Debug] [x86|x64|arm64] [with-npcap]
     compile-hosts3d.bat [Release|Debug] [x86|x64] [--no-pause]
     compile-hsen.bat [Release|Debug] [x86|x64] [--no-pause]
 
@@ -78,12 +79,14 @@ Codex note:
     The interactive MSYS2 installer itself should still be started by the user.
 
 Windows packaging note:
-    Use compile-all-windows.bat Release --package to build Hosts3D and hsen for
-    both x64 and x86, then create both public Windows ZIPs in one run.
-    package-release-windows.bat defaults to a public ZIP without Packet.dll and wpcap.dll.
+    Normal Windows release flow is one command:
+        compile-all-windows.bat
+    It builds Hosts3D and hsen for x64 and x86, then creates both default
+    Windows ZIPs without Packet.dll and wpcap.dll.
     Use:
-        package-release-windows.bat Release x64 with-npcap
-    when you want a private/local test ZIP that carries the Npcap runtime DLLs.
+        compile-all-windows.bat with-npcap
+    when you want private/local test ZIPs that carry the Npcap runtime DLLs.
+    Use package-all-windows.bat directly only to repackage already-built runtimes.
     The staged release package now keeps its files flat in the package root:
         README.md
         README-runtime-windows.md

@@ -190,10 +190,16 @@ build\sarif\clang-tidy.sarif
 
 Open that file with a SARIF viewer to inspect warnings inline. The output stays under `build/`, so generated reports are local build artifacts and are not committed.
 
-### Windows Packaging
-Build both Windows runtime pairs and create both public release ZIPs:
+### Windows Build and Packaging
+For the normal Windows release flow, use one command. It builds both Windows runtime pairs and creates both default release ZIPs:
 ```powershell
-.\compile-all-windows.bat Release --package
+.\compile-all-windows.bat
+```
+
+Use parameters only for special cases:
+```powershell
+.\compile-all-windows.bat x64 no-package
+.\compile-all-windows.bat with-npcap
 ```
 
 Optionally build the Net-SNMP command line helpers used by the SCALANCE mirror-check prototype:
@@ -201,16 +207,16 @@ Optionally build the Net-SNMP command line helpers used by the SCALANCE mirror-c
 .\compile-net-snmp-windows.bat C:\path\to\net-snmp
 ```
 
-This first ensures static OpenSSL inputs with vcpkg (`openssl:x64-windows-static` and `openssl:x86-windows-static`), copies them into the local ignored `third_party\openssl\windows\<arch>` layout, and then builds `snmpget.exe`, `snmpwalk.exe`, and `snmpset.exe` for `x64` and `x86` using MSVC and Net-SNMP's Win32 `nmake` build. The resulting tools are copied to `Release\windows\<arch>\`. If present there, `package-release-windows.bat` includes them in the flat release ZIP.
+This first ensures static OpenSSL inputs with vcpkg (`openssl:x64-windows-static` and `openssl:x86-windows-static`), copies them into the local ignored `third_party\openssl\windows\<arch>` layout, and then builds `snmpget.exe`, `snmpwalk.exe`, and `snmpset.exe` for `x64` and `x86` using MSVC and Net-SNMP's Win32 `nmake` build. The resulting tools are copied to `Release\windows\<arch>\`. If present there, the normal `compile-all-windows.bat` flow includes them in the flat release ZIPs.
 
-Create a public release ZIP without bundled Npcap DLLs:
+Repackage already-built Windows runtimes without rebuilding:
 ```powershell
-.\package-release-windows.bat Release x64
+.\package-all-windows.bat
 ```
 
-Create a private/local test ZIP that also carries `wpcap.dll` and `Packet.dll`:
+Create private/local test ZIPs from already-built runtimes that also carry `wpcap.dll` and `Packet.dll`:
 ```powershell
-.\package-release-windows.bat Release x64 with-npcap
+.\package-all-windows.bat with-npcap
 ```
 
 ### Linux Packaging
@@ -258,7 +264,7 @@ set "HSEN_IFACE=\Device\NPF_{E4ED794E-A66F-451C-851E-91226CD96BA4}"
 ### `hsen.exe` packet-capture DLLs
 - `wpcap.dll` and `Packet.dll` are copied from local `third_party` first.
 - If missing there, scripts can copy from installed Npcap system paths.
-- Public release ZIPs can be packaged without these DLLs; use a private/local `with-npcap` package only when you explicitly want to carry them for testing.
+- Default release ZIPs are packaged without these DLLs; use a private/local `with-npcap` package only when you explicitly want to carry them for testing.
 
 ### Optional Net-SNMP helper tools
 - `compile-net-snmp-windows.bat` builds `snmpget.exe`, `snmpwalk.exe`, and `snmpset.exe` from a separate Net-SNMP checkout.

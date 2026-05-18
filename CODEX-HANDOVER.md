@@ -66,13 +66,13 @@ There was no existing Codex-specific handover file before this one.
 
 - `compile-hosts3d.bat`
 - `compile-hsen.bat`
-- `compile-all-windows.bat`
+- `compile-all-windows.bat` is the normal Windows release command; it builds x64+x86 and packages both default ZIPs
 
 The build scripts now accept:
 
 - `compile-hosts3d.bat [Release|Debug] [x86|x64|arm64] [--no-pause]`
 - `compile-hsen.bat [Release|Debug] [x86|x64|arm64] [--no-pause]`
-- `compile-all-windows.bat [Release|Debug] [all|x64|x86|arm64] [--package|package] [public|with-npcap]`
+- `compile-all-windows.bat [Debug] [x64|x86|arm64] [with-npcap] [no-package]`
 
 Build safety note:
 
@@ -110,8 +110,8 @@ Important x64 note:
 - the required code fix was changing the legacy hashtable callback arg type from `long` to pointer-safe `HtArgType` (`intptr_t`) for Windows x64
 - `Release/windows/x64/Hosts3D.exe` has been smoke-tested: it starts and creates `hsd-data` in the x64 runtime dir
 - `Release/windows/x64/hsen.exe -l` works and lists interfaces
-- `package-release-windows.bat Release x64` now produces `Release/dist/hosts3d-1.18-windows-x64.zip`
-- `compile-all-windows.bat Release --package` builds Hosts3D and hsen for x64 and x86, then creates both public Windows ZIPs
+- `package-all-windows.bat x64` repackages the already-built x64 runtime into `Release/dist/hosts3d-1.18-windows-x64.zip`
+- `compile-all-windows.bat` builds Hosts3D and hsen for x64 and x86, then creates both default Windows ZIPs; use `compile-all-windows.bat with-npcap` for private/local test ZIPs with bundled Npcap DLLs
 - `compile-hosts3d.bat` now links `Hosts3D` against GLFW 3 and copies `glfw3.dll` from the selected MSYS2 toolchain into the runtime output
 
 ### GLFW 3 migration status
@@ -141,8 +141,8 @@ Important x64 note:
 The Windows build/package flow now keeps the runtime README visible automatically:
 
 - `compile-hosts3d.bat` and `compile-hsen.bat` copy `README-runtime-windows.md` into the runtime output directory
-- `package-release-windows.bat` includes both `README-runtime-windows.md` and `README.md` in the staged Windows release ZIP
-- `package-release-windows.bat` now defaults to a public ZIP without `wpcap.dll` and `Packet.dll`
+- `package-all-windows.bat` includes both `README-runtime-windows.md` and `README.md` in the staged Windows release ZIPs
+- `package-all-windows.bat` is mainly for repackaging already-built runtimes; normal release use should go through `compile-all-windows.bat`
 - `package-release-linux` creates `Release/dist/hosts3d-<version>-linux-<arch>.tar.gz` plus SHA256 from the already-built Linux runtime
 - runtime binaries under `Release/` and `Debug/` are now treated as local build outputs, not as Git-tracked release artifacts
 - use `with-npcap` only for private/local test packages when you explicitly want those DLLs carried in the ZIP
@@ -285,10 +285,8 @@ For future tagged releases, use the package/assets model instead of relying on t
 Recommended order:
 
 - verify the repo is clean and the version in `src/version.h` matches the intended release
-- build Windows runtimes:
-  - `compile-all-windows.bat Release`
-- create Windows release assets:
-  - `compile-all-windows.bat Release --package`
+- build Windows runtimes and create Windows release assets:
+  - `compile-all-windows.bat`
 - on the Raspberry Pi / Linux arm64 build machine:
   - `git pull --ff-only`
   - `./compile-hosts3d Release`
@@ -338,7 +336,7 @@ Minimum required sweep areas:
 - build/package/install files:
   - `compile-*.bat`
   - `compile-*`
-  - `package-release-windows.bat`
+  - `package-all-windows.bat`
   - `Makefile.am` / `Makefile.in`
   - `configure.ac` / generated `configure`
   - `man/*.1`

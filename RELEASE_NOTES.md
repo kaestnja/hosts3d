@@ -14,7 +14,7 @@ upstream history in one place.
 - Window creation, event callbacks, scroll handling, cursor motion, and buffer swaps now use the GLFW 3 API.
 - GUI text entry no longer relies on GLFW 2 ASCII-style key callbacks; printable input now comes from the GLFW 3 character callback.
 - Windows build scripts now use the installed MSYS2 GLFW 3 packages and copy `glfw3.dll` into the runtime output.
-- `compile-all-windows.bat` now builds both Windows runtime pairs in one command and can optionally package them.
+- `compile-all-windows.bat` now builds both Windows runtime pairs and creates the default Windows release ZIPs in one command.
 - Linux/macOS/autotools build metadata has been updated to use GLFW 3 headers and libraries.
 - Windows packaging now includes `glfw3.dll` instead of the old `glfw.dll`.
 
@@ -50,7 +50,7 @@ upstream history in one place.
 - Most mode/toggle rows in the top-right OSD can now be clicked directly to cycle them, in addition to the existing keyboard shortcuts and menu entries.
 - Newly written `.hnl` layout files now use a versioned `HN2` format; older incompatible `0network.hnl` files are skipped cleanly with a warning instead of blocking startup, and a new compatible layout is written on exit.
 - `netpos.txt` exact `/32` rules now override broader matching nets, and `hold` can now be combined with a colour token such as `green hold`.
-- Windows packaging now supports a public ZIP without bundled Npcap DLLs, plus an optional `with-npcap` package for local/private testing.
+- Windows packaging now defaults to ZIPs without bundled Npcap DLLs, plus an optional `with-npcap` package for local/private testing.
 
 ### Notes
 - Packet colours still indicate protocol family.
