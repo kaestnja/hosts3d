@@ -87,6 +87,7 @@ Windows packaging note:
         compile-all-windows.bat with-npcap
     when you want private/local test ZIPs that carry the Npcap runtime DLLs.
     Use package-all-windows.bat directly only to repackage already-built runtimes.
+    Debug packages use a -debug suffix so they do not overwrite release ZIPs.
     The staged release package now keeps its files flat in the package root:
         README.md
         README-runtime-windows.md

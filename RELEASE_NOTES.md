@@ -17,6 +17,7 @@ upstream history in one place.
 - `compile-all-windows.bat` now builds both Windows runtime pairs and creates the default Windows release ZIPs in one command.
 - Linux/macOS/autotools build metadata has been updated to use GLFW 3 headers and libraries.
 - Windows packaging now includes `glfw3.dll` instead of the old `glfw.dll`.
+- Debug Windows packages use a `-debug` suffix so they do not overwrite release ZIPs.
 
 ### Notes
 - Existing rendering remains on the current OpenGL fixed-function path; this release updates the windowing/input/runtime layer, not the renderer architecture.

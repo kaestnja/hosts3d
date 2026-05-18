@@ -4,6 +4,7 @@ rem Defaults to Release x64+x86 without Packet.dll/wpcap.dll.
 rem Uses the already-built runtime from Release\windows\<arch>.
 rem Normal release flow uses compile-all-windows.bat, which calls this script after building.
 rem Use this script directly only to repackage already-built runtimes.
+rem Debug packages use a -debug suffix to avoid overwriting release ZIPs.
 rem Examples: package-all-windows.bat
 rem           package-all-windows.bat with-npcap
 setlocal EnableExtensions
@@ -54,6 +55,7 @@ set "ARCH=%~1"
 set "RUNDIR=%CONFIG%\windows\%ARCH%"
 set "DISTDIR=Release\dist"
 set "PKGNAME=hosts3d-%VERSION%-windows-%ARCH%"
+if /I "%CONFIG%"=="Debug" set "PKGNAME=%PKGNAME%-debug"
 if "%INCLUDE_NPCAP%"=="1" set "PKGNAME=%PKGNAME%-with-npcap"
 set "STAGEDIR=%DISTDIR%\%PKGNAME%"
 set "ZIPPATH=%DISTDIR%\%PKGNAME%.zip"

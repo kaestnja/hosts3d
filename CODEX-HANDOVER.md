@@ -143,6 +143,7 @@ The Windows build/package flow now keeps the runtime README visible automaticall
 - `compile-hosts3d.bat` and `compile-hsen.bat` copy `README-runtime-windows.md` into the runtime output directory
 - `package-all-windows.bat` includes both `README-runtime-windows.md` and `README.md` in the staged Windows release ZIPs
 - `package-all-windows.bat` is mainly for repackaging already-built runtimes; normal release use should go through `compile-all-windows.bat`
+- Debug Windows packages use a `-debug` suffix so they do not overwrite release ZIPs
 - `package-release-linux` creates `Release/dist/hosts3d-<version>-linux-<arch>.tar.gz` plus SHA256 from the already-built Linux runtime
 - runtime binaries under `Release/` and `Debug/` are now treated as local build outputs, not as Git-tracked release artifacts
 - use `with-npcap` only for private/local test packages when you explicitly want those DLLs carried in the ZIP

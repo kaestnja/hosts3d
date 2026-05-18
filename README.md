@@ -214,6 +214,11 @@ Repackage already-built Windows runtimes without rebuilding:
 .\package-all-windows.bat
 ```
 
+Debug packages are named with a `-debug` suffix:
+```powershell
+.\package-all-windows.bat Debug
+```
+
 Create private/local test ZIPs from already-built runtimes that also carry `wpcap.dll` and `Packet.dll`:
 ```powershell
 .\package-all-windows.bat with-npcap
