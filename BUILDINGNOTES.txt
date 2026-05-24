@@ -63,6 +63,9 @@ Windows MSYS2 bootstrap:
         C:\msys64\usr\bin\bash -lc "pacman -Syu --noconfirm"
         C:\msys64\usr\bin\bash -lc "pacman -S --needed --noconfirm mingw-w64-i686-gcc mingw-w64-i686-binutils mingw-w64-i686-glfw make"
         C:\msys64\usr\bin\bash -lc "pacman -S --needed --noconfirm mingw-w64-x86_64-gcc mingw-w64-x86_64-binutils mingw-w64-x86_64-glfw make"
+    If the first pacman update replaces MSYS2 core packages such as
+    msys2-runtime, bash, or pacman, close all MSYS2 shells and run
+    the pacman -Syu command once more before installing toolchain packages.
 
 Windows x64 note:
     x64 builds need an x64 MinGW compiler.

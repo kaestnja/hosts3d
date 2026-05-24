@@ -98,6 +98,7 @@ Windows bootstrap note for future Codex sessions:
   - `C:\msys64\usr\bin\bash -lc "pacman -Syu --noconfirm"`
   - `C:\msys64\usr\bin\bash -lc "pacman -S --needed --noconfirm mingw-w64-i686-gcc mingw-w64-i686-binutils mingw-w64-i686-glfw make"`
   - `C:\msys64\usr\bin\bash -lc "pacman -S --needed --noconfirm mingw-w64-x86_64-gcc mingw-w64-x86_64-binutils mingw-w64-x86_64-glfw make"`
+- if the first `pacman -Syu` updates MSYS2 core packages such as `msys2-runtime`, `bash`, or `pacman`, close all MSYS2 shells and run the `pacman -Syu` command once more before installing toolchain packages
 - the interactive MSYS2 installer itself is better launched by the user than assumed by automation
 
 Important x64 note:
