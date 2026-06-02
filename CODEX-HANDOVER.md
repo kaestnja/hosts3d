@@ -57,6 +57,10 @@ These files already existed before this handover and remain important:
   - repo-local markdown lint relaxations
 - `.vscode/c_cpp_properties.json`
   - VS Code IntelliSense configuration for the current MinGW32 Windows setup
+- `Tools/Find-InvalidTextBytes.ps1`
+  - strict text/path byte scanner for repository hygiene checks
+- `Tools/Repair-InvalidTextBytes.ps1`
+  - conservative byte-level repair helper for known unsafe text sequences
 
 There was no existing Codex-specific handover file before this one.
 
@@ -420,6 +424,35 @@ Keep in mind:
 - if a future startup-time resync is added again, guard it against the pre-thread state rather than waiting blindly on `goHosts`
 
 Do not accidentally reintroduce tracked runtime artifacts.
+
+### Text hygiene tools
+
+Use the repository text byte helpers before commits that touch scripts,
+documentation, generated text rules, or copied upstream text:
+
+```powershell
+pwsh -NoProfile -ExecutionPolicy Bypass -File "Tools\Find-InvalidTextBytes.ps1" -Root "." -TrackedOnly
+pwsh -NoProfile -ExecutionPolicy Bypass -File "Tools\Repair-InvalidTextBytes.ps1" -Root "." -TrackedOnly -DryRun
+```
+
+Current policy:
+
+- text files and repository path names are ASCII-only by default
+- German umlauts and eszett are allowed by the scanner unless
+  `$ProcessGermanUmlauts` is enabled, but new project text should still prefer
+  `ae`, `oe`, `ue`, and `ss`
+- there is no Hosts3D-specific exception for degree/Celsius symbols, brand
+  marks, radio play markers, or similar decorative Unicode
+- `Find-InvalidTextBytes.ps1` reports findings and exits with code `1`
+- `Repair-InvalidTextBytes.ps1` should be previewed with `-DryRun` before any
+  write; it only applies explicit safe replacements such as smart quotes,
+  typographic dashes, arrows, no-break spaces, soft hyphens, zero-width
+  characters, and bidirectional control characters
+- the repair helper preserves unknown valid UTF-8 sequences instead of damaging
+  them through single-byte CP1252 replacement rules; the scanner still reports
+  those sequences as findings unless a narrow exception is deliberately added
+- both helpers support `-Json` for automation and use `-TrackedOnly` for normal
+  commit checks
 
 ### Line endings
 
