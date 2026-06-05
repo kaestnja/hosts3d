@@ -97,6 +97,20 @@ function Write-ScriptBanner {
     Write-ConsoleLine ("Mode: {0}" -f ($modeParts -join ', ')) -Level Muted
 }
 
+function Get-RelativePathCompat {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$BasePath,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Path
+    )
+
+    $baseUri = New-Object System.Uri (($BasePath.TrimEnd('\', '/') + [System.IO.Path]::DirectorySeparatorChar))
+    $pathUri = New-Object System.Uri $Path
+    return [System.Uri]::UnescapeDataString($baseUri.MakeRelativeUri($pathUri).ToString()).Replace('/', [System.IO.Path]::DirectorySeparatorChar)
+}
+
 # Set to $true if German umlauts and eszett should be reported as findings.
 $ProcessGermanUmlauts = $false
 
@@ -477,7 +491,7 @@ else {
 }
 
 $scannedFiles = @($files | Where-Object {
-    $relative = [System.IO.Path]::GetRelativePath($rootPath, $_.FullName)
+    $relative = Get-RelativePathCompat $rootPath $_.FullName
     $parts = $relative -split '[\\/]'
     foreach ($part in $parts) {
         if ($skipDirs.Contains($part)) {
@@ -495,7 +509,7 @@ if (-not $Json) {
 $pathIndex = 0
 $pathTotal = $scannedFiles.Count
 $pathFindings = foreach ($file in $scannedFiles) {
-    $relative = [System.IO.Path]::GetRelativePath($rootPath, $file.FullName)
+    $relative = Get-RelativePathCompat $rootPath $file.FullName
     $pathIndex++
     if (-not $Json -and $pathTotal -gt 0) {
         Write-Progress `
@@ -519,7 +533,7 @@ if (-not $Json) {
 $fileIndex = 0
 $fileTotal = $files.Count
 $findings = foreach ($file in $files) {
-    $relativePath = [System.IO.Path]::GetRelativePath($rootPath, $file.FullName)
+    $relativePath = Get-RelativePathCompat $rootPath $file.FullName
     $fileIndex++
     if (-not $Json -and $fileTotal -gt 0) {
         Write-Progress `
