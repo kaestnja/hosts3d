@@ -3,6 +3,20 @@
 This file collects the continuation release history and the preserved legacy
 upstream history in one place.
 
+## Hosts3D 1.19
+
+### Highlights
+- Added a main-scene controller that switches between the existing host-traffic scene and a new switch-topology scene.
+- Added `F9`, an OSD `Main Scene` row, and menu entries for switching scenes without disturbing the existing host traffic view.
+- Kept the current host/packet/link scene as the default scene and render path.
+- Added an initial switch-topology render path with a two-row switch-port bank, host cubes, host-to-port lines, and mirror role coloring.
+- Added a first text data source for the switch scene: `hsd-data/switch-topology.txt`.
+- The switch scene builds and refreshes its own topology snapshot while it is displayed, combining file-provided switch data with currently observed Hosts3D hosts.
+
+### Notes
+- This release starts the runtime architecture needed for switch visualization. Controlled switch management remains intentionally separate.
+- The first switch topology file format is deliberately simple text so future SNMP/Web helpers can generate it without binding the main application to one parser or one switch model.
+
 ## Hosts3D 1.18
 
 ### Highlights

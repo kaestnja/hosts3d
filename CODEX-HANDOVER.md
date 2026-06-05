@@ -14,14 +14,14 @@ Use this file to recover:
 
 ## Current State
 
-- Current working version: `1.18`
+- Current working version: `1.19`
 - Version source of truth: `src/version.h`
 - Preferred Windows target in daily use: `Release/windows/x64` when it builds and runs cleanly
 - Default Windows build expectation for Codex sessions: build both `Release/windows/x64` and `Release/windows/x86` when possible
 - Fallback rule: prefer `x64`; only fall back to `x86` as the primary runtime target when `x64` shows build, startup, or runtime problems
 - Build toolchains now available on Windows: `MSYS2/MinGW32` and `MSYS2/MinGW64`
 - The project is already in productive use; changes should stay pragmatic and low-risk
-- `master` is now the active GLFW 3 / `1.18` mainline
+- `master` is now the active GLFW 3 / `1.19` mainline
 
 ## Existing Reference Files
 
@@ -115,7 +115,7 @@ Important x64 note:
 - the required code fix was changing the legacy hashtable callback arg type from `long` to pointer-safe `HtArgType` (`intptr_t`) for Windows x64
 - `Release/windows/x64/Hosts3D.exe` has been smoke-tested: it starts and creates `hsd-data` in the x64 runtime dir
 - `Release/windows/x64/hsen.exe -l` works and lists interfaces
-- `package-all-windows.bat x64` repackages the already-built x64 runtime into `Release/dist/hosts3d-1.18-windows-x64.zip`
+- `package-all-windows.bat x64` repackages the already-built x64 runtime into `Release/dist/hosts3d-1.19-windows-x64.zip`
 - `compile-all-windows.bat` builds Hosts3D and hsen for x64 and x86, then creates both default Windows ZIPs; use `compile-all-windows.bat with-npcap` for private/local test ZIPs with bundled Npcap DLLs
 - `compile-hosts3d.bat` now links `Hosts3D` against GLFW 3 and copies `glfw3.dll` from the selected MSYS2 toolchain into the runtime output
 
@@ -130,7 +130,7 @@ Important x64 note:
 ### macOS helper status
 
 - `compile-mac-hosts3d` is still present as a helper script
-- the current `1.18` sources have not been recently verified on a real macOS machine
+- the current `1.19` sources have not been recently verified on a real macOS machine
 - future Codex sessions should not present the macOS build path as fully verified unless it has been tested on macOS again
 - the script itself now warns and pauses for confirmation before continuing with a manual local build
 

@@ -1,4 +1,4 @@
-# Hosts3D 1.18
+# Hosts3D 1.19
 
 > 3D Real-Time Network Monitor (legacy project, modernized build workflow)  
 > Original upstream release: 10 May 2011, Del Castle
@@ -29,6 +29,15 @@ Current planning notes for capture and sensor-management work live in separate M
 - `scalance_xr328_snmp_mirroring_abfrage.md`: device-specific SNMP mirroring discovery and later management plan for the Siemens SCALANCE XR328-4C WG.
 
 The first experimental device-specific helper is `scripts/scalance_xr328_mirror_check.py`. It shells out to Net-SNMP (`snmpget`/`snmpwalk`) and emits JSON; it is intended as an initial diagnostic contract before any Hosts3D UI integration or controlled switch-management work.
+
+Hosts3D 1.19 starts the runtime-side integration with a main-scene controller. Press `F9`, click the OSD `Main Scene` row, or use `View` / `Show Switch Topology Scene` to switch between the existing host-traffic scene and the new switch-topology scene. The switch scene reads an optional `hsd-data/switch-topology.txt` file while it is displayed. The first text format supports lines such as:
+
+```text
+switch name=sw6248xr328 ports=28
+port id=1 name=P0.1 role=egress dest=6 up=1
+port id=6 name=P0.6 role=destination up=1
+host ip=192.168.6.10 mac=00:11:22:33:44:55 port=1 label=plc-01
+```
 
 ## Quick Start
 If your main goal is to get the project running again, use this order:
@@ -87,7 +96,7 @@ Alternative manual build commands:
 ```
 
 ### macOS (helper script present, but not recently verified)
-The macOS helper script is still kept in the repository, but the current `1.18`
+The macOS helper script is still kept in the repository, but the current `1.19`
 sources have not been recently verified on a real macOS machine.
 
 Use this path as a best-effort starting point, not as a guaranteed tested build.
