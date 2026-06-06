@@ -48,6 +48,8 @@ These files already existed before this handover and remain important:
   - documents the local Net-SNMP/OpenSSL build inputs and the verified dependency profile for the generated tools
 - `Tools/Stage-RuntimePayload.ps1`
   - single Windows runtime payload staging step for both local `Release/windows/<arch>` test folders and staged dist packages; keep SNMP helpers in the central `Tools/snmp/` runtime subfolder
+- `Tools/Hosts3D-DevTools.ps1`
+  - Codex/local dev helper for robust PowerShell-driven batch, MSYS2, GDB, VS Code extension, debug, artifact, and line-ending checks; prefer this helper for complex nested shell tasks
 - `testing/sim-hsen.ps1`
   - preferred synthetic packet sender for Windows visualization tests; now includes focused TCP/ICMP/ARP/discovery modes, optional wide host spread, and `CenterIp`
 - `testing/sim-hsen.py`
@@ -80,6 +82,23 @@ The build scripts now accept:
 - `compile-hosts3d.bat [Release|Debug] [x86|x64|arm64] [--no-pause]`
 - `compile-hsen.bat [Release|Debug] [x86|x64|arm64] [--no-pause]`
 - `compile-all-windows.bat [Debug] [x64|x86|arm64] [with-npcap] [no-package]`
+
+Codex shell convention:
+
+- PowerShell 7 (`pwsh`) is the normal control shell for Codex work in this repo
+- `.bat` files remain valid user-facing entry points, but Codex should run them deliberately through `cmd.exe /d /c call ...`; use `Tools/Hosts3D-DevTools.ps1` for common cases instead of composing fragile nested quote chains
+- use MSYS2/Bash only for MSYS2-native work such as `pacman`, MinGW shell probes, or POSIX build scripts
+- do not solve quoting problems by forbidding tools; prefer helper functions that make PowerShell, cmd.exe, and MSYS2 boundaries explicit
+
+Useful helper examples:
+
+```powershell
+pwsh -NoProfile -File Tools/Hosts3D-DevTools.ps1 -Task CheckAll
+pwsh -NoProfile -File Tools/Hosts3D-DevTools.ps1 -Task BuildHosts3D -Config Debug -Arch x64
+pwsh -NoProfile -File Tools/Hosts3D-DevTools.ps1 -Task BuildAllWindows
+pwsh -NoProfile -File Tools/Hosts3D-DevTools.ps1 -Task PackageWindows -Arch x64 -WithNpcap
+pwsh -NoProfile -File Tools/Hosts3D-DevTools.ps1 -Task PacmanInstall -Packages mingw-w64-x86_64-gdb,mingw-w64-i686-gdb
+```
 
 Build safety note:
 
@@ -209,7 +228,7 @@ Required debugger packages:
 Install the GDB packages on another Windows machine with MSYS2:
 
 ```powershell
-pwsh -NoProfile -Command "& 'C:/msys64/usr/bin/bash.exe' -lc 'pacman -S --needed --noconfirm mingw-w64-x86_64-gdb mingw-w64-i686-gdb'"
+pwsh -NoProfile -File Tools/Hosts3D-DevTools.ps1 -Task PacmanInstall -Packages mingw-w64-x86_64-gdb,mingw-w64-i686-gdb
 ```
 
 If `pacman` appears to run longer than the Codex command timeout, check whether it is still active before retrying:
@@ -230,16 +249,16 @@ Build script debug behavior:
 Useful validation commands:
 
 ```powershell
-pwsh -NoProfile -Command "./compile-hosts3d.bat Debug x64 --no-pause"
-pwsh -NoProfile -Command "./compile-hosts3d.bat Debug x86 --no-pause"
-pwsh -NoProfile -Command "./compile-hsen.bat Debug x64 --no-pause"
-pwsh -NoProfile -Command "./compile-hsen.bat Debug x86 --no-pause"
+pwsh -NoProfile -File Tools/Hosts3D-DevTools.ps1 -Task BuildHosts3D -Config Debug -Arch x64
+pwsh -NoProfile -File Tools/Hosts3D-DevTools.ps1 -Task BuildHosts3D -Config Debug -Arch x86
+pwsh -NoProfile -File Tools/Hosts3D-DevTools.ps1 -Task BuildHsen -Config Debug -Arch x64
+pwsh -NoProfile -File Tools/Hosts3D-DevTools.ps1 -Task BuildHsen -Config Debug -Arch x86
 ```
 
 Check that GDB sees source/debug information:
 
 ```powershell
-pwsh -NoProfile -Command "& 'C:/msys64/mingw64/bin/gdb.exe' --batch -ex 'file Debug/windows/x64/Hosts3D.exe' -ex 'info sources'"
+pwsh -NoProfile -File Tools/Hosts3D-DevTools.ps1 -Task GdbFile -Arch x64 -Program Debug/windows/x64/Hosts3D.exe
 ```
 
 Check JSON validity for VS Code files:
@@ -605,6 +624,7 @@ Minimum required sweep areas:
   - `compile-*`
   - `package-all-windows.bat`
   - `Tools/Stage-RuntimePayload.ps1`
+  - `Tools/Hosts3D-DevTools.ps1`
   - `Makefile.am` / `Makefile.in`
   - `configure.ac` / generated `configure`
   - `man/*.1`

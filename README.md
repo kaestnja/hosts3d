@@ -124,6 +124,12 @@ C:\msys64\usr\bin\bash -lc "pacman -S --needed --noconfirm mingw-w64-i686-gcc mi
 C:\msys64\usr\bin\bash -lc "pacman -S --needed --noconfirm mingw-w64-x86_64-gcc mingw-w64-x86_64-binutils mingw-w64-x86_64-glfw make"
 ```
 
+For Codex-driven setup work, prefer the repo helper when commands would otherwise need nested PowerShell/cmd/MSYS2 quoting:
+```powershell
+pwsh -NoProfile -File Tools/Hosts3D-DevTools.ps1 -Task CheckAll
+pwsh -NoProfile -File Tools/Hosts3D-DevTools.ps1 -Task PacmanInstall -Packages mingw-w64-x86_64-gdb,mingw-w64-i686-gdb
+```
+
 ```powershell
 $env:Path = "C:\msys64\mingw32\bin;$env:Path"
 g++ --version
@@ -203,6 +209,11 @@ Open that file with a SARIF viewer to inspect warnings inline. The output stays 
 For the normal Windows release flow, use one command. It builds both Windows runtime pairs and creates both default release ZIPs:
 ```powershell
 .\compile-all-windows.bat
+```
+
+Codex may use the PowerShell helper for the same task when robust shell dispatch is useful:
+```powershell
+pwsh -NoProfile -File Tools/Hosts3D-DevTools.ps1 -Task BuildAllWindows
 ```
 
 Use parameters only for special cases:

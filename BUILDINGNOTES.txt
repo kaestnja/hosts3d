@@ -80,6 +80,10 @@ Codex note:
     A future Codex session can usually run the pacman/package commands above if MSYS2
     is already installed at C:\msys64.
     The interactive MSYS2 installer itself should still be started by the user.
+    Prefer PowerShell as the control shell. Run .bat files deliberately through
+    cmd.exe /d /c, and use MSYS2/Bash only for MSYS2-native work such as pacman.
+    Tools/Hosts3D-DevTools.ps1 wraps the common cases so Codex can avoid fragile
+    nested quoting and shell-switching command strings.
 
 Windows packaging note:
     Normal Windows release flow is one command:
@@ -89,6 +93,8 @@ Windows packaging note:
     Use:
         compile-all-windows.bat with-npcap
     when you want private/local test ZIPs that carry the Npcap runtime DLLs.
+    Codex can call the same flow through:
+        pwsh -NoProfile -File Tools/Hosts3D-DevTools.ps1 -Task BuildAllWindows
     Use package-all-windows.bat directly only to repackage already-built runtimes.
     Both commands use Tools/Stage-RuntimePayload.ps1 as the single Windows
     payload staging step, so Release/windows/<arch> and the staged dist folder
