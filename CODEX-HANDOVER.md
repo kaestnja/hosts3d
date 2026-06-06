@@ -255,6 +255,36 @@ Manual VS Code flow:
    - `sceneViewToggle()`
    - `switchTopologySceneDraw()`
 
+VS Code extension setup for another machine:
+
+- Required extension for the `cppdbg` launch configurations:
+  - `ms-vscode.cpptools`
+- Check whether the VS Code CLI is available:
+
+```powershell
+pwsh -NoProfile -Command "Get-Command code -ErrorAction SilentlyContinue"
+```
+
+- Check whether the C/C++ extension is installed:
+
+```powershell
+pwsh -NoProfile -Command "code --list-extensions | Select-String -SimpleMatch 'ms-vscode.cpptools'"
+```
+
+- Install it if missing:
+
+```powershell
+pwsh -NoProfile -Command "code --install-extension ms-vscode.cpptools"
+```
+
+- If `code` is not in PATH, try the default Windows CLI path:
+
+```powershell
+pwsh -NoProfile -Command "& 'C:\Program Files\Microsoft VS Code\bin\code.cmd' --install-extension ms-vscode.cpptools"
+```
+
+Codex on another machine should install this extension when it is missing and the user has allowed local tool setup. If the VS Code CLI is unavailable, ask the user to install the Microsoft C/C++ extension manually from the VS Code Extensions view.
+
 Codex setup checklist for another Windows machine:
 
 1. Prefer `pwsh` over legacy `powershell` for commands.
@@ -262,9 +292,10 @@ Codex setup checklist for another Windows machine:
 3. Verify `C:\msys64\mingw64\bin\g++.exe` and `C:\msys64\mingw32\bin\g++.exe`.
 4. Install GDB packages if missing.
 5. Verify `C:\msys64\mingw64\bin\gdb.exe` and `C:\msys64\mingw32\bin\gdb.exe`.
-6. Build `Debug x64` and `Debug x86` once.
-7. Run the JSON validity check above.
-8. Start `Debug Hosts3D x64` from VS Code and confirm breakpoints bind.
+6. Verify/install VS Code extension `ms-vscode.cpptools`.
+7. Build `Debug x64` and `Debug x86` once.
+8. Run the JSON validity check above.
+9. Start `Debug Hosts3D x64` from VS Code and confirm breakpoints bind.
 
 ## Major Functional State Already Implemented
 
