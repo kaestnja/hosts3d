@@ -212,6 +212,56 @@ Current Windows debug setup:
 - Verified `clang-tidy` path: `C:\msys64\mingw64\bin\clang-tidy.exe`
 - `C:\msys64\mingw64\bin` has been added to the user PATH; already-running shells may need a restart to inherit it.
 
+### Static Analysis / clang-tidy
+
+Use `clang-tidy` for local static-analysis sweeps and SARIF output that VS Code can show inline.
+
+Current Windows setup:
+
+- package source: MSYS2 MinGW64
+- package name: `mingw-w64-x86_64-clang-tools-extra`
+- verified executable: `C:\msys64\mingw64\bin\clang-tidy.exe`
+- verified version: LLVM `22.1.3`
+- user PATH should include: `C:\msys64\mingw64\bin`
+
+Install on another Windows machine after MSYS2 exists:
+
+```powershell
+pwsh -NoProfile -File Tools/Hosts3D-DevTools.ps1 -Task PacmanInstall -Packages mingw-w64-x86_64-clang-tools-extra
+```
+
+If the package installs but the current shell still cannot resolve `clang-tidy`, restart the shell or add the path to the current process:
+
+```powershell
+$env:Path = "$env:Path;C:\msys64\mingw64\bin"
+```
+
+The repo helpers also search common install locations directly, so they should work before a newly added user PATH is inherited by already-running shells:
+
+- `C:\msys64\mingw64\bin\clang-tidy.exe`
+- `C:\msys64\ucrt64\bin\clang-tidy.exe`
+- `C:\msys64\clang64\bin\clang-tidy.exe`
+- `C:\Program Files\LLVM\bin\clang-tidy.exe`
+
+Verify:
+
+```powershell
+pwsh -NoProfile -File Tools/Hosts3D-DevTools.ps1 -Task CheckTools
+clang-tidy --version
+```
+
+Run the SARIF sweep:
+
+```powershell
+pwsh -NoProfile -File Tools/Hosts3D-DevTools.ps1 -Task RunClangTidySarif
+```
+
+Expected output:
+
+- `build\sarif\clang-tidy.sarif`
+- generated SARIF and other files under `build/` stay local and are not committed
+- the most recent local run wrote `116` result(s); treat the exact count as diagnostic state, not a release gate by itself
+
 VS Code debug files now live in the repository:
 
 - `.vscode/launch.json`
