@@ -300,8 +300,11 @@ Use this intent:
 - Prefer installing missing, standard Microsoft VS Code debug extensions through the `code` CLI when available.
 - Prefer `pwsh` over legacy Windows PowerShell for setup commands.
 - If a VS Code command id, extension behavior, or current best practice is uncertain, research current official VS Code/Microsoft documentation before changing user settings.
-- Do not overwrite existing user settings wholesale. Read existing JSON, preserve unrelated settings, and only add or adjust the needed debug-related entries.
+- Do not blindly overwrite existing user settings wholesale. Read existing JSON/JSONC, assess whether relevant debug settings are missing, duplicated, stale, malformed, or counterproductive, and improve them when needed.
+- Preserve unrelated good settings, but fix clearly broken or harmful settings when they affect debugging, language tooling, terminal behavior, interpreter selection, or VS Code command routing.
+- Before making broad user-settings changes, create a timestamped backup or show a compact diff plan. For narrow, obvious fixes, make a minimal targeted edit and report it.
 - If a file contains JSON with comments, use VS Code-friendly JSONC handling or make a careful minimal edit instead of destructive reformatting.
+- Prefer merging and normalizing settings over accumulating duplicate launch entries, conflicting terminal profiles, or obsolete extension-specific settings.
 
 Recommended discovery steps:
 
@@ -376,6 +379,21 @@ Possible global user `launch` entries, if the user wants generic single-file F5 
 ```
 
 Be careful: VS Code may still ask the user to choose a debug configuration when multiple applicable configurations exist. If the user wants fewer prompts, prefer one sensible default per language and avoid adding many near-duplicate global configurations.
+
+User settings review:
+
+- Inspect relevant user and workspace settings before adding new ones.
+- Look especially for:
+  - duplicate or stale global `launch.configurations`
+  - wrong debugger types such as old Python debug adapter names
+  - terminal profiles pointing to missing shells
+  - Python interpreter paths that no longer exist
+  - PowerShell extension settings that still force legacy Windows PowerShell when `pwsh` is available and preferred
+  - C/C++ configuration provider or compiler paths that point to missing toolchains
+  - keybindings that shadow `F5` or route it to an unrelated command
+- If existing settings are poorly written but unrelated to debugging, mention them separately instead of rewriting the user's whole VS Code profile.
+- If existing settings are poorly written and directly affect the requested debug workflow, fix them deliberately and explain the fix.
+- If multiple reasonable styles exist, choose the least surprising one: small, readable settings that preserve project-specific `.vscode/launch.json` behavior.
 
 Validation after setup:
 
