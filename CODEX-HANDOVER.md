@@ -335,6 +335,13 @@ Manual VS Code flow:
    - `sceneViewToggle()`
    - `switchTopologySceneDraw()`
 
+Switch topology scene notes:
+
+- host labels draw as compact blocks at each node: hostname/label, IP, MAC, and `port <id> <name>` when mapped
+- host-to-port mapping currently comes from `hsd-data/switch-topology.txt` lines with `host ... port=...`
+- without `switch-topology.txt`, the topology scene can show observed hosts, but it cannot infer their switch ports yet
+- automatic import from SCALANCE JSON/SNMP output into that topology file is still a future integration step
+
 VS Code extension setup for another machine:
 
 - Required extension for the `cppdbg` launch configurations:

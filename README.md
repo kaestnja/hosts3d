@@ -39,6 +39,8 @@ port id=6 name=P0.6 role=destination up=1
 host ip=192.168.6.10 mac=00:11:22:33:44:55 port=1 label=plc-01
 ```
 
+Hosts appear on a switch port only when the topology file supplies `port=...` for that host identity. The view then draws a connection line and a compact host label block with hostname/label, IP, MAC, and port. Without that file, Hosts3D can still show observed hosts in the topology scene, but it cannot infer their switch ports yet.
+
 ## Quick Start
 If your main goal is to get the project running again, use this order:
 

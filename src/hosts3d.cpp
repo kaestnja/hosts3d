@@ -543,6 +543,12 @@ struct switch_topology_host_type
   char ip[16], mac[18], label[64];
 };
 
+struct switch_topology_host_draw_type
+{
+  size_t index;
+  int lane, total;
+};
+
 struct switch_topology_state_type
 {
   bool initialized, fileLoaded;
@@ -3653,7 +3659,7 @@ static pos_type switchTopologyPortPos(const switch_topology_port_type *port)
   return pos;
 }
 
-static pos_type switchTopologyHostPos(const switch_topology_host_type *host, size_t index)
+static pos_type switchTopologyHostPos(const switch_topology_host_type *host, size_t index, int lane, int total)
 {
   pos_type pos;
   switch_topology_port_type *port = (host && host->port > 0 ? switchTopologyPort(host->port, false) : 0);
@@ -3661,7 +3667,12 @@ static pos_type switchTopologyHostPos(const switch_topology_host_type *host, siz
   {
     pos_type pp = switchTopologyPortPos(port);
     int row = switchTopologyPortRow(port);
-    int spread = (int)(index % 5) - 2;
+    double spread;
+    if (total < 1) total = 1;
+    if (lane < 0) lane = 0;
+    spread = ((double)lane - (((double)total - 1.0) / 2.0));
+    if (spread < -3.0) spread = -3.0;
+    if (spread > 3.0) spread = 3.0;
     pos.x = pp.x + (spread * (SPC / 2));
     pos.y = SPC;
     pos.z = pp.z + (row ? (5 * SPC) : (-5 * SPC));
@@ -3699,15 +3710,68 @@ static void switchTopologyDrawCube(pos_type pos, int list, double scale)
 
 static void switchTopologyDrawLabel(pos_type pos, const char *text, int yoff)
 {
+  size_t len;
+  double xoff;
   if (!text || !*text) return;
+  len = strlen(text);
+  if (len > 24) len = 24;
+  xoff = (double)len * 3.0;
   glColor3ub(white[0], white[1], white[2]);
-  glRasterPos3d(pos.x - 8.0, pos.y + yoff, pos.z);
+  glRasterPos3d(pos.x - xoff, pos.y + yoff, pos.z);
   GLWin.DrawString((const unsigned char *)text);
+}
+
+static void switchTopologyCompactText(const char *src, char *dst, size_t dstsz, size_t maxChars)
+{
+  size_t len, copyLen;
+  if (!dst || !dstsz) return;
+  dst[0] = '\0';
+  if (!src || !*src) return;
+  len = strlen(src);
+  if (!maxChars || len <= maxChars || (maxChars + 1 >= dstsz))
+  {
+    setStringValue(dst, dstsz, src);
+    return;
+  }
+  if (maxChars < 4) maxChars = 4;
+  copyLen = maxChars - 2;
+  if (copyLen >= dstsz) copyLen = dstsz - 1;
+  memcpy(dst, src, copyLen);
+  dst[copyLen] = '\0';
+  strncat(dst, "..", dstsz - strlen(dst) - 1);
+}
+
+static bool switchTopologySameText(const char *left, const char *right)
+{
+  return (left && right && *left && *right && strEqNoCase(left, right));
+}
+
+static void switchTopologyDrawHostLabels(const switch_topology_host_type *host, const switch_topology_port_type *port, pos_type pos)
+{
+  char line[4][72];
+  int lineCount = 0;
+  if (!host) return;
+  for (int cnt = 0; cnt < 4; cnt++) line[cnt][0] = '\0';
+  if (*host->label) switchTopologyCompactText(host->label, line[lineCount++], sizeof(line[0]), 22);
+  if (*host->ip && !switchTopologySameText(host->ip, host->label))
+    switchTopologyCompactText(host->ip, line[lineCount++], sizeof(line[0]), 22);
+  if (*host->mac && !switchTopologySameText(host->mac, host->label))
+    switchTopologyCompactText(host->mac, line[lineCount++], sizeof(line[0]), 22);
+  if (port && (lineCount < 4))
+  {
+    char portText[72];
+    snprintf(portText, sizeof(portText), "port %d %s", port->id, port->name);
+    switchTopologyCompactText(portText, line[lineCount++], sizeof(line[0]), 22);
+  }
+  for (int cnt = 0; cnt < lineCount; cnt++)
+    switchTopologyDrawLabel(pos, line[cnt], 18 - (cnt * 10));
 }
 
 static void switchTopologySceneDraw()
 {
   char label[128];
+  std::map<int, int> portTotals, portSeen;
+  std::vector<switch_topology_host_draw_type> hostDraw;
   switchTopologySceneRefresh(false);
   glCallList(objsDraw + 14);
   snprintf(label, sizeof(label), "%s | %u observed hosts | %u mapped | %s",
@@ -3745,14 +3809,34 @@ static void switchTopologySceneDraw()
     }
   }
 
+  hostDraw.reserve(switchTopologyState.hosts.size());
   for (size_t cnt = 0; cnt < switchTopologyState.hosts.size(); cnt++)
   {
-    switch_topology_host_type *host = &switchTopologyState.hosts[cnt];
-    pos_type hpos = switchTopologyHostPos(host, cnt);
+    int portId = switchTopologyState.hosts[cnt].port;
+    if (portId > 0) portTotals[portId]++;
+  }
+  for (size_t cnt = 0; cnt < switchTopologyState.hosts.size(); cnt++)
+  {
+    switch_topology_host_draw_type item;
+    int portId = switchTopologyState.hosts[cnt].port;
+    item.index = cnt;
+    item.lane = 0;
+    item.total = 1;
+    if (portId > 0)
+    {
+      item.lane = portSeen[portId]++;
+      item.total = portTotals[portId];
+    }
+    hostDraw.push_back(item);
+  }
+
+  for (size_t cnt = 0; cnt < hostDraw.size(); cnt++)
+  {
+    switch_topology_host_type *host = &switchTopologyState.hosts[hostDraw[cnt].index];
+    pos_type hpos = switchTopologyHostPos(host, cnt, hostDraw[cnt].lane, hostDraw[cnt].total);
     switch_topology_port_type *port = (host->port > 0 ? switchTopologyPort(host->port, false) : 0);
     switchTopologyDrawCube(hpos, objsDraw + (host->observed ? 4 : 6), 0.85);
-    switchTopologyDrawLabel(hpos, host->label, 14);
-    if (*host->mac) switchTopologyDrawLabel(hpos, host->mac, -16);
+    switchTopologyDrawHostLabels(host, port, hpos);
     if (port)
     {
       pos_type ppos = switchTopologyPortPos(port);
