@@ -162,8 +162,109 @@ The Windows build/package flow now keeps the runtime README visible automaticall
 The repository now contains:
 
 - `.vscode/c_cpp_properties.json`
+- `.vscode/tasks.json`
+- `.vscode/launch.json`
 
-This was added because VS Code IntelliSense was reporting many false missing-include errors even though the project built correctly.
+This was added because VS Code IntelliSense was reporting many false missing-include errors even though the project built correctly, and because the Windows MinGW builds are now directly debuggable from VS Code.
+
+## Debug
+
+Current Windows debug setup:
+
+- Use PowerShell 7 (`pwsh`) for Codex-driven shell work on this machine.
+- Verified `pwsh` path: `C:\Program Files\PowerShell\7\pwsh.exe`
+- Verified `pwsh` version: `7.6.2`
+- Git for Windows is installed.
+- Verified Git path: `C:\Program Files\Git\cmd\git.exe`
+- Verified Git version: `2.52.0.windows.1`
+- GitHub CLI (`gh`) was not present in Git for Windows or PATH on this machine.
+- If `gh` is needed on another machine, install it explicitly, for example:
+  - `winget install --id GitHub.cli --exact`
+  - expected default executable path: `C:\Program Files\GitHub CLI\gh.exe`
+
+VS Code debug files now live in the repository:
+
+- `.vscode/launch.json`
+  - `Debug Hosts3D x64`
+  - `Debug Hosts3D x86`
+  - `Debug hsen x64 - list interfaces`
+- `.vscode/tasks.json`
+  - `build Hosts3D Debug x64`
+  - `build Hosts3D Debug x86`
+  - `build hsen Debug x64`
+  - `build hsen Debug x86`
+- `.vscode/c_cpp_properties.json`
+  - includes both `Hosts3D Win32 MinGW` and `Hosts3D x64 MinGW`
+
+Required debugger packages:
+
+- `C:\msys64\mingw64\bin\gdb.exe`
+- `C:\msys64\mingw32\bin\gdb.exe`
+
+Install the GDB packages on another Windows machine with MSYS2:
+
+```powershell
+pwsh -NoProfile -Command "& 'C:/msys64/usr/bin/bash.exe' -lc 'pacman -S --needed --noconfirm mingw-w64-x86_64-gdb mingw-w64-i686-gdb'"
+```
+
+If `pacman` appears to run longer than the Codex command timeout, check whether it is still active before retrying:
+
+```powershell
+pwsh -NoProfile -Command "Get-Process pacman,bash -ErrorAction SilentlyContinue | Select-Object ProcessName,Id,CPU,StartTime"
+```
+
+Build script debug behavior:
+
+- `compile-hosts3d.bat Debug <arch> --no-pause` now uses `-g -O0 -DDEBUG`.
+- `compile-hsen.bat Debug <arch> --no-pause` now uses `-g -O0 -DDEBUG`.
+- Release builds still use `-O2`.
+- Debug outputs are written to:
+  - `Debug\windows\x64`
+  - `Debug\windows\x86`
+
+Useful validation commands:
+
+```powershell
+pwsh -NoProfile -Command "./compile-hosts3d.bat Debug x64 --no-pause"
+pwsh -NoProfile -Command "./compile-hosts3d.bat Debug x86 --no-pause"
+pwsh -NoProfile -Command "./compile-hsen.bat Debug x64 --no-pause"
+pwsh -NoProfile -Command "./compile-hsen.bat Debug x86 --no-pause"
+```
+
+Check that GDB sees source/debug information:
+
+```powershell
+pwsh -NoProfile -Command "& 'C:/msys64/mingw64/bin/gdb.exe' --batch -ex 'file Debug/windows/x64/Hosts3D.exe' -ex 'info sources'"
+```
+
+Check JSON validity for VS Code files:
+
+```powershell
+pwsh -NoProfile -Command 'foreach ($f in ".vscode/launch.json",".vscode/tasks.json",".vscode/c_cpp_properties.json") { $text = Get-Content $f -Raw; if (-not (Test-Json $text)) { throw "Invalid JSON: $f" }; "JSON OK: $f" }'
+```
+
+Manual VS Code flow:
+
+1. Open the repository folder in VS Code.
+2. Install/use the Microsoft C/C++ extension.
+3. Open `Run and Debug`.
+4. Choose `Debug Hosts3D x64` for the normal debug target.
+5. Press `F5`.
+6. Useful first breakpoints:
+   - `displayGL()`
+   - `sceneViewToggle()`
+   - `switchTopologySceneDraw()`
+
+Codex setup checklist for another Windows machine:
+
+1. Prefer `pwsh` over legacy `powershell` for commands.
+2. Verify `C:\msys64` exists and both MinGW toolchains are installed.
+3. Verify `C:\msys64\mingw64\bin\g++.exe` and `C:\msys64\mingw32\bin\g++.exe`.
+4. Install GDB packages if missing.
+5. Verify `C:\msys64\mingw64\bin\gdb.exe` and `C:\msys64\mingw32\bin\gdb.exe`.
+6. Build `Debug x64` and `Debug x86` once.
+7. Run the JSON validity check above.
+8. Start `Debug Hosts3D x64` from VS Code and confirm breakpoints bind.
 
 ## Major Functional State Already Implemented
 
