@@ -259,6 +259,10 @@ VS Code extension setup for another machine:
 
 - Required extension for the `cppdbg` launch configurations:
   - `ms-vscode.cpptools`
+- Commonly useful debug extensions for the general "open a file and press F5" workflow:
+  - `ms-vscode.powershell`
+  - `ms-python.python`
+  - `ms-python.debugpy`
 - Check whether the VS Code CLI is available:
 
 ```powershell
@@ -284,6 +288,106 @@ pwsh -NoProfile -Command "& 'C:\Program Files\Microsoft VS Code\bin\code.cmd' --
 ```
 
 Codex on another machine should install this extension when it is missing and the user has allowed local tool setup. If the VS Code CLI is unavailable, ask the user to install the Microsoft C/C++ extension manually from the VS Code Extensions view.
+
+### Codex instruction: prepare VS Code debug environments
+
+When the user asks something like "installiere mir alle noch fehlenden Debugumgebungen, wie im Handover beschrieben", do not run a blind setup script. Treat this as an environment-preparation task with verification.
+
+Use this intent:
+
+- Make VS Code able to debug common single-file scripts with as little manual chooser work as possible.
+- Keep C/C++ project debugging project-specific through checked-in `.vscode/launch.json` and `.vscode/tasks.json`.
+- Prefer installing missing, standard Microsoft VS Code debug extensions through the `code` CLI when available.
+- Prefer `pwsh` over legacy Windows PowerShell for setup commands.
+- If a VS Code command id, extension behavior, or current best practice is uncertain, research current official VS Code/Microsoft documentation before changing user settings.
+- Do not overwrite existing user settings wholesale. Read existing JSON, preserve unrelated settings, and only add or adjust the needed debug-related entries.
+- If a file contains JSON with comments, use VS Code-friendly JSONC handling or make a careful minimal edit instead of destructive reformatting.
+
+Recommended discovery steps:
+
+```powershell
+pwsh -NoProfile -Command "Get-Command code,pwsh,python,py,git -ErrorAction SilentlyContinue | Select-Object Name,Source,Version"
+pwsh -NoProfile -Command "code --list-extensions"
+pwsh -NoProfile -Command "Get-ChildItem 'C:\msys64\mingw64\bin','C:\msys64\mingw32\bin' -Filter 'gdb.exe' -ErrorAction SilentlyContinue | Select-Object FullName"
+```
+
+If `code` is not in PATH, check common Windows CLI paths:
+
+```powershell
+pwsh -NoProfile -Command "Get-Item 'C:\Program Files\Microsoft VS Code\bin\code.cmd','%LOCALAPPDATA%\Programs\Microsoft VS Code\bin\code.cmd' -ErrorAction SilentlyContinue"
+```
+
+Suggested extension handling:
+
+- Install `ms-vscode.cpptools` when missing for C/C++ `cppdbg`.
+- Install `ms-vscode.powershell` when missing for PowerShell script debugging.
+- Install `ms-python.python` and `ms-python.debugpy` when missing for Python script debugging.
+- Use commands like:
+
+```powershell
+pwsh -NoProfile -Command "code --install-extension ms-vscode.cpptools"
+pwsh -NoProfile -Command "code --install-extension ms-vscode.powershell"
+pwsh -NoProfile -Command "code --install-extension ms-python.python"
+pwsh -NoProfile -Command "code --install-extension ms-python.debugpy"
+```
+
+Expected debug model:
+
+- Python:
+  - Single-file debug should use the active file.
+  - Use the selected Python interpreter in VS Code.
+  - A global user launch configuration can use debugger type `debugpy` and `program=${file}`.
+- PowerShell:
+  - Single-file debug should use the active `.ps1` file.
+  - Prefer the Microsoft PowerShell extension and PowerShell 7 where possible.
+  - A global user launch configuration can use debugger type `PowerShell` and `script=${file}`.
+- Batch/CMD:
+  - Treat `.bat`/`.cmd` as runnable, not truly step-debuggable.
+  - If the user wants F5 behavior for batch files, add a run-style task/keybinding or explain the limitation clearly.
+- C/C++:
+  - Do not assume the active `.cpp` file is the program.
+  - For real projects, use workspace `.vscode/launch.json` and `.vscode/tasks.json`.
+  - For Hosts3D specifically, `Debug Hosts3D x64` is the normal target.
+
+Possible global user `launch` entries, if the user wants generic single-file F5 behavior and no better workspace-specific configuration exists:
+
+```json
+{
+  "launch": {
+    "version": "0.2.0",
+    "configurations": [
+      {
+        "name": "Python: Current File",
+        "type": "debugpy",
+        "request": "launch",
+        "program": "${file}",
+        "console": "integratedTerminal"
+      },
+      {
+        "name": "PowerShell: Current File",
+        "type": "PowerShell",
+        "request": "launch",
+        "script": "${file}",
+        "args": []
+      }
+    ]
+  }
+}
+```
+
+Be careful: VS Code may still ask the user to choose a debug configuration when multiple applicable configurations exist. If the user wants fewer prompts, prefer one sensible default per language and avoid adding many near-duplicate global configurations.
+
+Validation after setup:
+
+- Confirm extension list includes the installed debug extensions.
+- Open a `.py` file and verify `Python: Current File` can start.
+- Open a `.ps1` file and verify `PowerShell: Current File` can start.
+- Open Hosts3D and verify `Debug Hosts3D x64` builds and starts.
+- For Hosts3D, verify breakpoints bind in:
+  - `displayGL()`
+  - `sceneViewToggle()`
+  - `switchTopologySceneDraw()`
+- Summarize exactly what was installed, what user settings were changed, and what could not be automated.
 
 Codex setup checklist for another Windows machine:
 
