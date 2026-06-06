@@ -345,8 +345,10 @@ Expected debug model:
   - Prefer the Microsoft PowerShell extension and PowerShell 7 where possible.
   - A global user launch configuration can use debugger type `PowerShell` and `script=${file}`.
 - Batch/CMD:
-  - Treat `.bat`/`.cmd` as runnable, not truly step-debuggable.
-  - If the user wants F5 behavior for batch files, add a run-style task/keybinding or explain the limitation clearly.
+  - Do not assume this is impossible or fully supported without checking current tooling.
+  - Research current VS Code extension/tool support if the user asks for actual batch/CMD debugging.
+  - If no reliable step-debugging support is available, provide a run-style task/keybinding as a fallback and clearly label it as run-only.
+  - If a reliable debugger/extension exists, install/configure it only after checking its current documentation and suitability.
 - C/C++:
   - Do not assume the active `.cpp` file is the program.
   - For real projects, use workspace `.vscode/launch.json` and `.vscode/tasks.json`.
