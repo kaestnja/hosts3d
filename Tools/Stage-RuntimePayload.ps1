@@ -122,8 +122,18 @@ Quick lab example:
 .\run-scalance-check.ps1 -SwitchIp 192.168.6.248 -Version 2c -Community public
 ```
 
-SNMPv3 credentials should be provided through environment variables or a future
-local credential profile, not stored in this package.
+Hosts3D F9 integration:
+
+- `hsd-data\switches.txt` stores the human-editable switch profile.
+- When a profile is `enabled=1` and `auto_refresh=1`, the F9 switch-topology
+  scene starts this helper in the background.
+- The helper writes raw diagnostics to `hsd-data\scalance_xr328_mirror_check.json`
+  and the display mapping to `hsd-data\switch-topology.txt`.
+
+For SNMPv1/v2c, omitting a community value makes the helper try the usual
+read-only defaults `private` and then `public`. For non-default values use
+`community=...` or `community_env=SNMP_COMMUNITY`; for SNMPv3 passwords prefer
+environment variables or a future local credential profile.
 '@
 Write-TextFile -Path (Join-Path $snmpToolsDir "README.md") -Content $snmpReadme
 

@@ -64,6 +64,8 @@ On Linux, `Stop` and normal `Exit` also sweep matching bundled local `hsen` proc
 Linux local `hsen` starts are also detached from the GUI process, and brief zombie startup failures are treated as failed launches instead of as running sensors.
 Hosts3D also marks its UDP receive socket close-on-exec and retries the packet-socket bind once after cleaning up orphaned managed local `hsen` processes, so stale previous runs do not silently block packet reception.
 
+The F9 switch-topology scene can create `.hosts3d/switches.txt` as a disabled switch profile template. After editing the switch address and SNMP profile data with Hosts3D closed, set `enabled=1`. With SNMPv1/v2c and no `community` value, the helper tries the usual defaults `private` and then `public` read-only. With `auto_refresh=1`, F9 starts the matching SNMP helper in the background, writes raw diagnostics to `.hosts3d/scalance_xr328_mirror_check.json`, and updates `.hosts3d/switch-topology.txt` for display. For non-default community values use `community=...` or `community_env=SNMP_COMMUNITY`; for SNMPv3 passwords prefer `user_env`, `auth_pass_env`, and `priv_pass_env`.
+
 The top-right OSD also includes `PS Demo` and `Py Demo` quick-launch buttons for the bundled synthetic visualization demos.
 While a demo is active, the matching OSD button stays tinted until the demo finishes.
 The same `RUNTIME` strip also includes a clickable `Dynamic Host TTL` row with presets from `Off` up to `1h`.

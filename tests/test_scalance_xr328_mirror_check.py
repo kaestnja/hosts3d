@@ -2,6 +2,7 @@ import importlib.util
 import sys
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
 
 SCRIPT_PATH = Path(__file__).resolve().parents[1] / "Tools" / "snmp" / "scalance_xr328_mirror_check.py"
@@ -64,6 +65,65 @@ class ScalanceMirrorCheckTests(unittest.TestCase):
         self.assertEqual(raw["sources"][0]["source_id"], 10)
         self.assertEqual(raw["sources"][0]["interface"]["if_name"], "P0.10")
         self.assertEqual(raw["destinations"][0]["destination_id"], 6)
+
+    def test_switch_profile_line_supports_hosts3d_switches_txt(self):
+        profile = mirror_check.parse_switch_profile_line(
+            'switch name=sw6248xr328 type=scalance_xr328 host=192.168.6.248 version=2c community_env=SNMP_COMMUNITY auto_refresh=1'
+        )
+
+        self.assertEqual(profile["name"], "sw6248xr328")
+        self.assertEqual(profile["host"], "192.168.6.248")
+        self.assertEqual(profile["community_env"], "SNMP_COMMUNITY")
+        self.assertTrue(mirror_check.parse_bool_text(profile["auto_refresh"]))
+
+    def test_snmp_v2c_defaults_to_private_public_when_community_missing(self):
+        args = SimpleNamespace(version="2c", community="")
+
+        self.assertEqual(
+            mirror_check.snmp_community_candidates(args),
+            [("private", "default_private"), ("public", "default_public")],
+        )
+        self.assertEqual(mirror_check.credential_state(args)["community"], "default_probe_private_public")
+        self.assertEqual(mirror_check.missing_credentials(args), [])
+
+    def test_snmp_v2c_explicit_community_is_used_alone(self):
+        args = SimpleNamespace(version="2c", community="lab-read")
+
+        self.assertEqual(mirror_check.snmp_community_candidates(args), [("lab-read", "provided")])
+        self.assertEqual(mirror_check.credential_state(args)["community"], "provided")
+
+    def test_topology_lines_include_ports_and_hosts(self):
+        data = {
+            "status": "ok",
+            "device": {"host": "192.168.6.248", "sys_name": "sw6248xr328"},
+            "interfaces": [
+                {
+                    "if_index": 2,
+                    "if_name": "P0.2",
+                    "oper_status": "up",
+                    "learned_macs": [{"mac": "68:05:CA:11:D6:C7"}],
+                    "lldp_neighbors": [
+                        {
+                            "management_address": "192.168.6.32",
+                            "system_name": "W032S22",
+                            "chassis_id": "68:05:CA:11:D6:C7",
+                        },
+                    ],
+                },
+                {"if_index": 6, "if_name": "P0.6", "oper_status": "up"},
+            ],
+            "mirroring": {
+                "destination_port": {"raw_id": 6, "if_index": 6, "if_name": "P0.6"},
+                "source_ports": [{"raw_id": 2, "if_index": 2, "if_name": "P0.2", "egress_mirroring": True}],
+            },
+        }
+
+        lines = mirror_check.topology_lines(data)
+
+        self.assertIn("switch name=sw6248xr328 ports=28", lines)
+        self.assertIn("port id=2 name=P0.2 role=egress dest=6 up=1", lines)
+        self.assertIn("port id=6 name=P0.6 role=destination up=1", lines)
+        self.assertIn("host ip=192.168.6.32 mac=68:05:CA:11:D6:C7 port=2 label=W032S22", lines)
 
 
 if __name__ == "__main__":

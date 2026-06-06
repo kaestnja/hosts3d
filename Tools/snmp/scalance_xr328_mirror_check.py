@@ -26,14 +26,25 @@ Common use cases:
 3. Run a lab-only SNMPv2c discovery:
      python Tools/snmp/scalance_xr328_mirror_check.py 192.168.6.248 --version 2c --community public --pretty
 
+   If no SNMPv1/v2c community is given, the helper tries the usual defaults
+   private and then public. The helper remains read-only; it does not call
+   snmpset.
+
 4. Use local Net-SNMP tools from a Hosts3D release directory:
      python Tools/snmp/scalance_xr328_mirror_check.py 192.168.6.248 --version 2c --community public --snmpget Release/windows/x64/snmpget.exe --snmpwalk Release/windows/x64/snmpwalk.exe --pretty
 
 5. Keep the first probe small when Bridge-FDB or LLDP is slow/noisy:
      python Tools/snmp/scalance_xr328_mirror_check.py 192.168.6.248 --version 2c --community public --skip-fdb --skip-lldp --pretty
 
-Credentials are never printed as values. Prefer environment variables for
-passwords until the planned local profile/OS credential-store flow exists.
+6. Use the Hosts3D F9 profile and write both runtime output formats:
+     python Tools/snmp/scalance_xr328_mirror_check.py --profile-file hsd-data/switches.txt --write-json hsd-data/scalance_xr328_mirror_check.json --write-topology hsd-data/switch-topology.txt --pretty
+
+Example switches.txt line:
+     switch name=sw6248xr328 type=scalance_xr328 host=192.168.6.248 version=2c enabled=1 auto_refresh=1 refresh_seconds=60
+
+Credentials are never printed as values. Use environment variables for
+non-default community values or SNMPv3 passwords when they should not live in
+the local profile file.
 """
 
 from __future__ import annotations
@@ -42,10 +53,12 @@ import argparse
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 
@@ -108,7 +121,9 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="SCALANCE XR328 mirroring discovery using snmpget/snmpwalk.",
     )
-    parser.add_argument("host", help="Switch hostname or IP address")
+    parser.add_argument("host", nargs="?", help="Switch hostname or IP address")
+    parser.add_argument("--profile-file", help="Read switch connection data from a Hosts3D switches.txt file")
+    parser.add_argument("--profile", help="Profile name from --profile-file; defaults to the first enabled switch")
     parser.add_argument("--version", choices=["1", "2c", "3"], default="3")
     parser.add_argument("--port", type=int, default=161)
     parser.add_argument("--timeout", type=int, default=3)
@@ -129,18 +144,94 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Only query basic device identity; useful for validating SNMP credentials",
     )
+    parser.add_argument("--write-json", help="Write the raw JSON result to this path")
+    parser.add_argument("--write-topology", help="Write Hosts3D switch-topology.txt output to this path")
     parser.add_argument("--pretty", action="store_true", help="Pretty-print JSON")
     return parser.parse_args()
+
+
+def parse_bool_text(value: str | None, default: bool = False) -> bool:
+    if value is None:
+        return default
+    return value.strip().lower() in ("1", "true", "yes", "on", "enabled")
+
+
+def parse_switch_profile_line(line: str) -> dict[str, str] | None:
+    line = line.strip()
+    if not line or line[0] in "#;":
+        return None
+    try:
+        parts = shlex.split(line, comments=True)
+    except ValueError:
+        return None
+    if not parts or parts[0].lower() != "switch":
+        return None
+    profile: dict[str, str] = {}
+    for item in parts[1:]:
+        if "=" not in item:
+            continue
+        key, value = item.split("=", 1)
+        profile[key.strip().lower()] = value.strip()
+    return profile if profile else None
+
+
+def load_switch_profiles(path: str) -> list[dict[str, str]]:
+    profiles: list[dict[str, str]] = []
+    try:
+        with open(path, encoding="utf-8") as handle:
+            for line in handle:
+                profile = parse_switch_profile_line(line)
+                if profile:
+                    profiles.append(profile)
+    except OSError:
+        return []
+    return profiles
+
+
+def env_or_value(profile: dict[str, str], key: str, default: str = "") -> str:
+    env_name = profile.get(key + "_env", "")
+    if env_name and os.getenv(env_name):
+        return os.getenv(env_name, "")
+    return profile.get(key, default)
+
+
+def apply_profile(args: argparse.Namespace) -> dict[str, str] | None:
+    if not args.profile_file:
+        return None
+    profiles = load_switch_profiles(args.profile_file)
+    selected: dict[str, str] | None = None
+    for profile in profiles:
+        if args.profile and profile.get("name") != args.profile:
+            continue
+        if not args.profile and not parse_bool_text(profile.get("enabled"), True):
+            continue
+        selected = profile
+        break
+    if selected is None:
+        return None
+    args.host = args.host or selected.get("host", "")
+    args.version = selected.get("version", args.version)
+    args.port = int(selected.get("port", args.port))
+    args.timeout = int(selected.get("timeout", args.timeout))
+    args.retries = int(selected.get("retries", args.retries))
+    args.community = args.community or env_or_value(selected, "community")
+    args.user = args.user or env_or_value(selected, "user")
+    args.level = selected.get("level", args.level)
+    args.auth_proto = selected.get("auth_proto", args.auth_proto)
+    args.auth_pass = args.auth_pass or env_or_value(selected, "auth_pass")
+    args.priv_proto = selected.get("priv_proto", args.priv_proto)
+    args.priv_pass = args.priv_pass or env_or_value(selected, "priv_pass")
+    return selected
 
 
 def command_exists(exe: str) -> bool:
     return shutil.which(exe) is not None
 
 
-def snmp_base_args(args: argparse.Namespace) -> list[str]:
+def snmp_base_args(args: argparse.Namespace, community: str | None = None) -> list[str]:
     cmd = ["-On", "-t", str(args.timeout), "-r", str(args.retries), "-v", args.version]
     if args.version in ("1", "2c"):
-        cmd += ["-c", args.community]
+        cmd += ["-c", community if community is not None else args.community]
     else:
         cmd += ["-l", args.level, "-u", args.user]
         if args.level in ("authNoPriv", "authPriv"):
@@ -151,9 +242,17 @@ def snmp_base_args(args: argparse.Namespace) -> list[str]:
     return cmd
 
 
+def snmp_community_candidates(args: argparse.Namespace) -> list[tuple[str, str]]:
+    if args.version not in ("1", "2c"):
+        return [("", "not_applicable")]
+    if args.community:
+        return [(args.community, "provided")]
+    return [("private", "default_private"), ("public", "default_public")]
+
+
 def credential_state(args: argparse.Namespace) -> dict[str, str]:
     if args.version in ("1", "2c"):
-        return {"community": "provided" if args.community else "missing"}
+        return {"community": "provided" if args.community else "default_probe_private_public"}
     state = {"user": "provided" if args.user else "missing"}
     if args.level in ("authNoPriv", "authPriv"):
         state["auth_pass"] = "provided" if args.auth_pass else "missing"
@@ -167,6 +266,8 @@ def credential_state(args: argparse.Namespace) -> dict[str, str]:
 
 
 def missing_credentials(args: argparse.Namespace) -> list[str]:
+    if args.version in ("1", "2c"):
+        return []
     missing = []
     state = credential_state(args)
     for key, value in state.items():
@@ -190,22 +291,32 @@ def run_snmp(args: argparse.Namespace, tool: str, oid: str) -> SnmpResult:
     exe = args.snmpget if tool == "get" else args.snmpwalk
     if not command_exists(exe):
         return SnmpResult(STATUS_NOT_IMPLEMENTED, {}, f"{exe} not found as a command or explicit executable path")
-    cmd = [exe] + snmp_base_args(args) + [oid]
-    try:
-        proc = subprocess.run(cmd, text=True, capture_output=True, timeout=args.timeout * (args.retries + 2) + 5)
-    except subprocess.TimeoutExpired:
-        return SnmpResult(STATUS_SNMP_UNREACHABLE, {}, "SNMP command timed out")
-    if proc.returncode != 0:
-        err = (proc.stderr or proc.stdout or "").strip()
-        return SnmpResult(classify_error(err), {}, err)
-    values = parse_snmp_lines(proc.stdout)
-    if not values:
-        return SnmpResult(STATUS_EMPTY_TABLE if tool == "walk" else STATUS_PARSE_ERROR, {}, proc.stdout.strip())
-    bad = "\n".join(values.values())
-    bad_status = classify_error(bad)
-    if bad_status != STATUS_UNKNOWN:
-        return SnmpResult(bad_status, values, bad)
-    return SnmpResult(STATUS_OK, values)
+    last: SnmpResult | None = None
+    for community, community_source in snmp_community_candidates(args):
+        cmd = [exe] + snmp_base_args(args, community if args.version in ("1", "2c") else None) + [oid]
+        try:
+            proc = subprocess.run(cmd, text=True, capture_output=True, timeout=args.timeout * (args.retries + 2) + 5)
+        except subprocess.TimeoutExpired:
+            last = SnmpResult(STATUS_SNMP_UNREACHABLE, {}, "SNMP command timed out")
+            continue
+        if proc.returncode != 0:
+            err = (proc.stderr or proc.stdout or "").strip()
+            last = SnmpResult(classify_error(err), {}, err)
+            continue
+        values = parse_snmp_lines(proc.stdout)
+        if not values:
+            last = SnmpResult(STATUS_EMPTY_TABLE if tool == "walk" else STATUS_PARSE_ERROR, {}, proc.stdout.strip())
+            continue
+        bad = "\n".join(values.values())
+        bad_status = classify_error(bad)
+        if bad_status != STATUS_UNKNOWN:
+            last = SnmpResult(bad_status, values, bad)
+            continue
+        if args.version in ("1", "2c"):
+            args.community = community
+            args.community_source = community_source
+        return SnmpResult(STATUS_OK, values)
+    return last or SnmpResult(STATUS_UNKNOWN, {}, "SNMP command failed")
 
 
 def parse_snmp_lines(text: str) -> dict[str, str]:
@@ -546,6 +657,110 @@ def build_lldp_neighbors(
     return by_port
 
 
+def topology_safe_text(value: Any, fallback: str = "") -> str:
+    text = str(value or fallback).strip()
+    if not text:
+        return fallback
+    return re.sub(r"\s+", "_", text)
+
+
+def topology_port_name(port: dict[str, Any]) -> str:
+    return topology_safe_text(port.get("if_name") or port.get("if_descr") or port.get("if_alias"), f"P0.{port.get('if_index', 0)}")
+
+
+def topology_host_mac(value: Any) -> str:
+    text = str(value or "").strip()
+    if re.fullmatch(r"[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}", text):
+        return text.upper()
+    return ""
+
+
+def topology_lines(data: dict[str, Any], profile: dict[str, str] | None = None) -> list[str]:
+    device = data.get("device", {})
+    mirroring = data.get("mirroring", {})
+    interfaces = data.get("interfaces", [])
+    name = topology_safe_text(
+        (profile or {}).get("name") or device.get("sys_name") or device.get("host"),
+        "switch",
+    )
+    ports_by_id: dict[int, dict[str, Any]] = {}
+    for iface in interfaces:
+        idx = iface.get("if_index")
+        if isinstance(idx, int) and idx > 0:
+            ports_by_id[idx] = iface
+    dest = mirroring.get("destination_port") or {}
+    dest_id = dest.get("raw_id") or dest.get("if_index")
+    source_by_id: dict[int, dict[str, Any]] = {}
+    for port in mirroring.get("source_ports", []):
+        raw_id = port.get("raw_id") or port.get("if_index")
+        if isinstance(raw_id, int):
+            source_by_id[raw_id] = port
+            ports_by_id.setdefault(raw_id, port)
+    if isinstance(dest_id, int):
+        ports_by_id.setdefault(dest_id, dest)
+    max_port = max([28] + [idx for idx in ports_by_id if idx <= 256])
+    lines = [
+        "# Generated by scalance_xr328_mirror_check.py. Edit with Hosts3D closed if you need manual corrections.",
+        "# Raw SNMP JSON should be kept beside this file for diagnostics.",
+        f"switch name={name} ports={max_port}",
+    ]
+    for port_id in sorted(idx for idx in ports_by_id if idx <= max_port):
+        port = ports_by_id[port_id]
+        role = "normal"
+        if isinstance(dest_id, int) and port_id == dest_id:
+            role = "destination"
+        if port_id in source_by_id:
+            src = source_by_id[port_id]
+            ingress = src.get("ingress_mirroring") is True
+            egress = src.get("egress_mirroring") is True
+            role = "both" if ingress and egress else "ingress" if ingress else "egress"
+        line = f"port id={port_id} name={topology_port_name(port)} role={role}"
+        if isinstance(dest_id, int) and port_id in source_by_id:
+            line += f" dest={dest_id}"
+        if port.get("oper_status"):
+            line += f" up={1 if port.get('oper_status') == 'up' else 0}"
+        lines.append(line)
+    seen_hosts: set[tuple[int, str, str]] = set()
+    for port_id in sorted(ports_by_id):
+        if port_id > max_port:
+            continue
+        port = ports_by_id[port_id]
+        for mac_item in port.get("learned_macs", []):
+            mac = topology_host_mac(mac_item.get("mac"))
+            if not mac:
+                continue
+            key = (port_id, mac, "")
+            if key in seen_hosts:
+                continue
+            seen_hosts.add(key)
+            lines.append(f"host mac={mac} port={port_id} label={topology_safe_text(mac)}")
+        for neighbor in port.get("lldp_neighbors", []):
+            ip = topology_safe_text(neighbor.get("management_address"))
+            label = topology_safe_text(neighbor.get("system_name") or neighbor.get("port_id") or neighbor.get("chassis_id"), "lldp_neighbor")
+            mac = topology_host_mac(neighbor.get("chassis_id"))
+            key = (port_id, mac, ip)
+            if key in seen_hosts:
+                continue
+            seen_hosts.add(key)
+            parts = ["host"]
+            if ip:
+                parts.append(f"ip={ip}")
+            if mac:
+                parts.append(f"mac={mac}")
+            parts.append(f"port={port_id}")
+            parts.append(f"label={label}")
+            lines.append(" ".join(parts))
+    return lines
+
+
+def write_text_atomic(path: str, content: str) -> None:
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    tmp = target.with_name(target.name + ".tmp")
+    tmp.write_text(content, encoding="utf-8", newline="\n")
+    tmp.replace(target)
+
+
 def apply_lldp(args: argparse.Namespace, result: dict[str, Any]) -> dict[int, list[dict[str, Any]]]:
     if args.skip_lldp:
         add_detail(result, "lldp_mib", STATUS_NOT_IMPLEMENTED, "skipped by argument")
@@ -591,6 +806,7 @@ def build_result(args: argparse.Namespace) -> dict[str, Any]:
             "auth_protocol": args.auth_proto if args.version == "3" and args.level in ("authNoPriv", "authPriv") else None,
             "privacy_protocol": args.priv_proto if args.version == "3" and args.level == "authPriv" else None,
             "credential_state": credential_state(args),
+            "community_source": "provided" if args.version in ("1", "2c") and args.community else "default_probe_private_public" if args.version in ("1", "2c") else None,
             "access_probe": STATUS_UNKNOWN,
         },
         "mirroring": {
@@ -608,6 +824,9 @@ def build_result(args: argparse.Namespace) -> dict[str, Any]:
         ],
     }
     sys_descr = get_result(args, "sysDescr", OID_SYS_DESCR, result)
+    result["snmp"]["credential_state"] = credential_state(args)
+    if args.version in ("1", "2c"):
+        result["snmp"]["community_source"] = getattr(args, "community_source", "provided" if args.community else "default_probe_private_public")
     result["snmp"]["access_probe"] = sys_descr.status
     result["device"]["sys_descr"] = parse_text(next(iter(sys_descr.values.values()), "") if sys_descr.status == STATUS_OK else "")
     result["device"]["sys_object_id"] = parse_text(get(args, "sysObjectID", OID_SYS_OBJECT_ID, result) or "")
@@ -641,6 +860,9 @@ def build_result(args: argparse.Namespace) -> dict[str, Any]:
 
     apply_fdb(args, result, interfaces)
     lldp_neighbors = apply_lldp(args, result)
+    for raw_id, neighbors in lldp_neighbors.items():
+        iface = interfaces.setdefault(raw_id, {"if_index": raw_id})
+        iface["lldp_neighbors"] = neighbors
 
     source_ids = set()
     for rows in (ingress, egress):
@@ -664,12 +886,30 @@ def build_result(args: argparse.Namespace) -> dict[str, Any]:
         port.setdefault("ip_correlations", [])
         result["mirroring"]["source_ports"].append(port)
 
+    result["interfaces"] = [interfaces[key] for key in sorted(interfaces)]
     finalize_status(result)
     return result
 
 
 def main() -> int:
     args = parse_args()
+    profile = apply_profile(args)
+    if not args.host:
+        data = {
+            "status": STATUS_AUTH_FAILED,
+            "details": [
+                {
+                    "component": "switch_profile",
+                    "status": STATUS_AUTH_FAILED,
+                    "message": "Missing switch host. Provide HOST or a switch line with host=... in --profile-file.",
+                },
+            ],
+        }
+        text = json.dumps(data, indent=2 if args.pretty else None, sort_keys=False)
+        if args.write_json:
+            write_text_atomic(args.write_json, text + "\n")
+        print(text)
+        return 2
     missing = missing_credentials(args)
     if missing:
         data = {
@@ -690,10 +930,18 @@ def main() -> int:
                 "access_probe": "not_run",
             },
         }
-        print(json.dumps(data, indent=2 if args.pretty else None, sort_keys=False))
+        text = json.dumps(data, indent=2 if args.pretty else None, sort_keys=False)
+        if args.write_json:
+            write_text_atomic(args.write_json, text + "\n")
+        print(text)
         return 2
     data = build_result(args)
-    print(json.dumps(data, indent=2 if args.pretty else None, sort_keys=False))
+    text = json.dumps(data, indent=2 if args.pretty else None, sort_keys=False)
+    if args.write_json:
+        write_text_atomic(args.write_json, text + "\n")
+    if args.write_topology and data["status"] in (STATUS_OK, STATUS_PARTIAL):
+        write_text_atomic(args.write_topology, "\n".join(topology_lines(data, profile)) + "\n")
+    print(text)
     return 0 if data["status"] in (STATUS_OK, STATUS_PARTIAL) else 1
 
 

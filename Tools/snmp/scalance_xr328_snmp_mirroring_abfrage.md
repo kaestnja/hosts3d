@@ -948,7 +948,7 @@ Beispiel mit SNMPv2c nur fuer Laborbetrieb:
 SNMP_COMMUNITY=COMMUNITY python3 Tools/snmp/scalance_xr328_mirror_check.py SWITCH_IP --version 2c --pretty
 ```
 
-Der Prototyp kann SNMP-Credentials aktuell direkt ueber Kommandozeilenparameter oder ueber Umgebungsvariablen erhalten. Fuer Passwoerter sind Umgebungsvariablen besser als direkte CLI-Argumente, weil sie nicht so leicht in Shell-History oder Prozesslisten sichtbar werden. Das Skript gibt keine Geheimniswerte aus, sondern meldet nur, ob `community`, `user`, `auth_pass` und `priv_pass` vorhanden oder fehlend sind. Mit `--check-access-only` fuehrt es nur die Device-Identity-Abfragen aus und eignet sich damit als kurze SNMPv3-Authentifizierungsprobe, bevor die vollstaendige Mirror-/FDB-/LLDP-Abfrage laeuft.
+Der Prototyp kann SNMP-Credentials aktuell direkt ueber Kommandozeilenparameter, ueber Umgebungsvariablen oder ueber das Hosts3D-Profilformat erhalten. Fuer SNMPv1/v2c ist ein fehlender `community`-Wert kein Fehler: das Skript probiert dann read-only `private` und danach `public`. Fuer abweichende Community-Werte und fuer SNMPv3-Passwoerter sind Umgebungsvariablen besser als direkte CLI-Argumente, wenn diese Werte nicht in Shell-History, Prozesslisten oder lokalen Profilen stehen sollen. Das Skript gibt keine Geheimniswerte aus, sondern meldet nur den Credential-Status beziehungsweise bei SNMPv1/v2c die verwendete Community-Quelle. Mit `--check-access-only` fuehrt es nur die Device-Identity-Abfragen aus und eignet sich damit als kurze SNMPv3-Authentifizierungsprobe, bevor die vollstaendige Mirror-/FDB-/LLDP-Abfrage laeuft.
 
 Vorschlag fuer eine spaetere lokale Profil- und Credential-Verwaltung:
 
@@ -1039,6 +1039,7 @@ Beispiel:
     "credential_state": {
       "community": "provided"
     },
+    "community_source": "provided",
     "access_probe": "ok"
   },
   "mirroring": {

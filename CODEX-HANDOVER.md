@@ -338,9 +338,15 @@ Manual VS Code flow:
 Switch topology scene notes:
 
 - host labels draw as compact blocks at each node: hostname/label, IP, MAC, and `port <id> <name>` when mapped
-- host-to-port mapping currently comes from `hsd-data/switch-topology.txt` lines with `host ... port=...`
-- without `switch-topology.txt`, the topology scene can show observed hosts, but it cannot infer their switch ports yet
-- automatic import from SCALANCE JSON/SNMP output into that topology file is still a future integration step
+- F9 reads `hsd-data/switch-topology.txt`; this remains the simple human-readable/editable display contract, comparable in spirit to `netpos.txt`
+- F9 creates `hsd-data/switches.txt` as a disabled template when missing; the user or Codex fills switch address/profile data there
+- when the first switch profile has `enabled=1 auto_refresh=1`, the F9 scene starts `Tools/snmp/scalance_xr328_mirror_check.py` in the background and throttles refreshes with `refresh_seconds`
+- for SNMPv1/v2c, no `community` value means the helper tries the usual defaults `private` and then `public` read-only; use `community=...` or `community_env=...` only for non-default values
+- do not restrict normal lab use just because default SNMP values are involved; warn occasionally when defaults are detected and remind that real non-lab networks should use better SNMP security
+- the SNMP helper writes raw diagnostics to `hsd-data/scalance_xr328_mirror_check.json` and writes the derived display mapping to `hsd-data/switch-topology.txt`
+- `View -> Refresh Switch Topology` manually starts the same background refresh, independent of the auto-refresh timer
+- without `switch-topology.txt`, the topology scene can show observed Hosts3D hosts, but it cannot infer their switch ports yet
+- keep both formats: JSON is the raw SNMP/diagnostic contract, while `switch-topology.txt` is the small editable rendering/input contract
 
 VS Code extension setup for another machine:
 

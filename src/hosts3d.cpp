@@ -561,6 +561,8 @@ struct switch_topology_state_type
 
 scene_view_type activeSceneView = svHostTraffic;
 switch_topology_state_type switchTopologyState = {false, false, 0, 0, 0, "", "", "", std::vector<switch_topology_port_type>(), std::vector<switch_topology_host_type>()};
+time_t switchTopologyLastSnmpLaunch = 0;
+char switchTopologySnmpStatus[128] = "";
 
 enum menustate_type { msNone, msToggle, msChoice };
 
@@ -580,6 +582,7 @@ static bool helpOverlayMouseOver();
 static void helpOverlayScrollDelta(int delta);
 static void drawHelpOverlay();
 static bool parseBindingValue(const char *value, int *out);
+static bool parseUnsignedIntValue(const char *value, unsigned int *out);
 static void bindingLabel(int encoded, char *buf, size_t bufsz);
 static const char *menuLabelWithHint(const char *title, int hotkey, menustate_type state = msNone, bool active = false);
 static int menuDepthForId(int menuid);
@@ -599,6 +602,10 @@ static void sceneViewSet(scene_view_type next);
 static void hostTrafficSceneDraw();
 static void switchTopologySceneRefresh(bool force);
 static void switchTopologySceneDraw();
+static bool switchTopologyParseBool(const char *txt, bool *out);
+static bool selfExecutableDir(char *dir, size_t dirsz);
+static bool pathJoin(char *dst, size_t dstsz, const char *left, const char *right);
+static bool launchDetachedCommandLine(const char *cmdline, const char *workdir);
 static inline HtArgType htArgFromPtr(const void *ptr) { return (HtArgType) (intptr_t) ptr; }
 static inline void *ptrFromHtArg(HtArgType arg) { return (void *) (intptr_t) arg; }
 static unsigned char hostZone(host_type *ht);
@@ -3382,6 +3389,198 @@ static void sceneViewToggle()
   sceneViewSet(activeSceneView == svHostTraffic ? svSwitchTopology : svHostTraffic);
 }
 
+struct switch_topology_profile_type
+{
+  bool exists, enabled, autoRefresh;
+  unsigned int refreshSeconds;
+  char name[64], type[64], host[128];
+};
+
+static void switchTopologyWriteDefaultConfig(const char *path)
+{
+  FILE *fp;
+  if (!path || !*path || fileExists(path)) return;
+  if (!(fp = fopen(path, "w"))) return;
+  fputs("# Hosts3D switch discovery profiles\n", fp);
+  fputs("# F9 reads switch-topology.txt. When auto_refresh=1, Hosts3D starts the matching SNMP helper in the background.\n", fp);
+  fputs("# For SNMPv1/v2c, omit community to try the usual read-only defaults private, then public.\n", fp);
+  fputs("# For non-default values use community=... or community_env=SNMP_COMMUNITY. For SNMPv3 prefer user_env, auth_pass_env and priv_pass_env.\n", fp);
+  fputs("# After editing with Hosts3D closed, set enabled=1 and auto_refresh=1.\n", fp);
+  fputs("switch name=sw6248xr328 type=scalance_xr328 host=192.168.6.248 version=2c enabled=0 auto_refresh=0 refresh_seconds=60\n", fp);
+  fclose(fp);
+}
+
+static bool switchTopologyParseProfileFile(const char *path, switch_topology_profile_type *profile)
+{
+  FILE *fp;
+  char line[1024];
+  bool sawSwitch = false;
+  if (!profile) return false;
+  profile->exists = false;
+  profile->enabled = true;
+  profile->autoRefresh = false;
+  profile->refreshSeconds = 60;
+  profile->name[0] = '\0';
+  profile->type[0] = '\0';
+  profile->host[0] = '\0';
+  if (!(fp = fopen(path, "r"))) return false;
+  while (fgets(line, sizeof(line), fp))
+  {
+    char *cmd, *tok;
+    switch_topology_profile_type candidate;
+    char *txt = trimWs(line);
+    if (!*txt || (*txt == '#') || (*txt == ';')) continue;
+    if (!(cmd = strtok(txt, " \t\r\n"))) continue;
+    if (!strEqNoCase(cmd, "switch")) continue;
+    sawSwitch = true;
+    candidate.exists = true;
+    candidate.enabled = true;
+    candidate.autoRefresh = false;
+    candidate.refreshSeconds = 60;
+    candidate.name[0] = '\0';
+    candidate.type[0] = '\0';
+    candidate.host[0] = '\0';
+    while ((tok = strtok(0, " \t\r\n")))
+    {
+      char *eq = strchr(tok, '=');
+      if (!eq) continue;
+      *eq = '\0';
+      char *key = trimWs(tok), *value = trimWs(eq + 1);
+      bool flag;
+      unsigned int seconds;
+      if (strEqNoCase(key, "name")) setStringValue(candidate.name, sizeof(candidate.name), value);
+      else if (strEqNoCase(key, "type")) setStringValue(candidate.type, sizeof(candidate.type), value);
+      else if (strEqNoCase(key, "host")) setStringValue(candidate.host, sizeof(candidate.host), value);
+      else if (strEqNoCase(key, "enabled") && switchTopologyParseBool(value, &flag)) candidate.enabled = flag;
+      else if (strEqNoCase(key, "auto_refresh") && switchTopologyParseBool(value, &flag)) candidate.autoRefresh = flag;
+      else if (strEqNoCase(key, "refresh_seconds") && parseUnsignedIntValue(value, &seconds)) candidate.refreshSeconds = seconds;
+    }
+    if (!profile->exists) *profile = candidate;
+    if (candidate.enabled)
+    {
+      *profile = candidate;
+      break;
+    }
+  }
+  fclose(fp);
+  if (profile->refreshSeconds < 15) profile->refreshSeconds = 15;
+  return profile->exists || sawSwitch;
+}
+
+static bool switchTopologyResolveSnmpScript(char *path, size_t pathsz, char *workdir, size_t workdirsz)
+{
+  char base[512], candidate[512], tools[512], snmp[512];
+  if (pathsz) *path = '\0';
+  if (workdir && workdirsz) *workdir = '\0';
+  if (selfExecutableDir(base, sizeof(base)))
+  {
+    if (workdir && workdirsz) setStringValue(workdir, workdirsz, base);
+    if (pathJoin(tools, sizeof(tools), base, "Tools") &&
+        pathJoin(snmp, sizeof(snmp), tools, "snmp") &&
+        pathJoin(path, pathsz, snmp, "scalance_xr328_mirror_check.py") &&
+        fileExists(path)) return true;
+#ifdef __MINGW32__
+    snprintf(candidate, sizeof(candidate), "%s\\..\\..\\..\\Tools\\snmp", base);
+#else
+    snprintf(candidate, sizeof(candidate), "%s/../../../Tools/snmp", base);
+#endif
+    if (pathJoin(path, pathsz, candidate, "scalance_xr328_mirror_check.py") && fileExists(path)) return true;
+  }
+  if (getcwd(base, sizeof(base)))
+  {
+    if (!workdir || !workdirsz || !*workdir) setStringValue(workdir, workdirsz, base);
+    if (pathJoin(tools, sizeof(tools), base, "Tools") &&
+        pathJoin(snmp, sizeof(snmp), tools, "snmp") &&
+        pathJoin(path, pathsz, snmp, "scalance_xr328_mirror_check.py") &&
+        fileExists(path)) return true;
+  }
+  if (pathsz) *path = '\0';
+  return false;
+}
+
+static bool switchTopologyResolveRuntimeTool(const char *tool, char *path, size_t pathsz)
+{
+  char base[512];
+  if (pathsz) *path = '\0';
+  if (!tool || !*tool) return false;
+  if (!selfExecutableDir(base, sizeof(base))) return false;
+  return pathJoin(path, pathsz, base, tool) && fileExists(path);
+}
+
+static void switchTopologyAppendRuntimeSnmpTools(char *cmd, size_t cmdsz)
+{
+  char snmpget[512], snmpwalk[512];
+  if (!cmd || !cmdsz) return;
+  if (switchTopologyResolveRuntimeTool("snmpget.exe", snmpget, sizeof(snmpget)))
+  {
+    strncat(cmd, " --snmpget \"", cmdsz - strlen(cmd) - 1);
+    strncat(cmd, snmpget, cmdsz - strlen(cmd) - 1);
+    strncat(cmd, "\"", cmdsz - strlen(cmd) - 1);
+  }
+  if (switchTopologyResolveRuntimeTool("snmpwalk.exe", snmpwalk, sizeof(snmpwalk)))
+  {
+    strncat(cmd, " --snmpwalk \"", cmdsz - strlen(cmd) - 1);
+    strncat(cmd, snmpwalk, cmdsz - strlen(cmd) - 1);
+    strncat(cmd, "\"", cmdsz - strlen(cmd) - 1);
+  }
+}
+
+static bool switchTopologySnmpRefreshRequest(bool manual, char *errbuf = 0, size_t errbufsz = 0)
+{
+  switch_topology_profile_type profile;
+  char cfgPath[512], jsonPath[512], topologyPath[512], scriptPath[512], workdir[512], cmd[4096];
+  time_t now;
+  if (errbuf && errbufsz) *errbuf = '\0';
+  ensureHsdDataDir();
+  setStringValue(cfgPath, sizeof(cfgPath), hsddata("switches.txt"));
+  switchTopologyWriteDefaultConfig(cfgPath);
+  if (!switchTopologyParseProfileFile(cfgPath, &profile) || !profile.enabled || !*profile.host)
+  {
+    if (manual && errbuf && errbufsz)
+      snprintf(errbuf, errbufsz, "Edit hsd-data/switches.txt first, set enabled=1, host=..., then retry.");
+    return false;
+  }
+  if (!manual && !profile.autoRefresh) return false;
+  time(&now);
+  if (!manual && switchTopologyLastSnmpLaunch && ((unsigned int)(now - switchTopologyLastSnmpLaunch) < profile.refreshSeconds)) return false;
+  if (manual && switchTopologyLastSnmpLaunch && ((now - switchTopologyLastSnmpLaunch) < 5))
+  {
+    if (errbuf && errbufsz) setStringValue(errbuf, errbufsz, "A switch topology refresh was just started.");
+    return false;
+  }
+  if (!switchTopologyResolveSnmpScript(scriptPath, sizeof(scriptPath), workdir, sizeof(workdir)))
+  {
+    if (errbuf && errbufsz) setStringValue(errbuf, errbufsz, "Unable to locate Tools/snmp/scalance_xr328_mirror_check.py.");
+    return false;
+  }
+  setStringValue(jsonPath, sizeof(jsonPath), hsddata("scalance_xr328_mirror_check.json"));
+  setStringValue(topologyPath, sizeof(topologyPath), hsddata("switch-topology.txt"));
+#ifdef __MINGW32__
+  snprintf(cmd, sizeof(cmd), "py -3 \"%s\" --profile-file \"%s\" --write-json \"%s\" --write-topology \"%s\" --pretty",
+           scriptPath, cfgPath, jsonPath, topologyPath);
+#else
+  snprintf(cmd, sizeof(cmd), "python3 \"%s\" --profile-file \"%s\" --write-json \"%s\" --write-topology \"%s\" --pretty",
+           scriptPath, cfgPath, jsonPath, topologyPath);
+#endif
+  switchTopologyAppendRuntimeSnmpTools(cmd, sizeof(cmd));
+  if (!launchDetachedCommandLine(cmd, workdir))
+  {
+#ifdef __MINGW32__
+    snprintf(cmd, sizeof(cmd), "python \"%s\" --profile-file \"%s\" --write-json \"%s\" --write-topology \"%s\" --pretty",
+             scriptPath, cfgPath, jsonPath, topologyPath);
+    switchTopologyAppendRuntimeSnmpTools(cmd, sizeof(cmd));
+    if (!launchDetachedCommandLine(cmd, workdir))
+#endif
+    {
+      if (errbuf && errbufsz) setStringValue(errbuf, errbufsz, "Unable to start Python switch topology refresh.");
+      return false;
+    }
+  }
+  switchTopologyLastSnmpLaunch = now;
+  snprintf(switchTopologySnmpStatus, sizeof(switchTopologySnmpStatus), "switch SNMP refresh started for %s", profile.host);
+  return true;
+}
+
 static switch_topology_port_type switchTopologyDefaultPort(int id)
 {
   switch_topology_port_type port;
@@ -3617,6 +3816,7 @@ static void switchTopologySceneRefresh(bool force)
 {
   time_t now;
   char path[512];
+  switchTopologySnmpRefreshRequest(false);
   time(&now);
   if (!force && switchTopologyState.initialized && ((now - switchTopologyState.lastRefresh) < 1)) return;
   switchTopologyState.initialized = true;
@@ -3636,6 +3836,8 @@ static void switchTopologySceneRefresh(bool force)
     setStringValue(switchTopologyState.sourceStatus, sizeof(switchTopologyState.sourceStatus), "switch-topology.txt loaded");
   }
   else setStringValue(switchTopologyState.sourceStatus, sizeof(switchTopologyState.sourceStatus), "no switch-topology.txt");
+  if (*switchTopologySnmpStatus && !switchTopologyState.fileLoaded)
+    setStringValue(switchTopologyState.sourceStatus, sizeof(switchTopologyState.sourceStatus), switchTopologySnmpStatus);
   hstsByIp.forEach(1, &switchTopologyCollectHostCb, 0, 0, 0, 0);
   for (size_t cnt = 0; cnt < switchTopologyState.hosts.size(); cnt++)
     if (switchTopologyState.hosts[cnt].port > 0) switchTopologyState.mappedHosts++;
@@ -3708,17 +3910,63 @@ static void switchTopologyDrawCube(pos_type pos, int list, double scale)
   glPopMatrix();
 }
 
+static bool switchTopologyProject(pos_type pos, double *screenX, double *screenY)
+{
+  GLdouble model[16], projection[16], winX, winY, winZ;
+  GLint viewport[4];
+  glGetDoublev(GL_MODELVIEW_MATRIX, model);
+  glGetDoublev(GL_PROJECTION_MATRIX, projection);
+  glGetIntegerv(GL_VIEWPORT, viewport);
+  if (!gluProject(pos.x, pos.y, pos.z, model, projection, viewport, &winX, &winY, &winZ)) return false;
+  if ((winZ < 0.0) || (winZ > 1.0)) return false;
+  *screenX = winX;
+  *screenY = winY;
+  return true;
+}
+
+static void switchTopologyDrawScreenLines(pos_type anchor, const char *const *lines, int lineCount, int yoff)
+{
+  double sx, sy;
+  int widthChars = 0, left, top;
+  GLboolean depthEnabled;
+  if (!lines || (lineCount <= 0)) return;
+  if (!switchTopologyProject(anchor, &sx, &sy)) return;
+  for (int cnt = 0; cnt < lineCount; cnt++)
+  {
+    int len = lines[cnt] ? (int)strlen(lines[cnt]) : 0;
+    if (len > widthChars) widthChars = len;
+  }
+  left = (int)(sx + 0.5) - ((widthChars * 6) / 2);
+  top = (int)(sy + 0.5) + yoff;
+  depthEnabled = glIsEnabled(GL_DEPTH_TEST);
+  if (depthEnabled) glDisable(GL_DEPTH_TEST);
+  glMatrixMode(GL_PROJECTION);
+  glPushMatrix();
+  glLoadIdentity();
+  gluOrtho2D(0.0, (GLdouble)wWin, 0.0, (GLdouble)hWin);
+  glMatrixMode(GL_MODELVIEW);
+  glPushMatrix();
+  glLoadIdentity();
+  for (int cnt = 0; cnt < lineCount; cnt++)
+  {
+    if (!lines[cnt] || !*lines[cnt]) continue;
+    glRasterPos2i(left, top - (cnt * 11));
+    GLWin.DrawString((const unsigned char *)lines[cnt]);
+  }
+  glPopMatrix();
+  glMatrixMode(GL_PROJECTION);
+  glPopMatrix();
+  glMatrixMode(GL_MODELVIEW);
+  if (depthEnabled) glEnable(GL_DEPTH_TEST);
+}
+
 static void switchTopologyDrawLabel(pos_type pos, const char *text, int yoff)
 {
-  size_t len;
-  double xoff;
+  const char *lines[1];
   if (!text || !*text) return;
-  len = strlen(text);
-  if (len > 24) len = 24;
-  xoff = (double)len * 3.0;
+  lines[0] = text;
   glColor3ub(white[0], white[1], white[2]);
-  glRasterPos3d(pos.x - xoff, pos.y + yoff, pos.z);
-  GLWin.DrawString((const unsigned char *)text);
+  switchTopologyDrawScreenLines(pos, lines, 1, yoff);
 }
 
 static void switchTopologyCompactText(const char *src, char *dst, size_t dstsz, size_t maxChars)
@@ -3763,8 +4011,9 @@ static void switchTopologyDrawHostLabels(const switch_topology_host_type *host, 
     snprintf(portText, sizeof(portText), "port %d %s", port->id, port->name);
     switchTopologyCompactText(portText, line[lineCount++], sizeof(line[0]), 22);
   }
-  for (int cnt = 0; cnt < lineCount; cnt++)
-    switchTopologyDrawLabel(pos, line[cnt], 18 - (cnt * 10));
+  const char *lines[4] = {line[0], line[1], line[2], line[3]};
+  glColor3ub(white[0], white[1], white[2]);
+  switchTopologyDrawScreenLines(pos, lines, lineCount, 28);
 }
 
 static void switchTopologySceneDraw()
@@ -6238,6 +6487,18 @@ void mnuProcess(int m)
       case 200: triggerKeyAction(kaOpenPacketTrafficFile); break;  //open packet traffic file
       case 201: triggerKeyAction(kaSavePacketTrafficFile); break;  //save packet traffic file as
       case 202: triggerKeyAction(kaToggleSceneView); break;  //toggle main scene
+      case 203:  //refresh switch topology from configured switch
+      {
+        char emsg[256];
+        if (!switchTopologySnmpRefreshRequest(true, emsg, sizeof(emsg)))
+          messageBox("SWITCH TOPOLOGY", (*emsg ? emsg : "Unable to start switch topology refresh."));
+        else
+        {
+          switchTopologySceneRefresh(true);
+          messageBox("SWITCH TOPOLOGY", "Switch topology refresh started in the background.");
+        }
+        break;
+      }
       case 70: triggerKeyAction(kaViewHome); break;  //recall home view
       case 71: triggerKeyAction(kaViewPos1); break;  //recall view position 1
       case 72: triggerKeyAction(kaViewPos2); break;  //recall view position 2
@@ -6572,22 +6833,23 @@ void mnuProcess(int m)
         addMenuItem("No Extra Action On Activity", 6, 0, 58, 'D', kaCount, msChoice, (setts.sona == don));
         break;
       case 107:
-        addMenuItem("VIEW", 15, 2, 100, GLFW_KEY_BACKSPACE);
-        addMenuItem("SCENE", 15, 0, 0);
+        addMenuItem("VIEW", 16, 2, 100, GLFW_KEY_BACKSPACE);
+        addMenuItem("SCENE", 16, 0, 0);
         addMenuItem((activeSceneView == svSwitchTopology ? "Host Traffic Scene" : "Switch Topology Scene"),
-                    15, 0, 202, 0, kaToggleSceneView, msChoice, (activeSceneView == svSwitchTopology), MENU_GROUP_ITEM_INDENT);
-        addMenuItem("LOAD VIEW", 15, 0, 0);
-        addMenuItem("Home", 15, 0, 70, 0, kaViewHome, msNone, false, MENU_GROUP_ITEM_INDENT);
-        addMenuItem("Alternate Home", 15, 0, 79, 0, kaViewHomeAlt, msNone, false, MENU_GROUP_ITEM_INDENT);
-        addMenuItem("View 1", 15, 0, 71, 0, kaViewPos1, msNone, false, MENU_GROUP_ITEM_INDENT);
-        addMenuItem("View 2", 15, 0, 72, 0, kaViewPos2, msNone, false, MENU_GROUP_ITEM_INDENT);
-        addMenuItem("View 3", 15, 0, 73, 0, kaViewPos3, msNone, false, MENU_GROUP_ITEM_INDENT);
-        addMenuItem("View 4", 15, 0, 74, 0, kaViewPos4, msNone, false, MENU_GROUP_ITEM_INDENT);
-        addMenuItem("SAVE VIEW", 15, 0, 0);
-        addMenuItem("View 1", 15, 0, 75, 0, kaViewSave1, msNone, false, MENU_GROUP_ITEM_INDENT);
-        addMenuItem("View 2", 15, 0, 76, 0, kaViewSave2, msNone, false, MENU_GROUP_ITEM_INDENT);
-        addMenuItem("View 3", 15, 0, 77, 0, kaViewSave3, msNone, false, MENU_GROUP_ITEM_INDENT);
-        addMenuItem("View 4", 15, 0, 78, 0, kaViewSave4, msNone, false, MENU_GROUP_ITEM_INDENT);
+                    16, 0, 202, 0, kaToggleSceneView, msChoice, (activeSceneView == svSwitchTopology), MENU_GROUP_ITEM_INDENT);
+        addMenuItem("Refresh Switch Topology", 16, 0, 203, 0, kaCount, msNone, false, MENU_GROUP_ITEM_INDENT);
+        addMenuItem("LOAD VIEW", 16, 0, 0);
+        addMenuItem("Home", 16, 0, 70, 0, kaViewHome, msNone, false, MENU_GROUP_ITEM_INDENT);
+        addMenuItem("Alternate Home", 16, 0, 79, 0, kaViewHomeAlt, msNone, false, MENU_GROUP_ITEM_INDENT);
+        addMenuItem("View 1", 16, 0, 71, 0, kaViewPos1, msNone, false, MENU_GROUP_ITEM_INDENT);
+        addMenuItem("View 2", 16, 0, 72, 0, kaViewPos2, msNone, false, MENU_GROUP_ITEM_INDENT);
+        addMenuItem("View 3", 16, 0, 73, 0, kaViewPos3, msNone, false, MENU_GROUP_ITEM_INDENT);
+        addMenuItem("View 4", 16, 0, 74, 0, kaViewPos4, msNone, false, MENU_GROUP_ITEM_INDENT);
+        addMenuItem("SAVE VIEW", 16, 0, 0);
+        addMenuItem("View 1", 16, 0, 75, 0, kaViewSave1, msNone, false, MENU_GROUP_ITEM_INDENT);
+        addMenuItem("View 2", 16, 0, 76, 0, kaViewSave2, msNone, false, MENU_GROUP_ITEM_INDENT);
+        addMenuItem("View 3", 16, 0, 77, 0, kaViewSave3, msNone, false, MENU_GROUP_ITEM_INDENT);
+        addMenuItem("View 4", 16, 0, 78, 0, kaViewSave4, msNone, false, MENU_GROUP_ITEM_INDENT);
         break;
       case 108:
         addMenuItem("NET LAYOUT", 14, 2, 100, GLFW_KEY_BACKSPACE);
