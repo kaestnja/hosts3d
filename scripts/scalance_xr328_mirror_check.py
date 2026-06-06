@@ -72,7 +72,19 @@ OID_MIRROR_EXT_DEST = OID_MIRROR_BASE + ".9"
 OID_FDB_ADDRESS = "1.3.6.1.2.1.17.4.3.1.1"
 OID_FDB_PORT = "1.3.6.1.2.1.17.4.3.1.2"
 OID_BASE_PORT_IFINDEX = "1.3.6.1.2.1.17.1.4.1.2"
+OID_Q_FDB_TABLE = "1.3.6.1.2.1.17.7.1.2.2"
+OID_LLDP_LOC_PORT_ID = "1.0.8802.1.1.2.1.3.7.1.3"
+OID_LLDP_LOC_PORT_DESC = "1.0.8802.1.1.2.1.3.7.1.4"
 OID_LLDP_REM_TABLE = "1.0.8802.1.1.2.1.4.1"
+OID_LLDP_REM_MAN_ADDR_TABLE = "1.0.8802.1.1.2.1.4.2"
+
+OID_LLDP_REM_CHASSIS_ID_SUBTYPE = OID_LLDP_REM_TABLE + ".1.4"
+OID_LLDP_REM_CHASSIS_ID = OID_LLDP_REM_TABLE + ".1.5"
+OID_LLDP_REM_PORT_ID_SUBTYPE = OID_LLDP_REM_TABLE + ".1.6"
+OID_LLDP_REM_PORT_ID = OID_LLDP_REM_TABLE + ".1.7"
+OID_LLDP_REM_PORT_DESC = OID_LLDP_REM_TABLE + ".1.8"
+OID_LLDP_REM_SYS_NAME = OID_LLDP_REM_TABLE + ".1.9"
+OID_LLDP_REM_SYS_DESC = OID_LLDP_REM_TABLE + ".1.10"
 
 STATUS_OK = "ok"
 STATUS_PARTIAL = "partial_data"
@@ -237,6 +249,7 @@ def parse_text(value: str) -> str | None:
 
 
 def decode_enabled_disabled(value: str) -> bool | None:
+    """Decode per-port Siemens mirror flags where enabled(1), disabled(2)."""
     low = value.lower()
     num = parse_int(value)
     if "enabled" in low or num == 1:
@@ -247,6 +260,7 @@ def decode_enabled_disabled(value: str) -> bool | None:
 
 
 def decode_mirror_status(value: str) -> str:
+    """Decode global Siemens mirror status where disabled(1), enabled(2)."""
     low = value.lower()
     num = parse_int(value)
     if "enabled" in low or num == 2:
@@ -289,17 +303,36 @@ def mac_from_value(value: str) -> str | None:
     return None
 
 
-def add_detail(result: dict[str, Any], component: str, status: str, message: str | None = None) -> None:
+def add_detail(
+    result: dict[str, Any],
+    component: str,
+    status: str,
+    message: str | None = None,
+    optional: bool = False,
+) -> None:
     item: dict[str, Any] = {"component": component, "status": status}
+    if optional:
+        item["optional"] = True
     if message:
         item["message"] = message
     result["details"].append(item)
 
 
-def walk(args: argparse.Namespace, component: str, oid: str, result: dict[str, Any]) -> dict[str, str]:
-    got = run_snmp(args, "walk", oid)
-    add_detail(result, component, got.status, got.error)
+def walk(args: argparse.Namespace, component: str, oid: str, result: dict[str, Any], optional: bool = False) -> dict[str, str]:
+    got = walk_result(args, component, oid, result, optional)
     return got.values if got.status == STATUS_OK else {}
+
+
+def walk_result(
+    args: argparse.Namespace,
+    component: str,
+    oid: str,
+    result: dict[str, Any],
+    optional: bool = False,
+) -> SnmpResult:
+    got = run_snmp(args, "walk", oid)
+    add_detail(result, component, got.status, got.error, optional)
+    return got
 
 
 def get(args: argparse.Namespace, component: str, oid: str, result: dict[str, Any]) -> str | None:
@@ -376,14 +409,155 @@ def apply_fdb(args: argparse.Namespace, result: dict[str, Any], interfaces: dict
         iface.setdefault("learned_macs", []).append(
             {"mac": mac, "source": "bridge_mib", "confidence": "learned_fdb"},
         )
+    q_bridge = walk_result(args, "dot1qTpFdbTable", OID_Q_FDB_TABLE, result, optional=True)
+    result["q_bridge_fdb"] = {
+        "status": q_bridge.status,
+        "raw_count": len(q_bridge.values) if q_bridge.status == STATUS_OK else 0,
+        "entries": [],
+    }
 
 
-def apply_lldp(args: argparse.Namespace, result: dict[str, Any]) -> None:
+def raw_column_rows(rows: dict[str, str], base: str, suffix_names: list[str]) -> list[dict[str, Any]]:
+    grouped: dict[tuple[int, ...], dict[str, Any]] = {}
+    for row_oid, value in rows.items():
+        parts = [parse_int(part) for part in suffix(row_oid, base).split(".") if part]
+        if len(parts) < len(suffix_names) + 1 or any(part is None for part in parts):
+            continue
+        numeric_parts = [part for part in parts if part is not None]
+        column = numeric_parts[0]
+        index_parts = tuple(numeric_parts[1 : len(suffix_names) + 1])
+        row = grouped.setdefault(index_parts, {name: part for name, part in zip(suffix_names, index_parts)})
+        row.setdefault("raw_columns", {})[str(column)] = parse_text(value)
+    return list(grouped.values())
+
+
+def build_extended_mirroring_raw(
+    ext_session: dict[str, str],
+    ext_src: dict[str, str],
+    ext_dest: dict[str, str],
+    interfaces: dict[int, dict[str, Any]],
+) -> dict[str, Any]:
+    sessions = raw_column_rows(ext_session, OID_MIRROR_EXT_SESSION + ".1", ["session_id"])
+    sources = raw_column_rows(ext_src, OID_MIRROR_EXT_SRC + ".1", ["session_id", "source_id"])
+    destinations = raw_column_rows(ext_dest, OID_MIRROR_EXT_DEST + ".1", ["session_id", "destination_id"])
+    for row in sources:
+        iface = interface_snapshot(interfaces, row.get("source_id"))
+        if iface:
+            row["interface"] = iface
+    for row in destinations:
+        iface = interface_snapshot(interfaces, row.get("destination_id"))
+        if iface:
+            row["interface"] = iface
+    return {
+        "interpretation": "raw_grouped_by_observed_indices",
+        "sessions": sessions,
+        "sources": sources,
+        "destinations": destinations,
+    }
+
+
+def lldp_index_from_suffix(row_suffix: str) -> tuple[int, int, int] | None:
+    parts = [parse_int(part) for part in row_suffix.split(".") if part]
+    if len(parts) < 3 or any(part is None for part in parts[:3]):
+        return None
+    numeric_parts = [part for part in parts if part is not None]
+    return numeric_parts[0], numeric_parts[1], numeric_parts[2]
+
+
+def lldp_man_addr_from_suffix(row_suffix: str) -> tuple[tuple[int, int, int], str | None] | None:
+    parts = [parse_int(part) for part in row_suffix.split(".") if part]
+    if len(parts) < 5 or any(part is None for part in parts[:5]):
+        return None
+    numeric_parts = [part for part in parts if part is not None]
+    key = (numeric_parts[0], numeric_parts[1], numeric_parts[2])
+    addr_subtype = numeric_parts[3]
+    addr_len = numeric_parts[4]
+    addr_parts = numeric_parts[5 : 5 + addr_len]
+    if len(addr_parts) != addr_len:
+        return key, None
+    if addr_subtype == 1 and addr_len == 4:
+        return key, ".".join(str(part) for part in addr_parts)
+    return key, ".".join(str(part) for part in addr_parts)
+
+
+def lldp_field(rows: dict[str, str], base: str, key: tuple[int, int, int]) -> str | None:
+    wanted = ".".join(str(part) for part in key)
+    for row_oid, value in rows.items():
+        if suffix(row_oid, base) == wanted:
+            return parse_text(value)
+    return None
+
+
+def build_lldp_neighbors(
+    rem_rows: dict[str, str],
+    man_addr_rows: dict[str, str],
+    loc_port_ids: dict[str, str],
+    loc_port_descs: dict[str, str],
+) -> dict[int, list[dict[str, Any]]]:
+    keys = set()
+    for row_oid in rem_rows:
+        for base in (
+            OID_LLDP_REM_CHASSIS_ID_SUBTYPE,
+            OID_LLDP_REM_CHASSIS_ID,
+            OID_LLDP_REM_PORT_ID_SUBTYPE,
+            OID_LLDP_REM_PORT_ID,
+            OID_LLDP_REM_PORT_DESC,
+            OID_LLDP_REM_SYS_NAME,
+            OID_LLDP_REM_SYS_DESC,
+        ):
+            if row_oid.startswith(base + "."):
+                key = lldp_index_from_suffix(suffix(row_oid, base))
+                if key:
+                    keys.add(key)
+                break
+    management_addresses: dict[tuple[int, int, int], list[str]] = {}
+    man_addr_base = OID_LLDP_REM_MAN_ADDR_TABLE + ".1.3"
+    for row_oid in man_addr_rows:
+        if not row_oid.startswith(man_addr_base + "."):
+            continue
+        parsed = lldp_man_addr_from_suffix(suffix(row_oid, man_addr_base))
+        if parsed is None:
+            continue
+        key, address = parsed
+        if address and address != "0.0.0.0":
+            management_addresses.setdefault(key, []).append(address)
+    by_port: dict[int, list[dict[str, Any]]] = {}
+    for key in sorted(keys):
+        _time_mark, local_port_num, remote_index = key
+        loc_port_id = parse_text(loc_port_ids.get(OID_LLDP_LOC_PORT_ID + "." + str(local_port_num), ""))
+        loc_port_desc = parse_text(loc_port_descs.get(OID_LLDP_LOC_PORT_DESC + "." + str(local_port_num), ""))
+        addresses = sorted(set(management_addresses.get(key, [])))
+        neighbor = {
+            "local_port_num": local_port_num,
+            "local_port_id": loc_port_id,
+            "local_port_description": loc_port_desc,
+            "remote_index": remote_index,
+            "chassis_id_subtype": parse_int(lldp_field(rem_rows, OID_LLDP_REM_CHASSIS_ID_SUBTYPE, key) or ""),
+            "chassis_id": lldp_field(rem_rows, OID_LLDP_REM_CHASSIS_ID, key),
+            "port_id_subtype": parse_int(lldp_field(rem_rows, OID_LLDP_REM_PORT_ID_SUBTYPE, key) or ""),
+            "port_id": lldp_field(rem_rows, OID_LLDP_REM_PORT_ID, key),
+            "port_description": lldp_field(rem_rows, OID_LLDP_REM_PORT_DESC, key),
+            "system_name": lldp_field(rem_rows, OID_LLDP_REM_SYS_NAME, key),
+            "system_description": lldp_field(rem_rows, OID_LLDP_REM_SYS_DESC, key),
+            "management_address": addresses[0] if addresses else None,
+            "management_addresses": addresses,
+        }
+        by_port.setdefault(local_port_num, []).append(neighbor)
+    return by_port
+
+
+def apply_lldp(args: argparse.Namespace, result: dict[str, Any]) -> dict[int, list[dict[str, Any]]]:
     if args.skip_lldp:
         add_detail(result, "lldp_mib", STATUS_NOT_IMPLEMENTED, "skipped by argument")
-        return
+        return {}
+    loc_port_ids = walk(args, "lldpLocPortId", OID_LLDP_LOC_PORT_ID, result, optional=True)
+    loc_port_descs = walk(args, "lldpLocPortDesc", OID_LLDP_LOC_PORT_DESC, result, optional=True)
     rows = walk(args, "lldpRemTable", OID_LLDP_REM_TABLE, result)
+    man_addr_rows = walk(args, "lldpRemManAddrTable", OID_LLDP_REM_MAN_ADDR_TABLE, result, optional=True)
     result["lldp_raw_count"] = len(rows)
+    neighbors = build_lldp_neighbors(rows, man_addr_rows, loc_port_ids, loc_port_descs)
+    result["lldp_neighbor_count"] = sum(len(port_neighbors) for port_neighbors in neighbors.values())
+    return neighbors
 
 
 def finalize_status(result: dict[str, Any]) -> None:
@@ -392,9 +566,17 @@ def finalize_status(result: dict[str, Any]) -> None:
         result["status"] = STATUS_AUTH_FAILED
     elif STATUS_SNMP_UNREACHABLE in statuses:
         result["status"] = STATUS_SNMP_UNREACHABLE
-    elif statuses - {STATUS_OK, STATUS_EMPTY_TABLE, STATUS_OID_NOT_SUPPORTED}:
+    effective_details = [
+        item
+        for item in result["details"]
+        if not (item.get("optional") and item["status"] in (STATUS_EMPTY_TABLE, STATUS_OID_NOT_SUPPORTED))
+    ]
+    effective_statuses = {item["status"] for item in effective_details}
+    if result["status"] != STATUS_OK:
+        return
+    if effective_statuses - {STATUS_OK, STATUS_EMPTY_TABLE, STATUS_OID_NOT_SUPPORTED}:
         result["status"] = STATUS_PARTIAL
-    elif any(item["status"] != STATUS_OK for item in result["details"]):
+    elif any(item["status"] != STATUS_OK for item in effective_details):
         result["status"] = STATUS_PARTIAL
 
 
@@ -416,7 +598,9 @@ def build_result(args: argparse.Namespace) -> dict[str, Any]:
             "destination_port": None,
             "source_ports": [],
             "extended_mirroring": STATUS_UNKNOWN,
+            "extended_mirroring_raw": {"interpretation": "not_checked", "sessions": [], "sources": [], "destinations": []},
         },
+        "q_bridge_fdb": {"status": STATUS_UNKNOWN, "raw_count": 0, "entries": []},
         "notes": [
             "This prototype currently reads state only; controlled write operations belong in a later explicit management step.",
             "MAC-to-port values are learned FDB data and may age out.",
@@ -448,9 +632,15 @@ def build_result(args: argparse.Namespace) -> dict[str, Any]:
     ext_src = walk(args, "snMspsConfigMirrorCtrlExtnSrcTable", OID_MIRROR_EXT_SRC, result)
     ext_dest = walk(args, "snMspsConfigMirrorCtrlExtnDestinationTable", OID_MIRROR_EXT_DEST, result)
     result["mirroring"]["extended_mirroring"] = "supported" if (ext_session or ext_src or ext_dest) else STATUS_EMPTY_TABLE
+    result["mirroring"]["extended_mirroring_raw"] = build_extended_mirroring_raw(
+        ext_session,
+        ext_src,
+        ext_dest,
+        interfaces,
+    )
 
     apply_fdb(args, result, interfaces)
-    apply_lldp(args, result)
+    lldp_neighbors = apply_lldp(args, result)
 
     source_ids = set()
     for rows in (ingress, egress):
@@ -470,7 +660,7 @@ def build_result(args: argparse.Namespace) -> dict[str, Any]:
         port["egress_mirroring"] = eg_flag
         status_val = next((v for k, v in ctrl_status.items() if parse_int(suffix(k, OID_MIRROR_CTRL_STATUS)) == raw_id), "")
         port["mirror_ctrl_status_raw"] = parse_text(status_val)
-        port.setdefault("lldp_neighbors", [])
+        port["lldp_neighbors"] = lldp_neighbors.get(raw_id, [])
         port.setdefault("ip_correlations", [])
         result["mirroring"]["source_ports"].append(port)
 
