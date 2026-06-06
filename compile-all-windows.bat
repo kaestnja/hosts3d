@@ -1,9 +1,10 @@
 @echo off
 rem Build all requested Windows Hosts3D binaries with the existing per-target scripts.
 rem Defaults to Release x64+x86 and packages the resulting runtimes.
+rem Also stages shared runtime payload files into Release\windows\<arch>.
 rem Normal use: compile-all-windows.bat
 rem Lab/test package with bundled Npcap DLLs: compile-all-windows.bat with-npcap
-rem Build only, for a broken/special architecture case: compile-all-windows.bat x64 no-package
+rem Build and stage only, for a broken/special architecture case: compile-all-windows.bat x64 no-package
 setlocal EnableExtensions
 cd /d "%~dp0"
 
@@ -27,6 +28,10 @@ exit /b 1
 
 :args_done
 
+set "POWERSHELL_EXE=pwsh"
+where pwsh >NUL 2>NUL
+if errorlevel 1 set "POWERSHELL_EXE=powershell"
+
 echo Building Hosts3D Windows binaries: %CONFIG% %ARCHES%
 for %%a in (%ARCHES%) do (
   echo.
@@ -37,6 +42,15 @@ for %%a in (%ARCHES%) do (
   echo.
   echo === hsen %CONFIG% %%a ===
   call "%~dp0compile-hsen.bat" %CONFIG% %%a --no-pause
+  if errorlevel 1 goto :fail
+
+  echo.
+  echo === Stage runtime payload %CONFIG% %%a ===
+  if "%INCLUDE_NPCAP%"=="1" (
+    "%POWERSHELL_EXE%" -NoProfile -ExecutionPolicy Bypass -File "%~dp0Tools\Stage-RuntimePayload.ps1" -Config "%CONFIG%" -Arch "%%a" -WithNpcap
+  ) else (
+    "%POWERSHELL_EXE%" -NoProfile -ExecutionPolicy Bypass -File "%~dp0Tools\Stage-RuntimePayload.ps1" -Config "%CONFIG%" -Arch "%%a"
+  )
   if errorlevel 1 goto :fail
 )
 

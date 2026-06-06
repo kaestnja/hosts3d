@@ -15,6 +15,7 @@ This package contains the Windows runtime files for `Hosts3D` and `hsen`.
 - `sim-hsen.py`
 - `demo-hsen.ps1`
 - `demo-hsen.py`
+- `tools\snmp\`
 
 Private/local test packages may additionally include:
 - `Packet.dll`
@@ -24,6 +25,13 @@ Packages built after the optional Net-SNMP helper step may additionally include:
 - `snmpget.exe`
 - `snmpwalk.exe`
 - `snmpset.exe`
+
+The optional `tools\snmp\` folder contains switch-specific diagnostic helpers.
+For example, the SCALANCE XR328 files live there as:
+- `tools\snmp\scalance_xr328_mirror_check.py`
+- `tools\snmp\scalance_xr328_snmp_mirroring_abfrage.md`
+- `tools\snmp\run-scalance-check.ps1`
+- `tools\snmp\run-scalance-check.cmd`
 
 ## First Start
 1. Start `Hosts3D.exe`
@@ -69,6 +77,7 @@ Expected demo artifact lifetime:
 - The Python demo requires Python 3 or the `py` launcher to be installed.
 - Public release ZIPs may omit `wpcap.dll` and `Packet.dll`. In that case, install Npcap on the target machine before using `hsen` or `Configure Local Sensors (hsen)`.
 - `snmpget.exe`, `snmpwalk.exe`, and `snmpset.exe` are optional administrative helpers for SNMP-based switch diagnostics and later mirror-port management. If present, they are self-contained command line tools built with static OpenSSL and static MSVC runtime linkage.
+- SNMP helper scripts and their matching markdown notes are staged below `tools\snmp\`. The switch type belongs in the file name, not in another per-switch folder.
 
 ## License
 Hosts3D is distributed under the GNU General Public License. See `COPYING`.

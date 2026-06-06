@@ -46,6 +46,8 @@ These files already existed before this handover and remain important:
   - optional Windows helper build for Net-SNMP CLI tools; uses a separate Net-SNMP checkout, prepares MSVC OpenSSL inputs via vcpkg under ignored `third_party/openssl/windows/<arch>`, and copies `snmpget.exe`, `snmpwalk.exe`, and `snmpset.exe` to `Release/windows/<arch>`
 - `third_party/net-snmp/README.md`
   - documents the local Net-SNMP/OpenSSL build inputs and the verified dependency profile for the generated tools
+- `Tools/Stage-RuntimePayload.ps1`
+  - single Windows runtime payload staging step for both local `Release/windows/<arch>` test folders and staged dist packages; keep SNMP helpers in the central `tools/snmp/` runtime subfolder
 - `testing/sim-hsen.ps1`
   - preferred synthetic packet sender for Windows visualization tests; now includes focused TCP/ICMP/ARP/discovery modes, optional wide host spread, and `CenterIp`
 - `testing/sim-hsen.py`
@@ -144,17 +146,18 @@ Important x64 note:
 - `Release/windows/x86/hsen.exe`
 - `Release/windows/x86/README-runtime-windows.md`
 
-The Windows build/package flow now keeps the runtime README visible automatically:
+The Windows build/package flow now stages one shared runtime payload:
 
-- `compile-hosts3d.bat` and `compile-hsen.bat` copy `README-runtime-windows.md` into the runtime output directory
-- `package-all-windows.bat` includes both `README-runtime-windows.md` and `README.md` in the staged Windows release ZIPs
-- `package-all-windows.bat` is mainly for repackaging already-built runtimes; normal release use should go through `compile-all-windows.bat`
+- `compile-hosts3d.bat` and `compile-hsen.bat` still copy `README-runtime-windows.md` into the runtime output directory during the individual builds
+- `compile-all-windows.bat` runs `Tools/Stage-RuntimePayload.ps1` after each arch build so local `Release/windows/<arch>` test folders receive the same runtime-adjacent files as packages
+- `package-all-windows.bat` also delegates package contents to `Tools/Stage-RuntimePayload.ps1`; it should remain mainly for repackaging already-built runtimes, while normal release use should go through `compile-all-windows.bat`
+- the unpacked Windows dist folder should match the local runtime payload except for package naming/hash artifacts and the explicit `with-npcap` choice
+- Windows payloads keep runtime/demo files flat in the package root: `README.md`, `README-runtime-windows.md`, `README-testing.md`, `sim-hsen.*`, and `demo-hsen.*` beside the main binaries
+- optional SNMP diagnostics are staged centrally in `tools/snmp/`; switch-specific SNMP files use the switch name in the file name, for example `scalance_xr328_mirror_check.py`, instead of one folder per switch
 - Debug Windows packages use a `-debug` suffix so they do not overwrite release ZIPs
 - `package-release-linux` creates `Release/dist/hosts3d-<version>-linux-<arch>.tar.gz` plus SHA256 from the already-built Linux runtime
 - runtime binaries under `Release/` and `Debug/` are now treated as local build outputs, not as Git-tracked release artifacts
 - use `with-npcap` only for private/local test packages when you explicitly want those DLLs carried in the ZIP
-- staged Windows and Linux release packages now keep their files flat in the package root instead of under a nested `testing/` folder
-- flat release packages now include `README-testing.md` plus `sim-hsen.*` and `demo-hsen.*` beside the main binaries
 - the runtime still accepts the older `testing/` layout as a fallback, but packaged releases should prefer the flat root layout
 - `testing/README.md` is now intentionally written so it still reads correctly after being renamed to `README-testing.md` in a flat release package
 
@@ -600,6 +603,7 @@ Minimum required sweep areas:
   - `compile-*.bat`
   - `compile-*`
   - `package-all-windows.bat`
+  - `Tools/Stage-RuntimePayload.ps1`
   - `Makefile.am` / `Makefile.in`
   - `configure.ac` / generated `configure`
   - `man/*.1`

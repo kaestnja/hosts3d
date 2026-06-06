@@ -2,6 +2,7 @@
 rem Stage all requested Windows runtime files and create distributable release ZIPs plus SHA256 files.
 rem Defaults to Release x64+x86 without Packet.dll/wpcap.dll.
 rem Uses the already-built runtime from Release\windows\<arch>.
+rem Delegates package payload contents to Tools\Stage-RuntimePayload.ps1.
 rem Normal release flow uses compile-all-windows.bat, which calls this script after building.
 rem Use this script directly only to repackage already-built runtimes.
 rem Debug packages use a -debug suffix to avoid overwriting release ZIPs.
@@ -38,6 +39,9 @@ if not defined VERSION (
 
 set "NPCAP_LABEL=without-npcap"
 if "%INCLUDE_NPCAP%"=="1" set "NPCAP_LABEL=with-npcap"
+set "POWERSHELL_EXE=pwsh"
+where pwsh >NUL 2>NUL
+if errorlevel 1 set "POWERSHELL_EXE=powershell"
 echo Packaging Windows release assets: %CONFIG% %ARCHES% %NPCAP_LABEL%
 for %%a in (%ARCHES%) do (
   echo.
@@ -79,37 +83,14 @@ if exist "%HASHPATH%" del /Q "%HASHPATH%"
 
 mkdir "%STAGEDIR%"
 
-for %%f in (Hosts3D.exe hsen.exe glfw3.dll libwinpthread-1.dll) do (
-  if not exist "%RUNDIR%\%%f" (
-    echo Missing "%RUNDIR%\%%f"
-    exit /b 1
-  )
-  copy /Y "%RUNDIR%\%%f" "%STAGEDIR%\%%f" >NUL
-)
-
-for %%f in (snmpget.exe snmpwalk.exe snmpset.exe) do (
-  if exist "%RUNDIR%\%%f" copy /Y "%RUNDIR%\%%f" "%STAGEDIR%\%%f" >NUL
-)
-
 if "%INCLUDE_NPCAP%"=="1" (
-  for %%f in (Packet.dll wpcap.dll) do (
-    if not exist "%RUNDIR%\%%f" (
-      echo Missing "%RUNDIR%\%%f"
-      exit /b 1
-    )
-    copy /Y "%RUNDIR%\%%f" "%STAGEDIR%\%%f" >NUL
-  )
+  "%POWERSHELL_EXE%" -NoProfile -ExecutionPolicy Bypass -File "%~dp0Tools\Stage-RuntimePayload.ps1" -Config "%CONFIG%" -Arch "%ARCH%" -Destination "%STAGEDIR%" -WithNpcap
+) else (
+  "%POWERSHELL_EXE%" -NoProfile -ExecutionPolicy Bypass -File "%~dp0Tools\Stage-RuntimePayload.ps1" -Config "%CONFIG%" -Arch "%ARCH%" -Destination "%STAGEDIR%"
 )
+if errorlevel 1 exit /b 1
 
-copy /Y "COPYING" "%STAGEDIR%\COPYING" >NUL
-copy /Y "README-runtime-windows.md" "%STAGEDIR%\README-runtime-windows.md" >NUL
-copy /Y "README-runtime-windows.md" "%STAGEDIR%\README.md" >NUL
-copy /Y "testing\README.md" "%STAGEDIR%\README-testing.md" >NUL
-for %%f in (sim-hsen.ps1 sim-hsen.py demo-hsen.ps1 demo-hsen.py) do (
-  copy /Y "testing\%%f" "%STAGEDIR%\%%f" >NUL
-)
-
-powershell -NoProfile -Command "Add-Type -AssemblyName System.IO.Compression.FileSystem; if (Test-Path '%ZIPPATH%') { Remove-Item '%ZIPPATH%' -Force }; [System.IO.Compression.ZipFile]::CreateFromDirectory('%STAGEDIR%', '%ZIPPATH%')"
+"%POWERSHELL_EXE%" -NoProfile -Command "Add-Type -AssemblyName System.IO.Compression.FileSystem; if (Test-Path '%ZIPPATH%') { Remove-Item '%ZIPPATH%' -Force }; [System.IO.Compression.ZipFile]::CreateFromDirectory('%STAGEDIR%', '%ZIPPATH%')"
 if errorlevel 1 exit /b 1
 
 set "HASH="

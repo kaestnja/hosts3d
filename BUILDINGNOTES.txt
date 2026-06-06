@@ -90,13 +90,22 @@ Windows packaging note:
         compile-all-windows.bat with-npcap
     when you want private/local test ZIPs that carry the Npcap runtime DLLs.
     Use package-all-windows.bat directly only to repackage already-built runtimes.
+    Both commands use Tools/Stage-RuntimePayload.ps1 as the single Windows
+    payload staging step, so Release/windows/<arch> and the staged dist folder
+    carry the same runtime-adjacent files.
     Debug packages use a -debug suffix so they do not overwrite release ZIPs.
-    The staged release package now keeps its files flat in the package root:
+    The staged release package keeps the normal runtime/demo files flat in the
+    package root:
         README.md
         README-runtime-windows.md
         README-testing.md
         Hosts3D.exe / hsen.exe / runtime DLLs
         sim-hsen.* / demo-hsen.*
+    Optional SNMP diagnostics are staged centrally below:
+        tools/snmp/
+    Switch-specific SNMP files keep the switch name in the file name, for
+    example scalance_xr328_mirror_check.py, instead of creating one folder per
+    switch type.
 
 Linux packaging note:
     package-release-linux creates a tar.gz plus SHA256 file from Release/linux/<arch>.
