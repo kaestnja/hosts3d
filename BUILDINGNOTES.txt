@@ -102,7 +102,7 @@ Windows packaging note:
         Hosts3D.exe / hsen.exe / runtime DLLs
         sim-hsen.* / demo-hsen.*
     Optional SNMP diagnostics are staged centrally below:
-        tools/snmp/
+        Tools/snmp/
     Switch-specific SNMP files keep the switch name in the file name, for
     example scalance_xr328_mirror_check.py, instead of creating one folder per
     switch type.

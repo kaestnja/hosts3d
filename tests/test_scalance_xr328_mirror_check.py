@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 
 
-SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "scalance_xr328_mirror_check.py"
+SCRIPT_PATH = Path(__file__).resolve().parents[1] / "Tools" / "snmp" / "scalance_xr328_mirror_check.py"
 SPEC = importlib.util.spec_from_file_location("scalance_xr328_mirror_check", SCRIPT_PATH)
 mirror_check = importlib.util.module_from_spec(SPEC)
 assert SPEC.loader is not None

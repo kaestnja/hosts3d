@@ -94,5 +94,5 @@ Geraetespezifische Recherche, OID-Listen, Validierungsschritte und konkrete Impl
 
 Aktueller spezifischer Auftrag:
 
-- `scalance_xr328_snmp_mirroring_abfrage.md`: SNMP-Zustandsabfrage fuer Siemens SCALANCE XR328-4C WG.
-- `scripts/scalance_xr328_mirror_check.py`: erster lesender Prototyp fuer die JSON-Diagnose des SCALANCE-Mirroring-Zustands.
+- `Tools/snmp/scalance_xr328_snmp_mirroring_abfrage.md`: SNMP-Zustandsabfrage fuer Siemens SCALANCE XR328-4C WG.
+- `Tools/snmp/scalance_xr328_mirror_check.py`: erster lesender Prototyp fuer die JSON-Diagnose des SCALANCE-Mirroring-Zustands.

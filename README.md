@@ -26,9 +26,9 @@ This README is organized for practical use:
 Current planning notes for capture and sensor-management work live in separate Markdown files so they can evolve without overloading the user-facing runtime documentation:
 
 - `Todos.md`: general capture, HSEN sensor-management, deployment, and network-device mirroring planning.
-- `scalance_xr328_snmp_mirroring_abfrage.md`: device-specific SNMP mirroring discovery and later management plan for the Siemens SCALANCE XR328-4C WG.
+- `Tools/snmp/scalance_xr328_snmp_mirroring_abfrage.md`: device-specific SNMP mirroring discovery and later management plan for the Siemens SCALANCE XR328-4C WG.
 
-The first experimental device-specific helper is `scripts/scalance_xr328_mirror_check.py`. It shells out to Net-SNMP (`snmpget`/`snmpwalk`) and emits JSON; it is intended as an initial diagnostic contract before any Hosts3D UI integration or controlled switch-management work.
+The first experimental device-specific helper is `Tools/snmp/scalance_xr328_mirror_check.py`. It shells out to Net-SNMP (`snmpget`/`snmpwalk`) and emits JSON; it is intended as an initial diagnostic contract before any Hosts3D UI integration or controlled switch-management work.
 
 Hosts3D 1.19 starts the runtime-side integration with a main-scene controller. Press `F9`, click the OSD `Main Scene` row, or use `View` / `Show Switch Topology Scene` to switch between the existing host-traffic scene and the new switch-topology scene. The switch scene reads an optional `hsd-data/switch-topology.txt` file while it is displayed. The first text format supports lines such as:
 
@@ -246,7 +246,7 @@ This creates:
 
 The release packages keep their runtime files flat in the package root.
 That includes the platform runtime README as `README.md`, the platform-specific copy (`README-runtime-*.md`), `README-testing.md`, and the four bundled synthetic helper scripts beside the main binaries.
-Windows packages and local `Release\windows\<arch>` runtime folders are staged through `Tools\Stage-RuntimePayload.ps1`. Optional switch diagnostics are collected centrally below `tools\snmp\`; switch-specific SNMP files use the switch name in the file name, not a separate per-switch directory.
+Windows packages and local `Release\windows\<arch>` runtime folders are staged through `Tools\Stage-RuntimePayload.ps1`. Optional switch diagnostics are collected centrally below `Tools\snmp\`; switch-specific SNMP files use the switch name in the file name, not a separate per-switch directory.
 
 ## Manual Start Helpers (Windows, Optional)
 ```powershell

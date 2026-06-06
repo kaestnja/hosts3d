@@ -37,17 +37,17 @@ These files already existed before this handover and remain important:
   - packaging/runtime handoff for Linux release output
 - `Todos.md`
   - active planning notes for general capture infrastructure, HSEN sensor management/deployment, and network-device mirroring capabilities
-- `scalance_xr328_snmp_mirroring_abfrage.md`
+- `Tools/snmp/scalance_xr328_snmp_mirroring_abfrage.md`
   - device-specific SNMP mirroring discovery and later management plan for Siemens SCALANCE XR328-4C WG; keep detailed SCALANCE OIDs and implementation steps there, not in the general todo file
-- `scripts/scalance_xr328_mirror_check.py`
+- `Tools/snmp/scalance_xr328_mirror_check.py`
   - first external JSON prototype for SCALANCE mirroring checks; keep this as the contract before wiring a Mirror Check into the Hosts3D local hsen UI or adding controlled switch-management operations
-  - always maintain this script together with `scalance_xr328_snmp_mirroring_abfrage.md`: the script header/use cases, JSON output, supported options, observed device behavior, and the markdown plan must describe the same current contract
+  - always maintain this script together with `Tools/snmp/scalance_xr328_snmp_mirroring_abfrage.md`: the script header/use cases, JSON output, supported options, observed device behavior, and the markdown plan must describe the same current contract
 - `compile-net-snmp-windows.bat`
   - optional Windows helper build for Net-SNMP CLI tools; uses a separate Net-SNMP checkout, prepares MSVC OpenSSL inputs via vcpkg under ignored `third_party/openssl/windows/<arch>`, and copies `snmpget.exe`, `snmpwalk.exe`, and `snmpset.exe` to `Release/windows/<arch>`
 - `third_party/net-snmp/README.md`
   - documents the local Net-SNMP/OpenSSL build inputs and the verified dependency profile for the generated tools
 - `Tools/Stage-RuntimePayload.ps1`
-  - single Windows runtime payload staging step for both local `Release/windows/<arch>` test folders and staged dist packages; keep SNMP helpers in the central `tools/snmp/` runtime subfolder
+  - single Windows runtime payload staging step for both local `Release/windows/<arch>` test folders and staged dist packages; keep SNMP helpers in the central `Tools/snmp/` runtime subfolder
 - `testing/sim-hsen.ps1`
   - preferred synthetic packet sender for Windows visualization tests; now includes focused TCP/ICMP/ARP/discovery modes, optional wide host spread, and `CenterIp`
 - `testing/sim-hsen.py`
@@ -153,7 +153,8 @@ The Windows build/package flow now stages one shared runtime payload:
 - `package-all-windows.bat` also delegates package contents to `Tools/Stage-RuntimePayload.ps1`; it should remain mainly for repackaging already-built runtimes, while normal release use should go through `compile-all-windows.bat`
 - the unpacked Windows dist folder should match the local runtime payload except for package naming/hash artifacts and the explicit `with-npcap` choice
 - Windows payloads keep runtime/demo files flat in the package root: `README.md`, `README-runtime-windows.md`, `README-testing.md`, `sim-hsen.*`, and `demo-hsen.*` beside the main binaries
-- optional SNMP diagnostics are staged centrally in `tools/snmp/`; switch-specific SNMP files use the switch name in the file name, for example `scalance_xr328_mirror_check.py`, instead of one folder per switch
+- optional SNMP diagnostics are staged centrally in `Tools/snmp/`; switch-specific SNMP files use the switch name in the file name, for example `scalance_xr328_mirror_check.py`, instead of one folder per switch
+- the repository source path and staged runtime path for SNMP helpers should stay the same relative path (`Tools/snmp/...`) so script header examples do not need separate repo and package variants
 - Debug Windows packages use a `-debug` suffix so they do not overwrite release ZIPs
 - `package-release-linux` creates `Release/dist/hosts3d-<version>-linux-<arch>.tar.gz` plus SHA256 from the already-built Linux runtime
 - runtime binaries under `Release/` and `Debug/` are now treated as local build outputs, not as Git-tracked release artifacts
@@ -616,8 +617,8 @@ Minimum required sweep areas:
 
 Special SCALANCE rule:
 
-- when changing `scripts/scalance_xr328_mirror_check.py`, also review and update `scalance_xr328_snmp_mirroring_abfrage.md`
-- when changing SCALANCE assumptions, OIDs, JSON examples, credential handling, or validation notes in `scalance_xr328_snmp_mirroring_abfrage.md`, also review and update the script
+- when changing `Tools/snmp/scalance_xr328_mirror_check.py`, also review and update `Tools/snmp/scalance_xr328_snmp_mirroring_abfrage.md`
+- when changing SCALANCE assumptions, OIDs, JSON examples, credential handling, or validation notes in `Tools/snmp/scalance_xr328_snmp_mirroring_abfrage.md`, also review and update the script
 - both files should stay consistent about command-line options, credential flow, output field names, observed XR328 behavior, and what remains only a planned future step
 
 For renames/removals/migrations, future Codex sessions should explicitly search for:

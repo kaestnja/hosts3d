@@ -12,25 +12,25 @@ Common use cases:
      $env:SNMP_USER = "USER"
      $env:SNMP_AUTH_PASS = "AUTHPASS"
      $env:SNMP_PRIV_PASS = "PRIVPASS"
-     python scripts/scalance_xr328_mirror_check.py 192.168.6.248 --version 3 --check-access-only --pretty
+     python Tools/snmp/scalance_xr328_mirror_check.py 192.168.6.248 --version 3 --check-access-only --pretty
 
    POSIX shell:
      export SNMP_USER=USER
      export SNMP_AUTH_PASS=AUTHPASS
      export SNMP_PRIV_PASS=PRIVPASS
-     python3 scripts/scalance_xr328_mirror_check.py 192.168.6.248 --version 3 --check-access-only --pretty
+     python3 Tools/snmp/scalance_xr328_mirror_check.py 192.168.6.248 --version 3 --check-access-only --pretty
 
 2. Run full SNMPv3 discovery after the access probe succeeds:
-     python scripts/scalance_xr328_mirror_check.py 192.168.6.248 --version 3 --pretty
+     python Tools/snmp/scalance_xr328_mirror_check.py 192.168.6.248 --version 3 --pretty
 
 3. Run a lab-only SNMPv2c discovery:
-     python scripts/scalance_xr328_mirror_check.py 192.168.6.248 --version 2c --community public --pretty
+     python Tools/snmp/scalance_xr328_mirror_check.py 192.168.6.248 --version 2c --community public --pretty
 
 4. Use local Net-SNMP tools from a Hosts3D release directory:
-     python scripts/scalance_xr328_mirror_check.py 192.168.6.248 --version 2c --community public --snmpget Release/windows/x64/snmpget.exe --snmpwalk Release/windows/x64/snmpwalk.exe --pretty
+     python Tools/snmp/scalance_xr328_mirror_check.py 192.168.6.248 --version 2c --community public --snmpget Release/windows/x64/snmpget.exe --snmpwalk Release/windows/x64/snmpwalk.exe --pretty
 
 5. Keep the first probe small when Bridge-FDB or LLDP is slow/noisy:
-     python scripts/scalance_xr328_mirror_check.py 192.168.6.248 --version 2c --community public --skip-fdb --skip-lldp --pretty
+     python Tools/snmp/scalance_xr328_mirror_check.py 192.168.6.248 --version 2c --community public --skip-fdb --skip-lldp --pretty
 
 Credentials are never printed as values. Prefer environment variables for
 passwords until the planned local profile/OS credential-store flow exists.

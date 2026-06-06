@@ -905,7 +905,7 @@ Sobald ein Weg robust genug ist, werden die anderen Wege in der Dokumentation al
 Ein erster lesender Prototyp liegt unter:
 
 ```text
-scripts/scalance_xr328_mirror_check.py
+Tools/snmp/scalance_xr328_mirror_check.py
 ```
 
 Der Prototyp nutzt Net-SNMP (`snmpget` und `snmpwalk`) als externe Werkzeuge und gibt JSON aus. Er ist bewusst als Diagnose- und Vertragswerkzeug gebaut: erst lesen und Format stabilisieren, danach koennen kontrollierte Verwaltungsfunktionen wie SNMP-SET, SSH-CLI oder API-basierte Switch-Aenderungen folgen.
@@ -928,8 +928,8 @@ Beispiel mit SNMPv3 und Umgebungsvariablen, um Credentials nicht unnoetig in der
 export SNMP_USER=USER
 export SNMP_AUTH_PASS=AUTHPASS
 export SNMP_PRIV_PASS=PRIVPASS
-python3 scripts/scalance_xr328_mirror_check.py SWITCH_IP --version 3 --check-access-only --pretty
-python3 scripts/scalance_xr328_mirror_check.py SWITCH_IP --version 3 --pretty
+python3 Tools/snmp/scalance_xr328_mirror_check.py SWITCH_IP --version 3 --check-access-only --pretty
+python3 Tools/snmp/scalance_xr328_mirror_check.py SWITCH_IP --version 3 --pretty
 ```
 
 PowerShell-Variante:
@@ -938,14 +938,14 @@ PowerShell-Variante:
 $env:SNMP_USER = "USER"
 $env:SNMP_AUTH_PASS = "AUTHPASS"
 $env:SNMP_PRIV_PASS = "PRIVPASS"
-python scripts/scalance_xr328_mirror_check.py SWITCH_IP --version 3 --check-access-only --pretty
-python scripts/scalance_xr328_mirror_check.py SWITCH_IP --version 3 --pretty
+python Tools/snmp/scalance_xr328_mirror_check.py SWITCH_IP --version 3 --check-access-only --pretty
+python Tools/snmp/scalance_xr328_mirror_check.py SWITCH_IP --version 3 --pretty
 ```
 
 Beispiel mit SNMPv2c nur fuer Laborbetrieb:
 
 ```bash
-SNMP_COMMUNITY=COMMUNITY python3 scripts/scalance_xr328_mirror_check.py SWITCH_IP --version 2c --pretty
+SNMP_COMMUNITY=COMMUNITY python3 Tools/snmp/scalance_xr328_mirror_check.py SWITCH_IP --version 2c --pretty
 ```
 
 Der Prototyp kann SNMP-Credentials aktuell direkt ueber Kommandozeilenparameter oder ueber Umgebungsvariablen erhalten. Fuer Passwoerter sind Umgebungsvariablen besser als direkte CLI-Argumente, weil sie nicht so leicht in Shell-History oder Prozesslisten sichtbar werden. Das Skript gibt keine Geheimniswerte aus, sondern meldet nur, ob `community`, `user`, `auth_pass` und `priv_pass` vorhanden oder fehlend sind. Mit `--check-access-only` fuehrt es nur die Device-Identity-Abfragen aus und eignet sich damit als kurze SNMPv3-Authentifizierungsprobe, bevor die vollstaendige Mirror-/FDB-/LLDP-Abfrage laeuft.
@@ -957,14 +957,14 @@ Vorschlag fuer eine spaetere lokale Profil- und Credential-Verwaltung:
 3. Ein separates Setup-Kommando fragt den Anwender einmalig interaktiv ab und speichert die Geheimnisse lokal fuer genau diesen Benutzer und Rechner, zum Beispiel:
 
 ```text
-python scripts/scalance_xr328_snmp_profile.py set sw6248xr328 --host 192.168.6.248 --version 3 --level authPriv --user USER --auth-proto SHA --priv-proto AES
+python Tools/snmp/scalance_xr328_snmp_profile.py set sw6248xr328 --host 192.168.6.248 --version 3 --level authPriv --user USER --auth-proto SHA --priv-proto AES
 ```
 
 4. Der Diagnoseaufruf verwendet danach nur noch das Profil:
 
 ```text
-python scripts/scalance_xr328_mirror_check.py --profile sw6248xr328 --check-access-only --pretty
-python scripts/scalance_xr328_mirror_check.py --profile sw6248xr328 --pretty
+python Tools/snmp/scalance_xr328_mirror_check.py --profile sw6248xr328 --check-access-only --pretty
+python Tools/snmp/scalance_xr328_mirror_check.py --profile sw6248xr328 --pretty
 ```
 
 5. Fuer die Implementierung ist ein kleines Credential-Modul sinnvoll, das zuerst Windows sauber unterstuetzt und spaeter plattformneutral erweitert wird. Eine praktikable Python-Variante waere die optionale Nutzung von `keyring`; ohne dieses Modul bleibt der aktuelle Weg ueber Umgebungsvariablen und CLI-Parameter als fallbackfaehiger Diagnosepfad erhalten.

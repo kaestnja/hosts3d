@@ -99,9 +99,9 @@ foreach ($name in @("sim-hsen.ps1", "sim-hsen.py", "demo-hsen.ps1", "demo-hsen.p
     Copy-PayloadFile -Source (Join-Path $repoRoot (Join-Path "testing" $name)) -DestinationDirectory $destinationPath -DestinationName $name -Required
 }
 
-$snmpToolsDir = Join-Path $destinationPath "tools\snmp"
-Copy-PayloadFile -Source (Join-Path $repoRoot "scripts\scalance_xr328_mirror_check.py") -DestinationDirectory $snmpToolsDir -DestinationName "scalance_xr328_mirror_check.py" -Required
-Copy-PayloadFile -Source (Join-Path $repoRoot "scalance_xr328_snmp_mirroring_abfrage.md") -DestinationDirectory $snmpToolsDir -DestinationName "scalance_xr328_snmp_mirroring_abfrage.md" -Required
+$snmpToolsDir = Join-Path $destinationPath "Tools\snmp"
+Copy-PayloadFile -Source (Join-Path $repoRoot "Tools\snmp\scalance_xr328_mirror_check.py") -DestinationDirectory $snmpToolsDir -DestinationName "scalance_xr328_mirror_check.py" -Required
+Copy-PayloadFile -Source (Join-Path $repoRoot "Tools\snmp\scalance_xr328_snmp_mirroring_abfrage.md") -DestinationDirectory $snmpToolsDir -DestinationName "scalance_xr328_snmp_mirroring_abfrage.md" -Required
 
 $snmpReadme = @'
 # Hosts3D SNMP Tools
@@ -113,7 +113,8 @@ Current helper:
 - scalance_xr328_snmp_mirroring_abfrage.md
 
 The switch type is encoded in the file names so future SNMP helpers can live
-beside these files without creating one folder per switch.
+beside these files without creating one folder per switch. From the repository
+root and from a staged package root, the same relative path works.
 
 Quick lab example:
 
