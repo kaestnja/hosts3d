@@ -82,6 +82,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--snmpwalk", default="snmpwalk")
     parser.add_argument("--skip-fdb", action="store_true", help="Skip Bridge-MIB FDB reads")
     parser.add_argument("--skip-lldp", action="store_true", help="Skip LLDP table read")
+    parser.add_argument(
+        "--check-access-only",
+        action="store_true",
+        help="Only query basic device identity; useful for validating SNMP credentials",
+    )
     parser.add_argument("--pretty", action="store_true", help="Pretty-print JSON")
     return parser.parse_args()
 
@@ -102,6 +107,30 @@ def snmp_base_args(args: argparse.Namespace) -> list[str]:
             cmd += ["-x", args.priv_proto, "-X", args.priv_pass]
     cmd += [f"{args.host}:{args.port}"]
     return cmd
+
+
+def credential_state(args: argparse.Namespace) -> dict[str, str]:
+    if args.version in ("1", "2c"):
+        return {"community": "provided" if args.community else "missing"}
+    state = {"user": "provided" if args.user else "missing"}
+    if args.level in ("authNoPriv", "authPriv"):
+        state["auth_pass"] = "provided" if args.auth_pass else "missing"
+    else:
+        state["auth_pass"] = "not_required"
+    if args.level == "authPriv":
+        state["priv_pass"] = "provided" if args.priv_pass else "missing"
+    else:
+        state["priv_pass"] = "not_required"
+    return state
+
+
+def missing_credentials(args: argparse.Namespace) -> list[str]:
+    missing = []
+    state = credential_state(args)
+    for key, value in state.items():
+        if value == "missing":
+            missing.append(key)
+    return missing
 
 
 def classify_error(text: str) -> str:
@@ -244,11 +273,16 @@ def walk(args: argparse.Namespace, component: str, oid: str, result: dict[str, A
 
 
 def get(args: argparse.Namespace, component: str, oid: str, result: dict[str, Any]) -> str | None:
-    got = run_snmp(args, "get", oid)
-    add_detail(result, component, got.status, got.error)
+    got = get_result(args, component, oid, result)
     if got.status != STATUS_OK:
         return None
     return next(iter(got.values.values()), None)
+
+
+def get_result(args: argparse.Namespace, component: str, oid: str, result: dict[str, Any]) -> SnmpResult:
+    got = run_snmp(args, "get", oid)
+    add_detail(result, component, got.status, got.error)
+    return got
 
 
 def build_interface_map(args: argparse.Namespace, result: dict[str, Any]) -> dict[int, dict[str, Any]]:
@@ -322,12 +356,31 @@ def apply_lldp(args: argparse.Namespace, result: dict[str, Any]) -> None:
     result["lldp_raw_count"] = len(rows)
 
 
+def finalize_status(result: dict[str, Any]) -> None:
+    statuses = {item["status"] for item in result["details"]}
+    if STATUS_AUTH_FAILED in statuses:
+        result["status"] = STATUS_AUTH_FAILED
+    elif STATUS_SNMP_UNREACHABLE in statuses:
+        result["status"] = STATUS_SNMP_UNREACHABLE
+    elif statuses - {STATUS_OK, STATUS_EMPTY_TABLE, STATUS_OID_NOT_SUPPORTED}:
+        result["status"] = STATUS_PARTIAL
+    elif any(item["status"] != STATUS_OK for item in result["details"]):
+        result["status"] = STATUS_PARTIAL
+
+
 def build_result(args: argparse.Namespace) -> dict[str, Any]:
     result: dict[str, Any] = {
         "status": STATUS_OK,
         "details": [],
         "device": {"host": args.host, "sys_name": None, "sys_descr": None, "sys_object_id": None},
-        "snmp": {"version": "v" + args.version, "security_level": args.level if args.version == "3" else None},
+        "snmp": {
+            "version": "v" + args.version,
+            "security_level": args.level if args.version == "3" else None,
+            "auth_protocol": args.auth_proto if args.version == "3" and args.level in ("authNoPriv", "authPriv") else None,
+            "privacy_protocol": args.priv_proto if args.version == "3" and args.level == "authPriv" else None,
+            "credential_state": credential_state(args),
+            "access_probe": STATUS_UNKNOWN,
+        },
         "mirroring": {
             "global_status": STATUS_UNKNOWN,
             "destination_port": None,
@@ -340,9 +393,15 @@ def build_result(args: argparse.Namespace) -> dict[str, Any]:
             "IP and hostname data are indirect correlations unless provided by LLDP or another explicit source.",
         ],
     }
-    result["device"]["sys_descr"] = parse_text(get(args, "sysDescr", OID_SYS_DESCR, result) or "")
+    sys_descr = get_result(args, "sysDescr", OID_SYS_DESCR, result)
+    result["snmp"]["access_probe"] = sys_descr.status
+    result["device"]["sys_descr"] = parse_text(next(iter(sys_descr.values.values()), "") if sys_descr.status == STATUS_OK else "")
     result["device"]["sys_object_id"] = parse_text(get(args, "sysObjectID", OID_SYS_OBJECT_ID, result) or "")
     result["device"]["sys_name"] = parse_text(get(args, "sysName", OID_SYS_NAME, result) or "")
+
+    if args.check_access_only:
+        finalize_status(result)
+        return result
 
     interfaces = build_interface_map(args, result)
     mirror_status = get(args, "snMspsConfigMirrorStatus", OID_MIRROR_STATUS, result)
@@ -385,25 +444,33 @@ def build_result(args: argparse.Namespace) -> dict[str, Any]:
         port.setdefault("ip_correlations", [])
         result["mirroring"]["source_ports"].append(port)
 
-    statuses = {item["status"] for item in result["details"]}
-    if STATUS_AUTH_FAILED in statuses:
-        result["status"] = STATUS_AUTH_FAILED
-    elif STATUS_SNMP_UNREACHABLE in statuses:
-        result["status"] = STATUS_SNMP_UNREACHABLE
-    elif statuses - {STATUS_OK, STATUS_EMPTY_TABLE, STATUS_OID_NOT_SUPPORTED}:
-        result["status"] = STATUS_PARTIAL
-    elif any(item["status"] != STATUS_OK for item in result["details"]):
-        result["status"] = STATUS_PARTIAL
+    finalize_status(result)
     return result
 
 
 def main() -> int:
     args = parse_args()
-    if args.version in ("1", "2c") and not args.community:
-        print(json.dumps({"status": STATUS_AUTH_FAILED, "details": [{"component": "snmp", "status": STATUS_AUTH_FAILED, "message": "SNMP community missing"}]}))
-        return 2
-    if args.version == "3" and not args.user:
-        print(json.dumps({"status": STATUS_AUTH_FAILED, "details": [{"component": "snmp", "status": STATUS_AUTH_FAILED, "message": "SNMPv3 user missing"}]}))
+    missing = missing_credentials(args)
+    if missing:
+        data = {
+            "status": STATUS_AUTH_FAILED,
+            "details": [
+                {
+                    "component": "snmp_credentials",
+                    "status": STATUS_AUTH_FAILED,
+                    "message": "Missing SNMP credential fields: " + ", ".join(missing),
+                },
+            ],
+            "snmp": {
+                "version": "v" + args.version,
+                "security_level": args.level if args.version == "3" else None,
+                "auth_protocol": args.auth_proto if args.version == "3" and args.level in ("authNoPriv", "authPriv") else None,
+                "privacy_protocol": args.priv_proto if args.version == "3" and args.level == "authPriv" else None,
+                "credential_state": credential_state(args),
+                "access_probe": "not_run",
+            },
+        }
+        print(json.dumps(data, indent=2 if args.pretty else None, sort_keys=False))
         return 2
     data = build_result(args)
     print(json.dumps(data, indent=2 if args.pretty else None, sort_keys=False))

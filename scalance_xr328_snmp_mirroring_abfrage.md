@@ -906,7 +906,18 @@ Beispiel mit SNMPv3 und Umgebungsvariablen, um Credentials nicht unnoetig in der
 export SNMP_USER=USER
 export SNMP_AUTH_PASS=AUTHPASS
 export SNMP_PRIV_PASS=PRIVPASS
-python3 scripts/scalance_xr328_mirror_check.py SWITCH_IP --pretty
+python3 scripts/scalance_xr328_mirror_check.py SWITCH_IP --version 3 --check-access-only --pretty
+python3 scripts/scalance_xr328_mirror_check.py SWITCH_IP --version 3 --pretty
+```
+
+PowerShell-Variante:
+
+```powershell
+$env:SNMP_USER = "USER"
+$env:SNMP_AUTH_PASS = "AUTHPASS"
+$env:SNMP_PRIV_PASS = "PRIVPASS"
+python scripts/scalance_xr328_mirror_check.py SWITCH_IP --version 3 --check-access-only --pretty
+python scripts/scalance_xr328_mirror_check.py SWITCH_IP --version 3 --pretty
 ```
 
 Beispiel mit SNMPv2c nur fuer Laborbetrieb:
@@ -915,11 +926,32 @@ Beispiel mit SNMPv2c nur fuer Laborbetrieb:
 SNMP_COMMUNITY=COMMUNITY python3 scripts/scalance_xr328_mirror_check.py SWITCH_IP --version 2c --pretty
 ```
 
+Der Prototyp kann SNMP-Credentials aktuell direkt ueber Kommandozeilenparameter oder ueber Umgebungsvariablen erhalten. Fuer Passwoerter sind Umgebungsvariablen besser als direkte CLI-Argumente, weil sie nicht so leicht in Shell-History oder Prozesslisten sichtbar werden. Das Skript gibt keine Geheimniswerte aus, sondern meldet nur, ob `community`, `user`, `auth_pass` und `priv_pass` vorhanden oder fehlend sind. Mit `--check-access-only` fuehrt es nur die Device-Identity-Abfragen aus und eignet sich damit als kurze SNMPv3-Authentifizierungsprobe, bevor die vollstaendige Mirror-/FDB-/LLDP-Abfrage laeuft.
+
+Vorschlag fuer eine spaetere lokale Profil- und Credential-Verwaltung:
+
+1. Nicht geheime Profilmetadaten werden lokal pro Benutzer abgelegt, zum Beispiel unter `%APPDATA%\Hosts3D\snmp-profiles.json` auf Windows oder unter `~/.config/hosts3d/snmp-profiles.json` auf Linux/macOS. Dort stehen nur Profilname, Host, SNMP-Version, Security-Level, Auth-/Privacy-Protokolle und Verweise auf Credential-Namen.
+2. Geheimnisse werden nicht in Repository, Handover, JSON-Ausgabe oder Klartext-Konfigurationsdateien gespeichert. Sie gehoeren in den lokalen Betriebssystem-Credential-Store: Windows Credential Manager/DPAPI auf Windows, Keychain auf macOS, Secret Service oder ein vergleichbarer sicherer Store auf Linux.
+3. Ein separates Setup-Kommando fragt den Anwender einmalig interaktiv ab und speichert die Geheimnisse lokal fuer genau diesen Benutzer und Rechner, zum Beispiel:
+
+```text
+python scripts/scalance_xr328_snmp_profile.py set sw6248xr328 --host 192.168.6.248 --version 3 --level authPriv --user USER --auth-proto SHA --priv-proto AES
+```
+
+4. Der Diagnoseaufruf verwendet danach nur noch das Profil:
+
+```text
+python scripts/scalance_xr328_mirror_check.py --profile sw6248xr328 --check-access-only --pretty
+python scripts/scalance_xr328_mirror_check.py --profile sw6248xr328 --pretty
+```
+
+5. Fuer die Implementierung ist ein kleines Credential-Modul sinnvoll, das zuerst Windows sauber unterstuetzt und spaeter plattformneutral erweitert wird. Eine praktikable Python-Variante waere die optionale Nutzung von `keyring`; ohne dieses Modul bleibt der aktuelle Weg ueber Umgebungsvariablen und CLI-Parameter als fallbackfaehiger Diagnosepfad erhalten.
+
 Aktuelle Grenzen des Prototyps:
 
 - Er liest bereits Device Identity, IF-MIB, klassische Siemens-Mirroring-OIDs, optionale erweiterte Siemens-Mirroring-Tabellen, Bridge-FDB und LLDP-Rohdaten.
 - Er korreliert Bridge-FDB-MACs ueber Bridge-Port zu `ifIndex`.
-- Der reale Validierungslauf gegen `sw6248xr328` wurde mit SNMPv2c durchgefuehrt; SNMPv3-Parameter sind im Prototyp vorbereitet, aber gegen dieses Geraet noch nicht praktisch bestaetigt.
+- Der reale Validierungslauf gegen `sw6248xr328` wurde mit SNMPv2c durchgefuehrt; der Prototyp hat jetzt eine explizite SNMPv3-Access-Probe, die praktische SNMPv3-Bestaetigung gegen dieses Geraet benoetigt aber noch echte SNMPv3-Credentials.
 - Das beobachtete Mirroring war global aktiv, Zielport war `P0.6`, aktive Source-Ports waren `P0.1`, `P0.2`, `P0.3`, `P0.4`, `P0.10`, `P0.17`, `P0.18`, `P0.19` und `P0.26`.
 - Die erweiterten Siemens-Mirroring-Tabellen liefern im aktuellen Skript nur die Aussage `supported`, wenn mindestens ein Tabellenzweig lesbare Rohdaten liefert; eine strukturierte Session-Auswertung fehlt noch.
 - LLDP wird im ersten Schritt nur als Rohdatenzaehlung erfasst; die Port-zu-Nachbar-Korrelation ist ein naechster Ausbauschritt.
@@ -963,7 +995,13 @@ Beispiel:
   },
   "snmp": {
     "version": "v2c",
-    "security_level": null
+    "security_level": null,
+    "auth_protocol": null,
+    "privacy_protocol": null,
+    "credential_state": {
+      "community": "provided"
+    },
+    "access_probe": "ok"
   },
   "mirroring": {
     "global_status": "enabled",
@@ -1143,7 +1181,7 @@ Zu pruefen:
 Das Tool gilt als brauchbarer Prototyp, wenn es folgende Anforderungen erfuellt:
 
 1. Es arbeitet im ersten Schritt ohne SNMP-SETs und schafft eine stabile Grundlage fuer spaetere Schreiboperationen.
-2. Es nimmt SNMPv3-authPriv-Parameter an und kann sie an Net-SNMP weiterreichen; die praktische SNMPv3-Validierung am konkreten XR328 bleibt ein eigener Testpunkt.
+2. Es nimmt SNMPv3-authPriv-Parameter an, prueft fehlende Credential-Felder vor dem Net-SNMP-Aufruf und kann eine kurze `--check-access-only`-Probe ausfuehren; die praktische SNMPv3-Validierung am konkreten XR328 bleibt ohne echte SNMPv3-Credentials ein eigener Testpunkt.
 3. Es kann den Siemens-Mirroring-Basiszweig automatisch testen.
 4. Es dekodiert `enabled(1)` und `disabled(2)` korrekt.
 5. Es liest globalen Mirroring-Status und Mirror-Zielport.
@@ -1167,11 +1205,12 @@ Implementiere:
 
 - [x] Konfigurationsaufnahme fuer Host, Port, SNMP-Version, Timeout, Retries
 - [x] SNMPv3 authPriv Parameter
+- [x] Kurze SNMPv3-faehige Access-Probe per `--check-access-only`
 - [x] `snmpget` und `snmpwalk` Hilfsfunktionen
 - [x] Saubere Fehlerklassifikation fuer Basispfade
 - [x] Keine unnoetige Ausgabe von Credentials
 
-Hinweis: Der reale XR328-Lauf wurde bisher mit SNMPv2c validiert; ein echter SNMPv3-Lauf am Geraet steht noch aus.
+Hinweis: Der reale XR328-Lauf wurde bisher mit SNMPv2c validiert; ein echter SNMPv3-Lauf am Geraet steht noch aus, bis passende SNMPv3-Credentials vorhanden sind.
 
 ### Schritt 2: Interface-Discovery
 
