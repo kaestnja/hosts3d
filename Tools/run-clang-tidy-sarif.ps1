@@ -15,8 +15,22 @@ param(
 $ErrorActionPreference = "Stop"
 
 $clangTidy = Get-Command clang-tidy -ErrorAction SilentlyContinue
+$clangTidyPath = if ($clangTidy) { $clangTidy.Source } else { "" }
 if (-not $clangTidy) {
-  throw "clang-tidy was not found in PATH. Install LLVM or add clang-tidy.exe to PATH."
+  foreach ($candidate in @(
+      "C:\msys64\mingw64\bin\clang-tidy.exe",
+      "C:\msys64\ucrt64\bin\clang-tidy.exe",
+      "C:\msys64\clang64\bin\clang-tidy.exe",
+      "C:\Program Files\LLVM\bin\clang-tidy.exe"
+    )) {
+    if (Test-Path -LiteralPath $candidate -PathType Leaf) {
+      $clangTidyPath = $candidate
+      break
+    }
+  }
+}
+if (-not $clangTidyPath) {
+  throw "clang-tidy was not found in PATH or the usual LLVM/MSYS2 install locations."
 }
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
@@ -76,7 +90,7 @@ foreach ($file in $Files) {
   try {
     $oldErrorActionPreference = $ErrorActionPreference
     $ErrorActionPreference = "Continue"
-    $output = & $clangTidy.Source @clangArgs 2>&1 | ForEach-Object { $_.ToString() }
+    $output = & $clangTidyPath @clangArgs 2>&1 | ForEach-Object { $_.ToString() }
     $ErrorActionPreference = $oldErrorActionPreference
     foreach ($line in $output) {
       $allOutput.Add($line)

@@ -220,6 +220,25 @@ function Get-VSCodeExtensions {
     return @{ Command = $code.Source; Extensions = @(& $code.Source --list-extensions) }
 }
 
+function Find-ClangTidy {
+    $cmd = Get-Command "clang-tidy" -ErrorAction SilentlyContinue
+    if ($cmd) {
+        return $cmd.Source
+    }
+
+    foreach ($candidate in @(
+        "C:\msys64\mingw64\bin\clang-tidy.exe",
+        "C:\msys64\ucrt64\bin\clang-tidy.exe",
+        "C:\msys64\clang64\bin\clang-tidy.exe",
+        "C:\Program Files\LLVM\bin\clang-tidy.exe"
+    )) {
+        if (Test-Path -LiteralPath $candidate -PathType Leaf) {
+            return $candidate
+        }
+    }
+    return ""
+}
+
 function Test-Hosts3DTools {
     $results = @()
     $results += Get-CommandCheck -Area "shell" -Name "PowerShell 7" -CommandName "pwsh"
@@ -229,8 +248,8 @@ function Test-Hosts3DTools {
     $results += Get-CommandCheck -Area "source" -Name "GitHub CLI" -CommandName "gh"
     $results += Get-CommandCheck -Area "script" -Name "python" -CommandName "python"
     $results += Get-CommandCheck -Area "script" -Name "py launcher" -CommandName "py"
-    $clangTidy = Get-Command "clang-tidy" -ErrorAction SilentlyContinue
-    $results += New-CheckResult -Area "analysis" -Name "clang-tidy" -Found ($null -ne $clangTidy) -Path $(if ($clangTidy) { $clangTidy.Source } else { "" }) -Required $false -Note "optional; needed for RunClangTidySarif"
+    $clangTidy = Find-ClangTidy
+    $results += New-CheckResult -Area "analysis" -Name "clang-tidy" -Found ($clangTidy -ne "") -Path $clangTidy -Required $false -Note "optional; needed for RunClangTidySarif"
     $results += Get-CommandCheck -Area "editor" -Name "VS Code CLI" -CommandName "code"
 
     $results += Get-FileCheck -Area "msys2" -Name "bash" -Path (Join-Path $Msys2Root "usr\bin\bash.exe")

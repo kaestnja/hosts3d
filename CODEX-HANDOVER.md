@@ -208,6 +208,9 @@ Current Windows debug setup:
 - If `gh` is needed on another machine, install it explicitly, for example:
   - `winget install --id GitHub.cli --exact`
   - expected default executable path: `C:\Program Files\GitHub CLI\gh.exe`
+- `clang-tidy` is installed through MSYS2 MinGW64.
+- Verified `clang-tidy` path: `C:\msys64\mingw64\bin\clang-tidy.exe`
+- `C:\msys64\mingw64\bin` has been added to the user PATH; already-running shells may need a restart to inherit it.
 
 VS Code debug files now live in the repository:
 
