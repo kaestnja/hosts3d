@@ -16,6 +16,11 @@ Geraet:
 
 - Siemens SCALANCE XR328-4C WG
 - Siemens-Artikelnummer laut Datenblatt: `6GK5328-4FS00-3AR3`
+- Real beobachtetes Geraet per `sysDescr`: `6GK5 328-4SS00-3AR3`
+- Real beobachtete Firmware per `sysDescr`: `V04.07.00`
+- Real beobachtete Hardware-Version per `sysDescr`: `Version 2`
+- Real beobachteter `sysName`: `sw6248xr328`
+- Real beobachteter `sysObjectID`: `.1.3.6.1.4.1.4329.6.1.2.1.2`
 
 Bekannte Eigenschaften laut Siemens-Datenblatt:
 
@@ -76,11 +81,11 @@ Die Siemens-Mirroring-OIDs liefern nach aktuellem Kenntnisstand nur Informatione
 
 ## Wichtige Einschraenkungen
 
-1. Die Mirroring-Konfiguration liegt voraussichtlich nicht in einer Standard-MIB, sondern in der Siemens Private MIB.
-2. Die unten genannten OIDs stammen aus oeffentlichen OID-Repositories und sollten gegen die Private MIB des konkreten Firmwarestands validiert werden.
+1. Die Mirroring-Konfiguration liegt nicht in einer Standard-MIB, sondern im Siemens Private MIB-Zweig.
+2. Die unten genannten klassischen Mirroring-OIDs wurden gegen einen realen SCALANCE XR328-4C WG mit Firmware `V04.07.00` erfolgreich lesend validiert.
 3. Siemens-Geraete koennen je nach Firmware und Geraetemodell nur Teilmengen der generischen Siemens Private MIB implementieren.
-4. Das Datenblatt nennt fuer den XR328-4C WG `port mirroring: yes`, aber `multiport mirroring: no`.
-5. Erweiterte Mirroring-Tabellen koennen in der MIB existieren, aber am konkreten Geraet leer oder nicht implementiert sein.
+4. Das Datenblatt nennt fuer den XR328-4C WG `port mirroring: yes`, aber `multiport mirroring: no`. Am beobachteten Geraet koennen trotzdem mehrere Source-Ports gleichzeitig auf ein Ziel gespiegelt werden; `multiport mirroring: no` ist daher nicht als "nur ein Source-Port" zu interpretieren.
+5. Erweiterte Mirroring-Tabellen koennen in der MIB existieren. Am beobachteten Geraet antworten diese Tabellen, der Prototyp wertet sie aber noch nicht semantisch als Sessions/Quellen/Ziele aus.
 6. Eine gelernte MAC-Adresse ist ein FDB-Eintrag und kann altern, verschwinden oder von einem nachgelagerten Geraet stammen.
 7. IP- und Hostname-Zuordnungen sind keine sicheren Layer-2-Informationen des Switchports, sondern Korrelationen.
 8. Script-Ausgaben sollen ASCII-only sein: keine Emojis, keine Farbcodes, keine Unicode-Symbole.
@@ -146,6 +151,11 @@ Dekodierung:
 anderer Wert -> unknown
 ```
 
+Real validierter Lauf:
+
+- `snMspsConfigMirrorStatus.0` antwortete mit `enabled`.
+- Der Prototyp dekodiert den Wert zu `mirroring.global_status = "enabled"`.
+
 ---
 
 ### Mirror-Zielport
@@ -166,6 +176,8 @@ Hinweis fuer die Implementierung:
 
 - Den gelieferten numerischen Wert nicht blind als physische Portnummer interpretieren.
 - Gegen `ifIndex`, `ifName`, `ifDescr`, `ifAlias` und gegebenenfalls Bridge-Port-Mapping validieren.
+- Beim real beobachteten Geraet entsprach der Rohwert `6` dem `ifIndex` `6` und damit dem Port `P0.6`.
+- `P0.6` war im realen Lauf sowohl administrativ als auch operativ `up`.
 
 ---
 
@@ -193,7 +205,7 @@ Quelle:
 
 - https://oid-base.com/get/1.3.6.1.4.1.4329.20.1.1.1.1.1.6.3.1
 
-Die Tabelle enthaelt laut oeffentlicher OID-Beschreibung einen Eintrag pro Interface. Der Index ist nach der Beschreibung der Mirror-Control-Index, in der Praxis voraussichtlich direkt oder indirekt dem Interface-Index zuzuordnen. Dies muss am realen Geraet verifiziert werden.
+Die Tabelle enthaelt laut oeffentlicher OID-Beschreibung einen Eintrag pro Interface. Der Index ist nach der Beschreibung der Mirror-Control-Index. Beim real beobachteten XR328 mit Firmware `V04.07.00` entsprach dieser Index fuer die klassischen Mirroring-OIDs direkt dem `ifIndex` der physischen Ports. Diese Beobachtung sollte fuer andere Firmwarestaende nicht blind verallgemeinert werden.
 
 ---
 
@@ -219,6 +231,11 @@ Dekodierung:
 anderer Wert -> unknown
 ```
 
+Real validierter Lauf:
+
+- Die abgefragten Source-Ports meldeten `ingress_mirroring = false`.
+- Der Mirror-Zustand war im realen Lauf also egress-orientiert.
+
 ---
 
 ### Egress Mirroring je Interface
@@ -242,6 +259,12 @@ Dekodierung:
 2 -> false
 anderer Wert -> unknown
 ```
+
+Real validierter Lauf:
+
+- Aktive Egress-Source-Ports: `P0.1`, `P0.2`, `P0.3`, `P0.4`, `P0.10`, `P0.17`, `P0.18`, `P0.19`, `P0.26`.
+- Alle diese Ports wurden auf den Zielport `P0.6` gespiegelt.
+- `mirror_ctrl_status_raw` war fuer die ausgegebenen Source-Ports `1`.
 
 ---
 
@@ -267,7 +290,7 @@ Hinweis:
 
 ## Erweiterte Siemens-Mirroring-Tabellen
 
-Der XR328-4C WG unterstuetzt laut Datenblatt kein Multiport Mirroring. Trotzdem kann die Siemens Private MIB erweiterte Tabellen enthalten. Diese Tabellen sollten optional abgefragt werden. Falls nicht vorhanden oder leer, soll das Tool dies sauber melden.
+Der XR328-4C WG unterstuetzt laut Datenblatt kein Multiport Mirroring. Trotzdem kann die Siemens Private MIB erweiterte Tabellen enthalten. Diese Tabellen sollten optional abgefragt werden. Falls nicht vorhanden oder leer, soll das Tool dies sauber melden. Beim real beobachteten Geraet antworteten die erweiterten Tabellen mit `ok`, weshalb der Prototyp aktuell `extended_mirroring = "supported"` meldet. Das bedeutet bisher nur: Der Tabellenzweig antwortet. Sessions, Source-IDs, Source-Modi und Destinationen muessen noch strukturiert ausgewertet werden.
 
 ### Erweiterte Mirroring-Session-Tabelle
 
@@ -465,6 +488,13 @@ Auswertelogik:
 7. MAC-Adresse dem Switchport zuordnen.
 ```
 
+Real validierter Lauf:
+
+- `dot1dTpFdbAddress`, `dot1dTpFdbPort` und `dot1dBasePortIfIndex` antworteten mit `ok`.
+- Die Zuordnung `MAC -> Bridge-Port -> ifIndex -> ifName` funktionierte fuer mehrere Source-Ports.
+- Im aktuellen Lauf hatten `P0.1`, `P0.2`, `P0.3`, `P0.4`, `P0.10`, `P0.17`, `P0.18` und `P0.19` je mindestens eine gelernte MAC.
+- `P0.26` war Mirror-Source, hatte im aktuellen FDB-Snapshot aber keine ausgegebene gelernte MAC.
+
 Einschraenkungen:
 
 - FDB-Eintraege sind gelernte MAC-Adressen, keine garantierten Endgeraete.
@@ -548,7 +578,7 @@ Einschaetzung fuer SCALANCE XR328-4C WG:
 
 ## LLDP-Nachbarn
 
-Der XR328-4C WG unterstuetzt laut Siemens-Datenblatt LLDP. Die LLDP-MIB kann Nachbargeraete liefern, sofern diese LLDP senden.
+Der XR328-4C WG unterstuetzt laut Siemens-Datenblatt LLDP. Die LLDP-MIB kann Nachbargeraete liefern, sofern diese LLDP senden. Beim real beobachteten Geraet antwortete `lldpRemTable` mit `ok`; der Prototyp zaehlte im aktuellen Lauf `lldp_raw_count = 135`. Die strukturierte Zuordnung dieser Rohdaten zu lokalen Ports und Nachbarfeldern ist noch offen.
 
 Relevante OIDs:
 
@@ -691,6 +721,8 @@ Ergebnis:
 - destination IDs if present
 ```
 
+Der aktuelle Prototyp unterscheidet hier bereits `supported` und `empty_table`, gibt aber noch keine strukturierten Session-, Source- oder Destination-Zeilen aus.
+
 ---
 
 ### Phase 4: MAC-Adressen je Port
@@ -718,6 +750,8 @@ Optional VLAN-aware:
 dot1qTpFdbTable
 1.3.6.1.2.1.17.7.1.2.2
 ```
+
+Der reale Lauf wurde bisher ueber die klassische Bridge-MIB validiert; Q-BRIDGE bleibt fuer VLAN-aware Auswertung ein offener optionaler Ausbau.
 
 Ergebnis:
 
@@ -747,12 +781,15 @@ lldpRemManAddrTable
 Ergebnis:
 
 ```text
+- lldp_raw_count
 - port -> LLDP chassis ID
 - port -> LLDP port ID
 - port -> LLDP system name
 - port -> LLDP system description
 - port -> LLDP management address if present
 ```
+
+Der aktuelle Prototyp liefert `lldp_raw_count`; die folgenden Port-zu-Nachbar-Felder bleiben noch zu implementieren.
 
 ---
 
@@ -882,6 +919,9 @@ Aktuelle Grenzen des Prototyps:
 
 - Er liest bereits Device Identity, IF-MIB, klassische Siemens-Mirroring-OIDs, optionale erweiterte Siemens-Mirroring-Tabellen, Bridge-FDB und LLDP-Rohdaten.
 - Er korreliert Bridge-FDB-MACs ueber Bridge-Port zu `ifIndex`.
+- Der reale Validierungslauf gegen `sw6248xr328` wurde mit SNMPv2c durchgefuehrt; SNMPv3-Parameter sind im Prototyp vorbereitet, aber gegen dieses Geraet noch nicht praktisch bestaetigt.
+- Das beobachtete Mirroring war global aktiv, Zielport war `P0.6`, aktive Source-Ports waren `P0.1`, `P0.2`, `P0.3`, `P0.4`, `P0.10`, `P0.17`, `P0.18`, `P0.19` und `P0.26`.
+- Die erweiterten Siemens-Mirroring-Tabellen liefern im aktuellen Skript nur die Aussage `supported`, wenn mindestens ein Tabellenzweig lesbare Rohdaten liefert; eine strukturierte Session-Auswertung fehlt noch.
 - LLDP wird im ersten Schritt nur als Rohdatenzaehlung erfasst; die Port-zu-Nachbar-Korrelation ist ein naechster Ausbauschritt.
 - IP-/Hostname-Korrelationen aus Gateway-ARP, DHCP, DNS oder Asset-Datenbank sind noch nicht implementiert.
 - Das Tool ist als Diagnose- und JSON-Vertragsgrundlage fuer eine spaetere Hosts3D-UI-Integration gedacht.
@@ -897,40 +937,58 @@ Beispiel:
 ```json
 {
   "status": "ok",
+  "details": [
+    {
+      "component": "sysDescr",
+      "status": "ok"
+    },
+    {
+      "component": "snMspsConfigMirrorStatus",
+      "status": "ok"
+    },
+    {
+      "component": "dot1dTpFdbAddress",
+      "status": "ok"
+    },
+    {
+      "component": "lldpRemTable",
+      "status": "ok"
+    }
+  ],
   "device": {
-    "host": "SWITCH_IP",
-    "sys_name": "string_or_null",
-    "sys_descr": "string_or_null",
-    "sys_object_id": "string_or_null"
+    "host": "192.168.6.248",
+    "sys_name": "sw6248xr328",
+    "sys_descr": "Siemens, SIMATIC NET, SCALANCE XR328-4C WG, 6GK5 328-4SS00-3AR3, HW: Version 2, FW: Version V04.07.00, SVPR8000110",
+    "sys_object_id": ".1.3.6.1.4.1.4329.6.1.2.1.2"
   },
   "snmp": {
-    "version": "v3",
-    "security_level": "authPriv",
-    "mirror_branch_supported": true,
-    "extended_mirror_supported": false
+    "version": "v2c",
+    "security_level": null
   },
   "mirroring": {
     "global_status": "enabled",
     "destination_port": {
-      "raw_id": 10,
-      "if_index": 10,
-      "if_name": "port_name_or_null",
+      "raw_id": 6,
+      "if_index": 6,
+      "if_name": "P0.6",
       "if_descr": "description_or_null",
       "if_alias": "alias_or_null",
-      "admin_status": "up_or_down_or_unknown",
-      "oper_status": "up_or_down_or_unknown"
+      "admin_status": "up",
+      "oper_status": "up"
     },
+    "extended_mirroring": "supported",
     "source_ports": [
       {
-        "raw_id": 5,
-        "if_index": 5,
-        "if_name": "port_name_or_null",
+        "raw_id": 1,
+        "if_index": 1,
+        "if_name": "P0.1",
         "if_descr": "description_or_null",
         "if_alias": "alias_or_null",
-        "ingress_mirroring": true,
-        "egress_mirroring": false,
-        "admin_status": "up_or_down_or_unknown",
-        "oper_status": "up_or_down_or_unknown",
+        "ingress_mirroring": false,
+        "egress_mirroring": true,
+        "mirror_ctrl_status_raw": "1",
+        "admin_status": "up",
+        "oper_status": "up",
         "learned_macs": [
           {
             "mac": "00:11:22:33:44:55",
@@ -961,10 +1019,12 @@ Beispiel:
       }
     ]
   },
+  "lldp_raw_count": 135,
   "notes": [
+    "This prototype currently reads state only; controlled write operations belong in a later explicit management step.",
     "MAC-to-port values are learned FDB data and may age out.",
     "IP and hostname data are indirect correlations unless provided by LLDP or another explicit source.",
-    "Mirroring OIDs are based on public Siemens Private MIB information and should be validated against the device firmware."
+    "The classic mirroring OIDs were validated read-only against the observed XR328 firmware; extended mirroring tables still need structured interpretation."
   ]
 }
 ```
@@ -1061,7 +1121,7 @@ Python-Wrapper um Net-SNMP, Ausgabe als JSON, zunaechst ohne Schreiboperationen.
 
 ## Validierung gegen Web Based Management des Switches
 
-Nach Implementierung sollte das Ergebnis gegen die Anzeige im Web Based Management des Switches validiert werden.
+Nach Implementierung sollte das Ergebnis gegen die Anzeige im Web Based Management des Switches validiert werden. Der reale SNMP-Lauf hat die technische Lesbarkeit der OIDs bestaetigt; das WBM bleibt wichtig, um die fachliche Interpretation von Richtung, Source-Port-Liste und Zielport gegen die Bedienoberflaeche abzugleichen.
 
 Zu pruefen:
 
@@ -1083,14 +1143,14 @@ Zu pruefen:
 Das Tool gilt als brauchbarer Prototyp, wenn es folgende Anforderungen erfuellt:
 
 1. Es arbeitet im ersten Schritt ohne SNMP-SETs und schafft eine stabile Grundlage fuer spaetere Schreiboperationen.
-2. Es unterstuetzt SNMPv3 authPriv.
+2. Es nimmt SNMPv3-authPriv-Parameter an und kann sie an Net-SNMP weiterreichen; die praktische SNMPv3-Validierung am konkreten XR328 bleibt ein eigener Testpunkt.
 3. Es kann den Siemens-Mirroring-Basiszweig automatisch testen.
 4. Es dekodiert `enabled(1)` und `disabled(2)` korrekt.
 5. Es liest globalen Mirroring-Status und Mirror-Zielport.
 6. Es liest Ingress- und Egress-Mirroring je Source-Port.
 7. Es mappt numerische Port-IDs auf `ifName`, `ifDescr` und `ifAlias`.
-8. Es korreliert gelernte MAC-Adressen per Bridge-MIB oder Q-BRIDGE-MIB.
-9. Es gibt LLDP-Nachbarn optional aus.
+8. Es korreliert gelernte MAC-Adressen per Bridge-MIB; Q-BRIDGE-MIB bleibt fuer VLAN-aware FDB-Auswertung optional.
+9. Es liest LLDP-Rohdaten und gibt mindestens eine Rohdatenzaehlung aus; strukturierte LLDP-Nachbarn sind der naechste Ausbauschritt.
 10. Es kennzeichnet IP- und Hostname-Zuordnungen als indirekte Korrelationen.
 11. Es meldet nicht unterstuetzte OIDs sauber.
 12. Es liefert JSON als maschinenlesbare Ausgabe.
@@ -1110,6 +1170,8 @@ Implementiere:
 - [x] `snmpget` und `snmpwalk` Hilfsfunktionen
 - [x] Saubere Fehlerklassifikation fuer Basispfade
 - [x] Keine unnoetige Ausgabe von Credentials
+
+Hinweis: Der reale XR328-Lauf wurde bisher mit SNMPv2c validiert; ein echter SNMPv3-Lauf am Geraet steht noch aus.
 
 ### Schritt 2: Interface-Discovery
 
@@ -1144,6 +1206,7 @@ Implementiere:
 Implementiere:
 
 - [x] Walk von `lldpRemTable`
+- [x] Rohdatenzaehlung als `lldp_raw_count`; im realen Lauf wurden `135` Rohzeilen gezaehlt
 - [ ] Zuordnung zu lokalen Ports
 - [ ] Ausgabe von Chassis-ID, Port-ID, Systemname, Beschreibung, Management-Adresse falls vorhanden
 
@@ -1154,6 +1217,7 @@ Implementiere:
 - [x] Walk der Tabellen unter `1.3.6.1.4.1.4329.20.1.1.1.1.1.6.6`, `.6.7`, `.6.9`
 - [x] Falls nicht vorhanden: `not_supported`
 - [x] Falls leer: `empty_table`
+- [x] Falls Rohdaten vorhanden sind: `extended_mirroring = "supported"`
 - [ ] Falls vorhanden: Sessions, Source-IDs, Source-Mode und Destination strukturiert ausgeben
 
 ### Schritt 7: Ausgabeformat
