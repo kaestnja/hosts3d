@@ -70,6 +70,8 @@ set "OUTDIR=%CONFIG%\windows\%ARCH%"
 if not exist "%OUTDIR%" mkdir "%OUTDIR%"
 set "OBJDIR=build\windows\hosts3d\%ARCH%\%CONFIG%"
 if not exist "%OBJDIR%" mkdir "%OBJDIR%"
+set "CXXFLAGS=-std=gnu++11 -Wall -O2"
+if /I "%CONFIG%"=="Debug" set "CXXFLAGS=-std=gnu++11 -Wall -g -O0 -DDEBUG"
 
 set "GLFW_INCLUDE=%MINGW_ROOT%\include"
 set "GLFW_LIBDIR=%MINGW_ROOT%\lib"
@@ -90,19 +92,19 @@ if not defined GLFW_LIB_OPT (
   goto :fail
 )
 
-"%GPP_EXE%" -std=gnu++11 -Wall -O2 -I"%GLFW_INCLUDE%" -c -o "%OBJDIR%\llist.o" src/llist.cpp
+"%GPP_EXE%" %CXXFLAGS% -I"%GLFW_INCLUDE%" -c -o "%OBJDIR%\llist.o" src/llist.cpp
 if errorlevel 1 goto :fail
-"%GPP_EXE%" -std=gnu++11 -Wall -O2 -I"%GLFW_INCLUDE%" -c -o "%OBJDIR%\misc.o" src/misc.cpp
+"%GPP_EXE%" %CXXFLAGS% -I"%GLFW_INCLUDE%" -c -o "%OBJDIR%\misc.o" src/misc.cpp
 if errorlevel 1 goto :fail
-"%GPP_EXE%" -std=gnu++11 -Wall -O2 -I"%GLFW_INCLUDE%" -c -o "%OBJDIR%\glwin.o" src/glwin.cpp
+"%GPP_EXE%" %CXXFLAGS% -I"%GLFW_INCLUDE%" -c -o "%OBJDIR%\glwin.o" src/glwin.cpp
 if errorlevel 1 goto :fail
-"%GPP_EXE%" -std=gnu++11 -Wall -O2 -I"%GLFW_INCLUDE%" -c -o "%OBJDIR%\objects.o" src/objects.cpp
+"%GPP_EXE%" %CXXFLAGS% -I"%GLFW_INCLUDE%" -c -o "%OBJDIR%\objects.o" src/objects.cpp
 if errorlevel 1 goto :fail
-"%GPP_EXE%" -std=gnu++11 -Wall -O2 -I"%GLFW_INCLUDE%" -c -o "%OBJDIR%\hosts3d.o" src/hosts3d.cpp
+"%GPP_EXE%" %CXXFLAGS% -I"%GLFW_INCLUDE%" -c -o "%OBJDIR%\hosts3d.o" src/hosts3d.cpp
 if errorlevel 1 goto :fail
 "%WINDRES_EXE%" -I"src" -O coff -i src/hosts3d.rc -o "%OBJDIR%\hosts3d-res.o"
 if errorlevel 1 goto :fail
-"%GPP_EXE%" -std=gnu++11 -Wall -O2 -static-libgcc -static-libstdc++ -o "%OUTDIR%\Hosts3D.exe" "%OBJDIR%\llist.o" "%OBJDIR%\misc.o" "%OBJDIR%\glwin.o" "%OBJDIR%\objects.o" "%OBJDIR%\hosts3d.o" "%OBJDIR%\hosts3d-res.o" -L"%GLFW_LIBDIR%" %GLFW_LIB_OPT% -lopengl32 -lglu32 -lws2_32 -liphlpapi
+"%GPP_EXE%" %CXXFLAGS% -static-libgcc -static-libstdc++ -o "%OUTDIR%\Hosts3D.exe" "%OBJDIR%\llist.o" "%OBJDIR%\misc.o" "%OBJDIR%\glwin.o" "%OBJDIR%\objects.o" "%OBJDIR%\hosts3d.o" "%OBJDIR%\hosts3d-res.o" -L"%GLFW_LIBDIR%" %GLFW_LIB_OPT% -lopengl32 -lglu32 -lws2_32 -liphlpapi
 if errorlevel 1 goto :fail
 if exist "%GLFW_BINDIR%\glfw3.dll" copy /Y "%GLFW_BINDIR%\glfw3.dll" "%OUTDIR%\glfw3.dll" >NUL
 if exist "%MINGW_BIN%libwinpthread-1.dll" copy /Y "%MINGW_BIN%libwinpthread-1.dll" "%OUTDIR%\libwinpthread-1.dll" >NUL

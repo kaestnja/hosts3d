@@ -1,0 +1,37 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "build Hosts3D Debug x64",
+      "type": "shell",
+      "command": "${workspaceFolder}\\compile-hosts3d.bat",
+      "args": ["Debug", "x64", "--no-pause"],
+      "problemMatcher": "$gcc",
+      "group": "build"
+    },
+    {
+      "label": "build Hosts3D Debug x86",
+      "type": "shell",
+      "command": "${workspaceFolder}\\compile-hosts3d.bat",
+      "args": ["Debug", "x86", "--no-pause"],
+      "problemMatcher": "$gcc",
+      "group": "build"
+    },
+    {
+      "label": "build hsen Debug x64",
+      "type": "shell",
+      "command": "${workspaceFolder}\\compile-hsen.bat",
+      "args": ["Debug", "x64", "--no-pause"],
+      "problemMatcher": "$gcc",
+      "group": "build"
+    },
+    {
+      "label": "build hsen Debug x86",
+      "type": "shell",
+      "command": "${workspaceFolder}\\compile-hsen.bat",
+      "args": ["Debug", "x86", "--no-pause"],
+      "problemMatcher": "$gcc",
+      "group": "build"
+    }
+  ]
+}
