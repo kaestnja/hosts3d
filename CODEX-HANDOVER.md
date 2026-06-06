@@ -41,6 +41,7 @@ These files already existed before this handover and remain important:
   - device-specific SNMP mirroring discovery and later management plan for Siemens SCALANCE XR328-4C WG; keep detailed SCALANCE OIDs and implementation steps there, not in the general todo file
 - `scripts/scalance_xr328_mirror_check.py`
   - first external JSON prototype for SCALANCE mirroring checks; keep this as the contract before wiring a Mirror Check into the Hosts3D local hsen UI or adding controlled switch-management operations
+  - always maintain this script together with `scalance_xr328_snmp_mirroring_abfrage.md`: the script header/use cases, JSON output, supported options, observed device behavior, and the markdown plan must describe the same current contract
 - `compile-net-snmp-windows.bat`
   - optional Windows helper build for Net-SNMP CLI tools; uses a separate Net-SNMP checkout, prepares MSVC OpenSSL inputs via vcpkg under ignored `third_party/openssl/windows/<arch>`, and copies `snmpget.exe`, `snmpwalk.exe`, and `snmpset.exe` to `Release/windows/<arch>`
 - `third_party/net-snmp/README.md`
@@ -608,6 +609,12 @@ Minimum required sweep areas:
   - `.gitattributes`
   - legacy folders/files that may now be obsolete
   - references to deleted or renamed paths
+
+Special SCALANCE rule:
+
+- when changing `scripts/scalance_xr328_mirror_check.py`, also review and update `scalance_xr328_snmp_mirroring_abfrage.md`
+- when changing SCALANCE assumptions, OIDs, JSON examples, credential handling, or validation notes in `scalance_xr328_snmp_mirroring_abfrage.md`, also review and update the script
+- both files should stay consistent about command-line options, credential flow, output field names, observed XR328 behavior, and what remains only a planned future step
 
 For renames/removals/migrations, future Codex sessions should explicitly search for:
 
