@@ -66,6 +66,8 @@ These files already existed before this handover and remain important:
   - strict text/path byte scanner for repository hygiene checks
 - `Tools/Repair-InvalidTextBytes.ps1`
   - conservative byte-level repair helper for known unsafe text sequences
+- `Tools/run-clang-tidy-sarif.ps1`
+  - local clang-tidy SARIF helper for VS Code/static-analysis review; output stays under `build/sarif/`
 
 There was no existing Codex-specific handover file before this one.
 
@@ -97,6 +99,7 @@ pwsh -NoProfile -File Tools/Hosts3D-DevTools.ps1 -Task CheckAll
 pwsh -NoProfile -File Tools/Hosts3D-DevTools.ps1 -Task BuildHosts3D -Config Debug -Arch x64
 pwsh -NoProfile -File Tools/Hosts3D-DevTools.ps1 -Task BuildAllWindows
 pwsh -NoProfile -File Tools/Hosts3D-DevTools.ps1 -Task PackageWindows -Arch x64 -WithNpcap
+pwsh -NoProfile -File Tools/Hosts3D-DevTools.ps1 -Task RunClangTidySarif
 pwsh -NoProfile -File Tools/Hosts3D-DevTools.ps1 -Task PacmanInstall -Packages mingw-w64-x86_64-gdb,mingw-w64-i686-gdb
 ```
 
@@ -625,6 +628,7 @@ Minimum required sweep areas:
   - `package-all-windows.bat`
   - `Tools/Stage-RuntimePayload.ps1`
   - `Tools/Hosts3D-DevTools.ps1`
+  - `Tools/run-clang-tidy-sarif.ps1`
   - `Makefile.am` / `Makefile.in`
   - `configure.ac` / generated `configure`
   - `man/*.1`

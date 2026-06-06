@@ -194,7 +194,7 @@ Notes:
 The repository includes a local `clang-tidy` SARIF helper for quick VS Code review:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\run-clang-tidy-sarif.ps1
+pwsh -NoProfile -ExecutionPolicy Bypass -File Tools\run-clang-tidy-sarif.ps1
 ```
 
 The script scans the main C++ sources and writes:

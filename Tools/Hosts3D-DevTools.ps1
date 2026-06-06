@@ -10,6 +10,7 @@ param(
         "BuildAllWindows",
         "PackageWindows",
         "StageRuntime",
+        "RunClangTidySarif",
         "RunMsys2",
         "PacmanInstall",
         "GdbFile",
@@ -228,6 +229,8 @@ function Test-Hosts3DTools {
     $results += Get-CommandCheck -Area "source" -Name "GitHub CLI" -CommandName "gh"
     $results += Get-CommandCheck -Area "script" -Name "python" -CommandName "python"
     $results += Get-CommandCheck -Area "script" -Name "py launcher" -CommandName "py"
+    $clangTidy = Get-Command "clang-tidy" -ErrorAction SilentlyContinue
+    $results += New-CheckResult -Area "analysis" -Name "clang-tidy" -Found ($null -ne $clangTidy) -Path $(if ($clangTidy) { $clangTidy.Source } else { "" }) -Required $false -Note "optional; needed for RunClangTidySarif"
     $results += Get-CommandCheck -Area "editor" -Name "VS Code CLI" -CommandName "code"
 
     $results += Get-FileCheck -Area "msys2" -Name "bash" -Path (Join-Path $Msys2Root "usr\bin\bash.exe")
@@ -307,6 +310,18 @@ function Invoke-Hosts3DStageRuntime {
     }
 }
 
+function Invoke-Hosts3DClangTidySarif {
+    $scriptPath = Join-RepoPath "Tools\run-clang-tidy-sarif.ps1"
+    if (-not (Test-Path -LiteralPath $scriptPath -PathType Leaf)) {
+        throw "clang-tidy SARIF helper not found: $scriptPath"
+    }
+
+    & $scriptPath @Args
+    if (-not $?) {
+        throw "run-clang-tidy-sarif.ps1 failed"
+    }
+}
+
 function Invoke-Hosts3DGdbFile {
     if (-not $Program) {
         $Program = "Debug\windows\$Arch\Hosts3D.exe"
@@ -364,6 +379,7 @@ Examples:
   pwsh -NoProfile -File Tools/Hosts3D-DevTools.ps1 -Task BuildHosts3D -Config Debug -Arch x64
   pwsh -NoProfile -File Tools/Hosts3D-DevTools.ps1 -Task BuildAllWindows -WithNpcap
   pwsh -NoProfile -File Tools/Hosts3D-DevTools.ps1 -Task PackageWindows -Arch x64 -WithNpcap
+  pwsh -NoProfile -File Tools/Hosts3D-DevTools.ps1 -Task RunClangTidySarif
   pwsh -NoProfile -File Tools/Hosts3D-DevTools.ps1 -Task PacmanInstall -Packages mingw-w64-x86_64-gdb,mingw-w64-i686-gdb
   pwsh -NoProfile -File Tools/Hosts3D-DevTools.ps1 -Task GdbFile -Arch x64 -Program Debug/windows/x64/Hosts3D.exe
 
@@ -435,6 +451,9 @@ switch ($Task) {
     }
     "StageRuntime" {
         Invoke-Hosts3DStageRuntime
+    }
+    "RunClangTidySarif" {
+        Invoke-Hosts3DClangTidySarif
     }
     "RunMsys2" {
         if (-not $Command) {
