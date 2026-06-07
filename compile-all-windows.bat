@@ -4,6 +4,7 @@ rem Defaults to Release x64+x86 and packages the resulting runtimes.
 rem Also stages shared runtime payload files into Release\windows\<arch>.
 rem Normal use: compile-all-windows.bat
 rem Lab/test package with bundled Npcap DLLs: compile-all-windows.bat with-npcap
+rem Lab/test package with bundled Npcap DLLs: cmd /d /c package-all-windows.bat with-npcap
 rem Build and stage only, for a broken/special architecture case: compile-all-windows.bat x64 no-package
 setlocal EnableExtensions
 cd /d "%~dp0"
@@ -11,7 +12,7 @@ cd /d "%~dp0"
 set "CONFIG=Release"
 set "ARCHES=x64 x86"
 set "DO_PACKAGE=1"
-set "INCLUDE_NPCAP=0"
+set "INCLUDE_NPCAP=1"
 
 :parse_args
 if "%~1"=="" goto :args_done
