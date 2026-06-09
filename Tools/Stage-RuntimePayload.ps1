@@ -1,3 +1,10 @@
+<#
+Stages the shared Windows runtime payload into Release/Debug windows folders or
+an explicit package destination. Debug staging also reuses Release Net-SNMP CLI
+tools for the same architecture when Debug-local snmp*.exe files are absent,
+because compile-net-snmp-windows.bat currently produces those tools under
+Release/windows/<arch>.
+#>
 param(
     [ValidateSet("Release", "Debug")]
     [string]$Config = "Release",
@@ -81,7 +88,14 @@ foreach ($name in @("Hosts3D.exe", "hsen.exe", "glfw3.dll", "libwinpthread-1.dll
 }
 
 foreach ($name in @("snmpget.exe", "snmpwalk.exe", "snmpset.exe")) {
-    Copy-PayloadFile -Source (Join-Path $runtimeDir $name) -DestinationDirectory $destinationPath -DestinationName $name
+    $toolSource = Join-Path $runtimeDir $name
+    if (-not (Test-Path -LiteralPath $toolSource -PathType Leaf) -and $Config -ne "Release") {
+        $releaseToolSource = Join-Path $repoRoot (Join-Path "Release" (Join-Path "windows" (Join-Path $Arch $name)))
+        if (Test-Path -LiteralPath $releaseToolSource -PathType Leaf) {
+            $toolSource = $releaseToolSource
+        }
+    }
+    Copy-PayloadFile -Source $toolSource -DestinationDirectory $destinationPath -DestinationName $name
 }
 
 if ($WithNpcap) {

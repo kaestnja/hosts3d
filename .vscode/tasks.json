@@ -4,16 +4,16 @@
     {
       "label": "build Hosts3D Debug x64",
       "type": "shell",
-      "command": "${workspaceFolder}\\compile-hosts3d.bat",
-      "args": ["Debug", "x64", "--no-pause"],
+      "command": "${workspaceFolder}\\compile-all-windows.bat",
+      "args": ["Debug", "x64", "no-package"],
       "problemMatcher": "$gcc",
       "group": "build"
     },
     {
       "label": "build Hosts3D Debug x86",
       "type": "shell",
-      "command": "${workspaceFolder}\\compile-hosts3d.bat",
-      "args": ["Debug", "x86", "--no-pause"],
+      "command": "${workspaceFolder}\\compile-all-windows.bat",
+      "args": ["Debug", "x86", "no-package"],
       "problemMatcher": "$gcc",
       "group": "build"
     },

@@ -171,11 +171,12 @@ Important x64 note:
 The Windows build/package flow now stages one shared runtime payload:
 
 - `compile-hosts3d.bat` and `compile-hsen.bat` still copy `README-runtime-windows.md` into the runtime output directory during the individual builds
-- `compile-all-windows.bat` runs `Tools/Stage-RuntimePayload.ps1` after each arch build so local `Release/windows/<arch>` test folders receive the same runtime-adjacent files as packages
+- `compile-all-windows.bat` runs `Tools/Stage-RuntimePayload.ps1` after each arch build so local `Release/windows/<arch>` and `Debug/windows/<arch>` test folders receive the same runtime-adjacent files as packages
 - `package-all-windows.bat` also delegates package contents to `Tools/Stage-RuntimePayload.ps1`; it should remain mainly for repackaging already-built runtimes, while normal release use should go through `compile-all-windows.bat`
 - the unpacked Windows dist folder should match the local runtime payload except for package naming/hash artifacts and the explicit `with-npcap` choice
 - Windows payloads keep runtime/demo files flat in the package root: `README.md`, `README-runtime-windows.md`, `README-testing.md`, `sim-hsen.*`, and `demo-hsen.*` beside the main binaries
 - optional SNMP diagnostics are staged centrally in `Tools/snmp/`; switch-specific SNMP files use the switch name in the file name, for example `scalance_xr328_mirror_check.py`, instead of one folder per switch
+- Debug staging falls back to `Release/windows/<arch>/snmp*.exe` for `snmpget.exe`, `snmpwalk.exe`, and `snmpset.exe` when those optional Net-SNMP tools have not been built into the Debug runtime directly
 - the repository source path and staged runtime path for SNMP helpers should stay the same relative path (`Tools/snmp/...`) so script header examples do not need separate repo and package variants
 - Debug Windows packages use a `-debug` suffix so they do not overwrite release ZIPs
 - `package-release-linux` creates `Release/dist/hosts3d-<version>-linux-<arch>.tar.gz` plus SHA256 from the already-built Linux runtime
@@ -269,8 +270,8 @@ VS Code debug files now live in the repository:
   - `Debug Hosts3D x86`
   - `Debug hsen x64 - list interfaces`
 - `.vscode/tasks.json`
-  - `build Hosts3D Debug x64`
-  - `build Hosts3D Debug x86`
+  - `build Hosts3D Debug x64` now calls `compile-all-windows.bat Debug x64 no-package` so the debug runtime payload is staged after each VS Code Hosts3D debug build
+  - `build Hosts3D Debug x86` now calls `compile-all-windows.bat Debug x86 no-package` for the same reason
   - `build hsen Debug x64`
   - `build hsen Debug x86`
 - `.vscode/c_cpp_properties.json`
@@ -297,6 +298,7 @@ Build script debug behavior:
 
 - `compile-hosts3d.bat Debug <arch> --no-pause` now uses `-g -O0 -DDEBUG`.
 - `compile-hsen.bat Debug <arch> --no-pause` now uses `-g -O0 -DDEBUG`.
+- VS Code Hosts3D debug tasks intentionally use `compile-all-windows.bat Debug <arch> no-package`, not the single-target build script, so F9 SNMP helpers and bundled demo scripts are present beside the Debug EXE.
 - Release builds still use `-O2`.
 - Debug outputs are written to:
   - `Debug\windows\x64`

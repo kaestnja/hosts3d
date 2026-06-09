@@ -231,14 +231,14 @@ Use parameters only for special cases:
 .\compile-all-windows.bat x64 no-package
 .\compile-all-windows.bat with-npcap
 ```
-`no-package` skips ZIP creation but still stages the local runtime payload in `Release\windows\<arch>`.
+`no-package` skips ZIP creation but still stages the local runtime payload in `Release\windows\<arch>` or `Debug\windows\<arch>`, depending on the selected configuration.
 
 Optionally build the Net-SNMP command line helpers used by the SCALANCE mirror-check prototype:
 ```powershell
 .\compile-net-snmp-windows.bat C:\path\to\net-snmp
 ```
 
-This first ensures static OpenSSL inputs with vcpkg (`openssl:x64-windows-static` and `openssl:x86-windows-static`), copies them into the local ignored `third_party\openssl\windows\<arch>` layout, and then builds `snmpget.exe`, `snmpwalk.exe`, and `snmpset.exe` for `x64` and `x86` using MSVC and Net-SNMP's Win32 `nmake` build. The resulting tools are copied to `Release\windows\<arch>\`. If present there, the normal `compile-all-windows.bat` flow includes them in the staged runtime payload and release ZIPs.
+This first ensures static OpenSSL inputs with vcpkg (`openssl:x64-windows-static` and `openssl:x86-windows-static`), copies them into the local ignored `third_party\openssl\windows\<arch>` layout, and then builds `snmpget.exe`, `snmpwalk.exe`, and `snmpset.exe` for `x64` and `x86` using MSVC and Net-SNMP's Win32 `nmake` build. The resulting tools are copied to `Release\windows\<arch>\`. If present there, the normal `compile-all-windows.bat` flow includes them in the staged runtime payload and release ZIPs; Debug staging also reuses these Release tools when Debug-local copies do not exist.
 
 Repackage already-built Windows runtimes without rebuilding:
 ```powershell
@@ -267,7 +267,7 @@ This creates:
 
 The release packages keep their runtime files flat in the package root.
 That includes the platform runtime README as `README.md`, the platform-specific copy (`README-runtime-*.md`), `README-testing.md`, and the four bundled synthetic helper scripts beside the main binaries.
-Windows packages and local `Release\windows\<arch>` runtime folders are staged through `Tools\Stage-RuntimePayload.ps1`. Optional switch diagnostics are collected centrally below `Tools\snmp\`; switch-specific SNMP files use the switch name in the file name, not a separate per-switch directory.
+Windows packages and local `Release\windows\<arch>` / `Debug\windows\<arch>` runtime folders are staged through `Tools\Stage-RuntimePayload.ps1`. Optional switch diagnostics are collected centrally below `Tools\snmp\`; switch-specific SNMP files use the switch name in the file name, not a separate per-switch directory.
 
 ## Manual Start Helpers (Windows, Optional)
 ```powershell

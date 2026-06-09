@@ -97,8 +97,10 @@ Windows packaging note:
         pwsh -NoProfile -File Tools/Hosts3D-DevTools.ps1 -Task BuildAllWindows
     Use package-all-windows.bat directly only to repackage already-built runtimes.
     Both commands use Tools/Stage-RuntimePayload.ps1 as the single Windows
-    payload staging step, so Release/windows/<arch> and the staged dist folder
-    carry the same runtime-adjacent files.
+    payload staging step, so Release/windows/<arch>, Debug/windows/<arch>, and
+    the staged dist folder carry the same runtime-adjacent files.
+    Debug staging reuses Release/windows/<arch>/snmp*.exe when those optional
+    Net-SNMP helpers are not present in the Debug runtime yet.
     Debug packages use a -debug suffix so they do not overwrite release ZIPs.
     The staged release package keeps the normal runtime/demo files flat in the
     package root:
