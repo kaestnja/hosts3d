@@ -71,6 +71,9 @@ function Write-TextFile {
     if (-not (Test-Path -LiteralPath $directory -PathType Container)) {
         New-Item -ItemType Directory -Path $directory | Out-Null
     }
+    if ([System.IO.Path]::GetExtension($Path) -in @(".bat", ".cmd", ".ps1")) {
+        $Content = $Content -replace "`r?`n", "`r`n"
+    }
     $encoding = New-Object System.Text.UTF8Encoding($false)
     [System.IO.File]::WriteAllText($Path, $Content, $encoding)
 }
