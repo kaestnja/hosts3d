@@ -50,7 +50,7 @@ The F9 switch-topology scene can also create and use:
 - `hsd-data\scalance_xr328_mirror_check.json`
 - `hsd-data\switch-topology.txt`
 
-`switches.txt` is the human-editable switch connection profile. F9 creates a disabled template when it is missing. Edit it with `Hosts3D` closed, set the switch address and SNMP profile, then set `enabled=1`. With SNMPv1/v2c and no `community` value, the helper tries the usual defaults `private` and then `public` read-only. With `auto_refresh=1`, F9 starts the SCALANCE helper in the background, keeps the raw JSON result, and updates `switch-topology.txt` for display. `View > Refresh Switch Topology` starts the same refresh manually.
+F9 starts the SCALANCE helper with the built-in lab default for `sw6248xr328` (`192.168.6.248`, SNMPv2c, read-only defaults `private` then `public`) and updates `switch-topology.txt` for display. `switches.txt` is only an optional human-editable override for another switch address or non-default SNMP data. With `auto_refresh=1`, an enabled override line refreshes automatically; `View > Refresh Switch Topology` starts the same refresh manually.
 
 You can also trigger the bundled synthetic visualization demos from the top-right OSD:
 - `PS Demo`
@@ -85,7 +85,7 @@ Expected demo artifact lifetime:
 - Public release ZIPs may omit `wpcap.dll` and `Packet.dll`. In that case, install Npcap on the target machine before using `hsen` or `Configure Local Sensors (hsen)`.
 - `snmpget.exe`, `snmpwalk.exe`, and `snmpset.exe` are optional administrative helpers for SNMP-based switch diagnostics and later mirror-port management. If present, they are self-contained command line tools built with static OpenSSL and static MSVC runtime linkage.
 - SNMP helper scripts and their matching markdown notes are staged below `Tools\snmp\`. The switch type belongs in the file name, not in another per-switch folder.
-- For non-default community values use `community=...` or `community_env=SNMP_COMMUNITY`; for SNMPv3 passwords prefer `user_env`, `auth_pass_env`, and `priv_pass_env`.
+- For non-default community values use `community=...` or `community_env=SNMP_COMMUNITY`; for SNMPv3 passwords prefer `user_env`, `auth_pass_env`, and `priv_pass_env` in `switches.txt`.
 
 ## License
 Hosts3D is distributed under the GNU General Public License. See `COPYING`.

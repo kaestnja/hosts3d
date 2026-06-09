@@ -30,21 +30,27 @@ Common use cases:
    private and then public. The helper remains read-only; it does not call
    snmpset.
 
-4. Use local Net-SNMP tools from a Hosts3D release directory:
-     python Tools/snmp/scalance_xr328_mirror_check.py 192.168.6.248 --version 2c --community public --snmpget Release/windows/x64/snmpget.exe --snmpwalk Release/windows/x64/snmpwalk.exe --pretty
+4. Use explicit Net-SNMP tools from a staged package root:
+     python Tools/snmp/scalance_xr328_mirror_check.py SWITCH_IP --version 2c --community COMMUNITY --snmpget snmpget.exe --snmpwalk snmpwalk.exe --pretty
+
+   The Hosts3D F9 integration passes the package-root snmpget/snmpwalk paths
+   automatically when those tools are present.
 
 5. Keep the first probe small when Bridge-FDB or LLDP is slow/noisy:
      python Tools/snmp/scalance_xr328_mirror_check.py 192.168.6.248 --version 2c --community public --skip-fdb --skip-lldp --pretty
 
-6. Use the Hosts3D F9 profile and write both runtime output formats:
-     python Tools/snmp/scalance_xr328_mirror_check.py --profile-file hsd-data/switches.txt --write-json hsd-data/scalance_xr328_mirror_check.json --write-topology hsd-data/switch-topology.txt --pretty
+6. Use the built-in Hosts3D F9 SCALANCE default and write both runtime outputs:
+     python Tools/snmp/scalance_xr328_mirror_check.py --hosts3d-default --write-json hsd-data/scalance_xr328_mirror_check.json --write-topology hsd-data/switch-topology.txt --pretty
+
+7. Use an optional Hosts3D switch config file instead of the built-in default:
+     python Tools/snmp/scalance_xr328_mirror_check.py --config-file hsd-data/switches.txt --write-json hsd-data/scalance_xr328_mirror_check.json --write-topology hsd-data/switch-topology.txt --pretty
 
 Example switches.txt line:
-     switch name=sw6248xr328 type=scalance_xr328 host=192.168.6.248 version=2c enabled=1 auto_refresh=1 refresh_seconds=60
+     switch name=sw6248xr328 type=scalance_xr328 host=SWITCH_IP version=2c community=COMMUNITY enabled=1 auto_refresh=1 refresh_seconds=60
 
 Credentials are never printed as values. Use environment variables for
 non-default community values or SNMPv3 passwords when they should not live in
-the local profile file.
+the local switch config file.
 """
 
 from __future__ import annotations
@@ -109,6 +115,13 @@ STATUS_PARSE_ERROR = "parse_error"
 STATUS_NOT_IMPLEMENTED = "not_implemented"
 STATUS_UNKNOWN = "unknown"
 
+DEFAULT_HOSTS3D_SWITCH_CONFIG = {
+    "name": "sw6248xr328",
+    "type": "scalance_xr328",
+    "host": "192.168.6.248",
+    "version": "2c",
+}
+
 
 @dataclass
 class SnmpResult:
@@ -122,8 +135,15 @@ def parse_args() -> argparse.Namespace:
         description="SCALANCE XR328 mirroring discovery using snmpget/snmpwalk.",
     )
     parser.add_argument("host", nargs="?", help="Switch hostname or IP address")
-    parser.add_argument("--profile-file", help="Read switch connection data from a Hosts3D switches.txt file")
-    parser.add_argument("--profile", help="Profile name from --profile-file; defaults to the first enabled switch")
+    parser.add_argument("--config-file", dest="config_file", help="Read switch connection data from a Hosts3D switches.txt file")
+    parser.add_argument("--profile-file", dest="config_file", help=argparse.SUPPRESS)
+    parser.add_argument("--switch", dest="switch_name", help="Switch name from --config-file; defaults to the first enabled switch")
+    parser.add_argument("--profile", dest="switch_name", help=argparse.SUPPRESS)
+    parser.add_argument(
+        "--hosts3d-default",
+        action="store_true",
+        help="Use the built-in Hosts3D SCALANCE XR328 lab default when no config file is selected",
+    )
     parser.add_argument("--version", choices=["1", "2c", "3"], default="3")
     parser.add_argument("--port", type=int, default=161)
     parser.add_argument("--timeout", type=int, default=3)
@@ -156,7 +176,7 @@ def parse_bool_text(value: str | None, default: bool = False) -> bool:
     return value.strip().lower() in ("1", "true", "yes", "on", "enabled")
 
 
-def parse_switch_profile_line(line: str) -> dict[str, str] | None:
+def parse_switch_config_line(line: str) -> dict[str, str] | None:
     line = line.strip()
     if not line or line[0] in "#;":
         return None
@@ -166,62 +186,86 @@ def parse_switch_profile_line(line: str) -> dict[str, str] | None:
         return None
     if not parts or parts[0].lower() != "switch":
         return None
-    profile: dict[str, str] = {}
+    config: dict[str, str] = {}
     for item in parts[1:]:
         if "=" not in item:
             continue
         key, value = item.split("=", 1)
-        profile[key.strip().lower()] = value.strip()
-    return profile if profile else None
+        config[key.strip().lower()] = value.strip()
+    return config if config else None
 
 
-def load_switch_profiles(path: str) -> list[dict[str, str]]:
-    profiles: list[dict[str, str]] = []
+def parse_switch_profile_line(line: str) -> dict[str, str] | None:
+    return parse_switch_config_line(line)
+
+
+def load_switch_configs(path: str) -> list[dict[str, str]]:
+    configs: list[dict[str, str]] = []
     try:
         with open(path, encoding="utf-8") as handle:
             for line in handle:
-                profile = parse_switch_profile_line(line)
-                if profile:
-                    profiles.append(profile)
+                config = parse_switch_config_line(line)
+                if config:
+                    configs.append(config)
     except OSError:
         return []
-    return profiles
+    return configs
 
 
-def env_or_value(profile: dict[str, str], key: str, default: str = "") -> str:
-    env_name = profile.get(key + "_env", "")
+def load_switch_profiles(path: str) -> list[dict[str, str]]:
+    return load_switch_configs(path)
+
+
+def env_or_value(config: dict[str, str], key: str, default: str = "") -> str:
+    env_name = config.get(key + "_env", "")
     if env_name and os.getenv(env_name):
         return os.getenv(env_name, "")
-    return profile.get(key, default)
+    return config.get(key, default)
 
 
-def apply_profile(args: argparse.Namespace) -> dict[str, str] | None:
-    if not args.profile_file:
+def apply_config_values(args: argparse.Namespace, config: dict[str, str]) -> None:
+    args.host = args.host or config.get("host", "")
+    args.version = config.get("version", args.version)
+    args.port = int(config.get("port", args.port))
+    args.timeout = int(config.get("timeout", args.timeout))
+    args.retries = int(config.get("retries", args.retries))
+    args.community = args.community or env_or_value(config, "community")
+    args.user = args.user or env_or_value(config, "user")
+    args.level = config.get("level", args.level)
+    args.auth_proto = config.get("auth_proto", args.auth_proto)
+    args.auth_pass = args.auth_pass or env_or_value(config, "auth_pass")
+    args.priv_proto = config.get("priv_proto", args.priv_proto)
+    args.priv_pass = args.priv_pass or env_or_value(config, "priv_pass")
+
+
+def apply_switch_config(args: argparse.Namespace) -> dict[str, str] | None:
+    if not args.config_file:
         return None
-    profiles = load_switch_profiles(args.profile_file)
+    configs = load_switch_configs(args.config_file)
     selected: dict[str, str] | None = None
-    for profile in profiles:
-        if args.profile and profile.get("name") != args.profile:
+    for config in configs:
+        if args.switch_name and config.get("name") != args.switch_name:
             continue
-        if not args.profile and not parse_bool_text(profile.get("enabled"), True):
+        if not args.switch_name and not parse_bool_text(config.get("enabled"), True):
             continue
-        selected = profile
+        selected = config
         break
     if selected is None:
         return None
-    args.host = args.host or selected.get("host", "")
-    args.version = selected.get("version", args.version)
-    args.port = int(selected.get("port", args.port))
-    args.timeout = int(selected.get("timeout", args.timeout))
-    args.retries = int(selected.get("retries", args.retries))
-    args.community = args.community or env_or_value(selected, "community")
-    args.user = args.user or env_or_value(selected, "user")
-    args.level = selected.get("level", args.level)
-    args.auth_proto = selected.get("auth_proto", args.auth_proto)
-    args.auth_pass = args.auth_pass or env_or_value(selected, "auth_pass")
-    args.priv_proto = selected.get("priv_proto", args.priv_proto)
-    args.priv_pass = args.priv_pass or env_or_value(selected, "priv_pass")
+    apply_config_values(args, selected)
     return selected
+
+
+def apply_profile(args: argparse.Namespace) -> dict[str, str] | None:
+    return apply_switch_config(args)
+
+
+def apply_hosts3d_default(args: argparse.Namespace) -> dict[str, str] | None:
+    if not args.hosts3d_default:
+        return None
+    config = dict(DEFAULT_HOSTS3D_SWITCH_CONFIG)
+    apply_config_values(args, config)
+    return config
 
 
 def command_exists(exe: str) -> bool:
@@ -668,6 +712,14 @@ def topology_port_name(port: dict[str, Any]) -> str:
     return topology_safe_text(port.get("if_name") or port.get("if_descr") or port.get("if_alias"), f"P0.{port.get('if_index', 0)}")
 
 
+def topology_is_switch_port(port: dict[str, Any]) -> bool:
+    name = topology_safe_text(port.get("if_name"))
+    if re.fullmatch(r"P\d+\.\d+", name):
+        return True
+    descr = topology_safe_text(port.get("if_descr")).lower()
+    return "ethernet_port" in descr and "vlan" not in descr and "loopback" not in descr
+
+
 def topology_host_mac(value: Any) -> str:
     text = str(value or "").strip()
     if re.fullmatch(r"[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}", text):
@@ -675,18 +727,18 @@ def topology_host_mac(value: Any) -> str:
     return ""
 
 
-def topology_lines(data: dict[str, Any], profile: dict[str, str] | None = None) -> list[str]:
+def topology_lines(data: dict[str, Any], config: dict[str, str] | None = None) -> list[str]:
     device = data.get("device", {})
     mirroring = data.get("mirroring", {})
     interfaces = data.get("interfaces", [])
     name = topology_safe_text(
-        (profile or {}).get("name") or device.get("sys_name") or device.get("host"),
+        (config or {}).get("name") or device.get("sys_name") or device.get("host"),
         "switch",
     )
     ports_by_id: dict[int, dict[str, Any]] = {}
     for iface in interfaces:
         idx = iface.get("if_index")
-        if isinstance(idx, int) and idx > 0:
+        if isinstance(idx, int) and idx > 0 and topology_is_switch_port(iface):
             ports_by_id[idx] = iface
     dest = mirroring.get("destination_port") or {}
     dest_id = dest.get("raw_id") or dest.get("if_index")
@@ -893,15 +945,15 @@ def build_result(args: argparse.Namespace) -> dict[str, Any]:
 
 def main() -> int:
     args = parse_args()
-    profile = apply_profile(args)
+    switch_config = apply_switch_config(args) or apply_hosts3d_default(args)
     if not args.host:
         data = {
             "status": STATUS_AUTH_FAILED,
             "details": [
                 {
-                    "component": "switch_profile",
+                    "component": "switch_config",
                     "status": STATUS_AUTH_FAILED,
-                    "message": "Missing switch host. Provide HOST or a switch line with host=... in --profile-file.",
+                    "message": "Missing switch host. Provide HOST, --hosts3d-default, or a switch line with host=... in --config-file.",
                 },
             ],
         }
@@ -940,7 +992,7 @@ def main() -> int:
     if args.write_json:
         write_text_atomic(args.write_json, text + "\n")
     if args.write_topology and data["status"] in (STATUS_OK, STATUS_PARTIAL):
-        write_text_atomic(args.write_topology, "\n".join(topology_lines(data, profile)) + "\n")
+        write_text_atomic(args.write_topology, "\n".join(topology_lines(data, switch_config)) + "\n")
     print(text)
     return 0 if data["status"] in (STATUS_OK, STATUS_PARTIAL) else 1
 

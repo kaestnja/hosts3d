@@ -910,7 +910,7 @@ Tools/snmp/scalance_xr328_mirror_check.py
 
 Der Prototyp nutzt Net-SNMP (`snmpget` und `snmpwalk`) als externe Werkzeuge und gibt JSON aus. Er ist bewusst als Diagnose- und Vertragswerkzeug gebaut: erst lesen und Format stabilisieren, danach koennen kontrollierte Verwaltungsfunktionen wie SNMP-SET, SSH-CLI oder API-basierte Switch-Aenderungen folgen.
 
-Die Net-SNMP-Werkzeuge muessen nicht zwingend systemweit installiert sein. Vergleichbar mit der GLFW3-Laufzeitloesung ist auch ein lokaler Release-Pfad denkbar: `snmpget.exe`, `snmpwalk.exe` und ihre benoetigten DLLs liegen dann neben dem Verwaltungswerkzeug oder in einem dokumentierten Unterordner des Release-Pakets. Der aktuelle Prototyp kann solche lokalen Werkzeuge ueber `--snmpget` und `--snmpwalk` explizit verwenden; ohne diese Angaben sucht er die Befehle wie ueblich ueber die Kommandoaufloesung des Systems. Wenn kein passendes Werkzeug gefunden wird, meldet das Tool dies im JSON-Statusmodell als `not_implemented`.
+Die Net-SNMP-Werkzeuge muessen nicht zwingend systemweit installiert sein. Im ausgelieferten Windows-Paket liegen `snmpget.exe`, `snmpwalk.exe` und `snmpset.exe` direkt im Paket-Root neben `Hosts3D.exe`, sofern der optionale Net-SNMP-Schritt gebaut wurde. Der aktuelle Prototyp kann solche lokalen Werkzeuge ueber `--snmpget snmpget.exe` und `--snmpwalk snmpwalk.exe` explizit verwenden; ohne diese Angaben sucht er die Befehle wie ueblich ueber die Kommandoaufloesung des Systems. Wenn kein passendes Werkzeug gefunden wird, meldet das Tool dies im JSON-Statusmodell als `not_implemented`.
 
 Der Windows-Buildweg fuer lokale Net-SNMP-Werkzeuge ist im Repository vorbereitet:
 
@@ -920,7 +920,7 @@ third_party/net-snmp/README.md
 third_party/openssl/windows/<arch>/  (lokal durch vcpkg erzeugt, nicht versioniert)
 ```
 
-Der getestete Build ruft vcpkg fuer `openssl:x64-windows-static` und `openssl:x86-windows-static` auf, kopiert die benoetigten Header und Libraries in das lokale `third_party/openssl/windows/<arch>`-Layout und erzeugt danach `snmpget.exe`, `snmpwalk.exe` und `snmpset.exe` fuer `x64` und `x86` unter `Release/windows/<arch>/`. OpenSSL wird statisch gelinkt; `dumpbin /dependents` zeigte nur Windows-System-DLLs, keine OpenSSL- oder MSVC-Runtime-DLLs.
+Der getestete Entwicklungs-Build ruft vcpkg fuer `openssl:x64-windows-static` und `openssl:x86-windows-static` auf, kopiert die benoetigten Header und Libraries in das lokale `third_party/openssl/windows/<arch>`-Layout und erzeugt danach `snmpget.exe`, `snmpwalk.exe` und `snmpset.exe` fuer `x64` und `x86` unter dem lokalen, nicht ausgelieferten Build-Layout `Release/windows/<arch>/`. Beim Paket-Staging werden diese Werkzeuge in den Paket-Root kopiert. OpenSSL wird statisch gelinkt; `dumpbin /dependents` zeigte nur Windows-System-DLLs, keine OpenSSL- oder MSVC-Runtime-DLLs.
 
 Beispiel mit SNMPv3 und Umgebungsvariablen, um Credentials nicht unnoetig in der Shell-History abzulegen:
 
@@ -948,26 +948,22 @@ Beispiel mit SNMPv2c nur fuer Laborbetrieb:
 SNMP_COMMUNITY=COMMUNITY python3 Tools/snmp/scalance_xr328_mirror_check.py SWITCH_IP --version 2c --pretty
 ```
 
-Der Prototyp kann SNMP-Credentials aktuell direkt ueber Kommandozeilenparameter, ueber Umgebungsvariablen oder ueber das Hosts3D-Profilformat erhalten. Fuer SNMPv1/v2c ist ein fehlender `community`-Wert kein Fehler: das Skript probiert dann read-only `private` und danach `public`. Fuer abweichende Community-Werte und fuer SNMPv3-Passwoerter sind Umgebungsvariablen besser als direkte CLI-Argumente, wenn diese Werte nicht in Shell-History, Prozesslisten oder lokalen Profilen stehen sollen. Das Skript gibt keine Geheimniswerte aus, sondern meldet nur den Credential-Status beziehungsweise bei SNMPv1/v2c die verwendete Community-Quelle. Mit `--check-access-only` fuehrt es nur die Device-Identity-Abfragen aus und eignet sich damit als kurze SNMPv3-Authentifizierungsprobe, bevor die vollstaendige Mirror-/FDB-/LLDP-Abfrage laeuft.
+Der Prototyp kann SNMP-Credentials aktuell direkt ueber Kommandozeilenparameter, ueber Umgebungsvariablen oder ueber die optionale Hosts3D-Switch-Konfiguration `hsd-data/switches.txt` erhalten. Fuer SNMPv1/v2c ist ein fehlender `community`-Wert kein Fehler: das Skript probiert dann read-only `private` und danach `public`. Fuer abweichende Community-Werte und fuer SNMPv3-Passwoerter sind Umgebungsvariablen besser als direkte CLI-Argumente, wenn diese Werte nicht in Shell-History, Prozesslisten oder lokalen Konfigurationsdateien stehen sollen. Das Skript gibt keine Geheimniswerte aus, sondern meldet nur den Credential-Status beziehungsweise bei SNMPv1/v2c die verwendete Community-Quelle. Mit `--check-access-only` fuehrt es nur die Device-Identity-Abfragen aus und eignet sich damit als kurze SNMPv3-Authentifizierungsprobe, bevor die vollstaendige Mirror-/FDB-/LLDP-Abfrage laeuft.
 
-Vorschlag fuer eine spaetere lokale Profil- und Credential-Verwaltung:
-
-1. Nicht geheime Profilmetadaten werden lokal pro Benutzer abgelegt, zum Beispiel unter `%APPDATA%\Hosts3D\snmp-profiles.json` auf Windows oder unter `~/.config/hosts3d/snmp-profiles.json` auf Linux/macOS. Dort stehen nur Profilname, Host, SNMP-Version, Security-Level, Auth-/Privacy-Protokolle und Verweise auf Credential-Namen.
-2. Geheimnisse werden nicht in Repository, Handover, JSON-Ausgabe oder Klartext-Konfigurationsdateien gespeichert. Sie gehoeren in den lokalen Betriebssystem-Credential-Store: Windows Credential Manager/DPAPI auf Windows, Keychain auf macOS, Secret Service oder ein vergleichbarer sicherer Store auf Linux.
-3. Ein separates Setup-Kommando fragt den Anwender einmalig interaktiv ab und speichert die Geheimnisse lokal fuer genau diesen Benutzer und Rechner, zum Beispiel:
+Hosts3D F9 verwendet fuer den aktuellen SCALANCE-Prototyp einen eingebauten Lab-Default (`sw6248xr328`, `192.168.6.248`, SNMPv2c, read-only Defaults `private` dann `public`). `hsd-data/switches.txt` ist nur ein Override, wenn ein anderer Switch, eine andere SNMP-Version oder nicht-default Credentials benoetigt werden:
 
 ```text
-python Tools/snmp/scalance_xr328_snmp_profile.py set sw6248xr328 --host 192.168.6.248 --version 3 --level authPriv --user USER --auth-proto SHA --priv-proto AES
+switch name=sw6248xr328 type=scalance_xr328 host=SWITCH_IP version=2c community=COMMUNITY enabled=1 auto_refresh=1 refresh_seconds=60
 ```
 
-4. Der Diagnoseaufruf verwendet danach nur noch das Profil:
+Der dazu passende direkte Diagnoseaufruf lautet:
 
 ```text
-python Tools/snmp/scalance_xr328_mirror_check.py --profile sw6248xr328 --check-access-only --pretty
-python Tools/snmp/scalance_xr328_mirror_check.py --profile sw6248xr328 --pretty
+python Tools/snmp/scalance_xr328_mirror_check.py --config-file hsd-data/switches.txt --switch sw6248xr328 --check-access-only --pretty
+python Tools/snmp/scalance_xr328_mirror_check.py --config-file hsd-data/switches.txt --switch sw6248xr328 --pretty
 ```
 
-5. Fuer die Implementierung ist ein kleines Credential-Modul sinnvoll, das zuerst Windows sauber unterstuetzt und spaeter plattformneutral erweitert wird. Eine praktikable Python-Variante waere die optionale Nutzung von `keyring`; ohne dieses Modul bleibt der aktuelle Weg ueber Umgebungsvariablen und CLI-Parameter als fallbackfaehiger Diagnosepfad erhalten.
+Eine spaetere lokale Credential-Store-Integration bleibt sinnvoll, ist aber aktuell nicht implementiert. Wenn sie ergaenzt wird, sollte sie Geheimnisse in den lokalen Betriebssystem-Credential-Store legen, zum Beispiel Windows Credential Manager/DPAPI auf Windows, Keychain auf macOS oder Secret Service auf Linux. Bis dahin bleibt der aktuelle Weg ueber Umgebungsvariablen, CLI-Parameter und `switches.txt` der dokumentierte Diagnosepfad.
 
 Aktuelle Grenzen des Prototyps:
 

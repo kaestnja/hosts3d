@@ -66,15 +66,38 @@ class ScalanceMirrorCheckTests(unittest.TestCase):
         self.assertEqual(raw["sources"][0]["interface"]["if_name"], "P0.10")
         self.assertEqual(raw["destinations"][0]["destination_id"], 6)
 
-    def test_switch_profile_line_supports_hosts3d_switches_txt(self):
-        profile = mirror_check.parse_switch_profile_line(
+    def test_switch_config_line_supports_hosts3d_switches_txt(self):
+        config = mirror_check.parse_switch_config_line(
             'switch name=sw6248xr328 type=scalance_xr328 host=192.168.6.248 version=2c community_env=SNMP_COMMUNITY auto_refresh=1'
         )
 
-        self.assertEqual(profile["name"], "sw6248xr328")
-        self.assertEqual(profile["host"], "192.168.6.248")
-        self.assertEqual(profile["community_env"], "SNMP_COMMUNITY")
-        self.assertTrue(mirror_check.parse_bool_text(profile["auto_refresh"]))
+        self.assertEqual(config["name"], "sw6248xr328")
+        self.assertEqual(config["host"], "192.168.6.248")
+        self.assertEqual(config["community_env"], "SNMP_COMMUNITY")
+        self.assertTrue(mirror_check.parse_bool_text(config["auto_refresh"]))
+
+    def test_hosts3d_default_config_sets_known_scalance_lab_switch(self):
+        args = SimpleNamespace(
+            hosts3d_default=True,
+            host=None,
+            version="3",
+            port=161,
+            timeout=3,
+            retries=1,
+            community="",
+            user="",
+            level="authPriv",
+            auth_proto="SHA",
+            auth_pass="",
+            priv_proto="AES",
+            priv_pass="",
+        )
+
+        config = mirror_check.apply_hosts3d_default(args)
+
+        self.assertEqual(config["name"], "sw6248xr328")
+        self.assertEqual(args.host, "192.168.6.248")
+        self.assertEqual(args.version, "2c")
 
     def test_snmp_v2c_defaults_to_private_public_when_community_missing(self):
         args = SimpleNamespace(version="2c", community="")
@@ -124,6 +147,28 @@ class ScalanceMirrorCheckTests(unittest.TestCase):
         self.assertIn("port id=2 name=P0.2 role=egress dest=6 up=1", lines)
         self.assertIn("port id=6 name=P0.6 role=destination up=1", lines)
         self.assertIn("host ip=192.168.6.32 mac=68:05:CA:11:D6:C7 port=2 label=W032S22", lines)
+
+    def test_topology_lines_ignore_non_physical_high_ifindex_interfaces(self):
+        data = {
+            "status": "ok",
+            "device": {"host": "192.168.6.248", "sys_name": "sw6248xr328"},
+            "interfaces": [
+                {"if_index": 1, "if_name": "P0.1", "if_descr": "Ethernet Port", "oper_status": "up"},
+                {"if_index": 61, "if_name": "vlan1", "if_descr": "L3 VLAN, VLAN1", "oper_status": "up"},
+                {"if_index": 105, "if_name": "loopback0", "if_descr": "loopback", "oper_status": "up"},
+            ],
+            "mirroring": {
+                "destination_port": {"raw_id": 6, "if_index": 6, "if_name": "P0.6"},
+                "source_ports": [{"raw_id": 1, "if_index": 1, "if_name": "P0.1", "egress_mirroring": True}],
+            },
+        }
+
+        lines = mirror_check.topology_lines(data)
+
+        self.assertIn("switch name=sw6248xr328 ports=28", lines)
+        self.assertIn("port id=1 name=P0.1 role=egress dest=6 up=1", lines)
+        self.assertNotIn("port id=61 name=vlan1 role=normal up=1", lines)
+        self.assertNotIn("port id=105 name=loopback0 role=normal up=1", lines)
 
 
 if __name__ == "__main__":

@@ -3389,53 +3389,57 @@ static void sceneViewToggle()
   sceneViewSet(activeSceneView == svHostTraffic ? svSwitchTopology : svHostTraffic);
 }
 
-struct switch_topology_profile_type
+struct switch_topology_config_type
 {
   bool exists, enabled, autoRefresh;
   unsigned int refreshSeconds;
   char name[64], type[64], host[128];
 };
 
+static void switchTopologyDefaultSnmpConfig(switch_topology_config_type *config)
+{
+  if (!config) return;
+  config->exists = true;
+  config->enabled = true;
+  config->autoRefresh = true;
+  config->refreshSeconds = 60;
+  setStringValue(config->name, sizeof(config->name), "sw6248xr328");
+  setStringValue(config->type, sizeof(config->type), "scalance_xr328");
+  setStringValue(config->host, sizeof(config->host), "192.168.6.248");
+}
+
 static void switchTopologyWriteDefaultConfig(const char *path)
 {
   FILE *fp;
   if (!path || !*path || fileExists(path)) return;
   if (!(fp = fopen(path, "w"))) return;
-  fputs("# Hosts3D switch discovery profiles\n", fp);
-  fputs("# F9 reads switch-topology.txt. When auto_refresh=1, Hosts3D starts the matching SNMP helper in the background.\n", fp);
-  fputs("# For SNMPv1/v2c, omit community to try the usual read-only defaults private, then public.\n", fp);
-  fputs("# For non-default values use community=... or community_env=SNMP_COMMUNITY. For SNMPv3 prefer user_env, auth_pass_env and priv_pass_env.\n", fp);
-  fputs("# After editing with Hosts3D closed, set enabled=1 and auto_refresh=1.\n", fp);
-  fputs("switch name=sw6248xr328 type=scalance_xr328 host=192.168.6.248 version=2c enabled=0 auto_refresh=0 refresh_seconds=60\n", fp);
+  fputs("# Hosts3D optional switch config overrides\n", fp);
+  fputs("# F9 has a built-in SCALANCE XR328 lab default: sw6248xr328 at 192.168.6.248, SNMPv2c, read-only defaults private then public.\n", fp);
+  fputs("# Add an enabled switch line only when you need to override that default or use another switch.\n", fp);
+  fputs("# For non-default SNMPv1/v2c values use community=... or community_env=SNMP_COMMUNITY.\n", fp);
+  fputs("# For SNMPv3 prefer user_env, auth_pass_env and priv_pass_env instead of writing passwords here.\n", fp);
+  fputs("# Example:\n", fp);
+  fputs("# switch name=sw6248xr328 type=scalance_xr328 host=192.168.6.248 version=2c enabled=1 auto_refresh=1 refresh_seconds=60\n", fp);
   fclose(fp);
 }
 
-static bool switchTopologyParseProfileFile(const char *path, switch_topology_profile_type *profile)
+static bool switchTopologyReadConfigOverride(const char *path, switch_topology_config_type *config)
 {
   FILE *fp;
   char line[1024];
-  bool sawSwitch = false;
-  if (!profile) return false;
-  profile->exists = false;
-  profile->enabled = true;
-  profile->autoRefresh = false;
-  profile->refreshSeconds = 60;
-  profile->name[0] = '\0';
-  profile->type[0] = '\0';
-  profile->host[0] = '\0';
+  if (!config) return false;
   if (!(fp = fopen(path, "r"))) return false;
   while (fgets(line, sizeof(line), fp))
   {
     char *cmd, *tok;
-    switch_topology_profile_type candidate;
+    switch_topology_config_type candidate;
     char *txt = trimWs(line);
     if (!*txt || (*txt == '#') || (*txt == ';')) continue;
     if (!(cmd = strtok(txt, " \t\r\n"))) continue;
     if (!strEqNoCase(cmd, "switch")) continue;
-    sawSwitch = true;
     candidate.exists = true;
     candidate.enabled = true;
-    candidate.autoRefresh = false;
+    candidate.autoRefresh = true;
     candidate.refreshSeconds = 60;
     candidate.name[0] = '\0';
     candidate.type[0] = '\0';
@@ -3455,16 +3459,16 @@ static bool switchTopologyParseProfileFile(const char *path, switch_topology_pro
       else if (strEqNoCase(key, "auto_refresh") && switchTopologyParseBool(value, &flag)) candidate.autoRefresh = flag;
       else if (strEqNoCase(key, "refresh_seconds") && parseUnsignedIntValue(value, &seconds)) candidate.refreshSeconds = seconds;
     }
-    if (!profile->exists) *profile = candidate;
     if (candidate.enabled)
     {
-      *profile = candidate;
-      break;
+      *config = candidate;
+      if (config->refreshSeconds < 15) config->refreshSeconds = 15;
+      fclose(fp);
+      return true;
     }
   }
   fclose(fp);
-  if (profile->refreshSeconds < 15) profile->refreshSeconds = 15;
-  return profile->exists || sawSwitch;
+  return false;
 }
 
 static bool switchTopologyResolveSnmpScript(char *path, size_t pathsz, char *workdir, size_t workdirsz)
@@ -3527,22 +3531,25 @@ static void switchTopologyAppendRuntimeSnmpTools(char *cmd, size_t cmdsz)
 
 static bool switchTopologySnmpRefreshRequest(bool manual, char *errbuf = 0, size_t errbufsz = 0)
 {
-  switch_topology_profile_type profile;
+  switch_topology_config_type config;
   char cfgPath[512], jsonPath[512], topologyPath[512], scriptPath[512], workdir[512], cmd[4096];
+  bool useConfigFile;
   time_t now;
   if (errbuf && errbufsz) *errbuf = '\0';
   ensureHsdDataDir();
   setStringValue(cfgPath, sizeof(cfgPath), hsddata("switches.txt"));
   switchTopologyWriteDefaultConfig(cfgPath);
-  if (!switchTopologyParseProfileFile(cfgPath, &profile) || !profile.enabled || !*profile.host)
+  switchTopologyDefaultSnmpConfig(&config);
+  useConfigFile = switchTopologyReadConfigOverride(cfgPath, &config);
+  if (!config.enabled || !*config.host)
   {
     if (manual && errbuf && errbufsz)
-      snprintf(errbuf, errbufsz, "Edit hsd-data/switches.txt first, set enabled=1, host=..., then retry.");
+      snprintf(errbuf, errbufsz, "Switch config is missing host=... Fix hsd-data/switches.txt or remove its override line.");
     return false;
   }
-  if (!manual && !profile.autoRefresh) return false;
+  if (!manual && !config.autoRefresh) return false;
   time(&now);
-  if (!manual && switchTopologyLastSnmpLaunch && ((unsigned int)(now - switchTopologyLastSnmpLaunch) < profile.refreshSeconds)) return false;
+  if (!manual && switchTopologyLastSnmpLaunch && ((unsigned int)(now - switchTopologyLastSnmpLaunch) < config.refreshSeconds)) return false;
   if (manual && switchTopologyLastSnmpLaunch && ((now - switchTopologyLastSnmpLaunch) < 5))
   {
     if (errbuf && errbufsz) setStringValue(errbuf, errbufsz, "A switch topology refresh was just started.");
@@ -3556,18 +3563,30 @@ static bool switchTopologySnmpRefreshRequest(bool manual, char *errbuf = 0, size
   setStringValue(jsonPath, sizeof(jsonPath), hsddata("scalance_xr328_mirror_check.json"));
   setStringValue(topologyPath, sizeof(topologyPath), hsddata("switch-topology.txt"));
 #ifdef __MINGW32__
-  snprintf(cmd, sizeof(cmd), "py -3 \"%s\" --profile-file \"%s\" --write-json \"%s\" --write-topology \"%s\" --pretty",
-           scriptPath, cfgPath, jsonPath, topologyPath);
+  if (useConfigFile)
+    snprintf(cmd, sizeof(cmd), "py -3 \"%s\" --config-file \"%s\" --write-json \"%s\" --write-topology \"%s\" --pretty",
+             scriptPath, cfgPath, jsonPath, topologyPath);
+  else
+    snprintf(cmd, sizeof(cmd), "py -3 \"%s\" --hosts3d-default --write-json \"%s\" --write-topology \"%s\" --pretty",
+             scriptPath, jsonPath, topologyPath);
 #else
-  snprintf(cmd, sizeof(cmd), "python3 \"%s\" --profile-file \"%s\" --write-json \"%s\" --write-topology \"%s\" --pretty",
-           scriptPath, cfgPath, jsonPath, topologyPath);
+  if (useConfigFile)
+    snprintf(cmd, sizeof(cmd), "python3 \"%s\" --config-file \"%s\" --write-json \"%s\" --write-topology \"%s\" --pretty",
+             scriptPath, cfgPath, jsonPath, topologyPath);
+  else
+    snprintf(cmd, sizeof(cmd), "python3 \"%s\" --hosts3d-default --write-json \"%s\" --write-topology \"%s\" --pretty",
+             scriptPath, jsonPath, topologyPath);
 #endif
   switchTopologyAppendRuntimeSnmpTools(cmd, sizeof(cmd));
   if (!launchDetachedCommandLine(cmd, workdir))
   {
 #ifdef __MINGW32__
-    snprintf(cmd, sizeof(cmd), "python \"%s\" --profile-file \"%s\" --write-json \"%s\" --write-topology \"%s\" --pretty",
-             scriptPath, cfgPath, jsonPath, topologyPath);
+    if (useConfigFile)
+      snprintf(cmd, sizeof(cmd), "python \"%s\" --config-file \"%s\" --write-json \"%s\" --write-topology \"%s\" --pretty",
+               scriptPath, cfgPath, jsonPath, topologyPath);
+    else
+      snprintf(cmd, sizeof(cmd), "python \"%s\" --hosts3d-default --write-json \"%s\" --write-topology \"%s\" --pretty",
+               scriptPath, jsonPath, topologyPath);
     switchTopologyAppendRuntimeSnmpTools(cmd, sizeof(cmd));
     if (!launchDetachedCommandLine(cmd, workdir))
 #endif
@@ -3577,7 +3596,7 @@ static bool switchTopologySnmpRefreshRequest(bool manual, char *errbuf = 0, size
     }
   }
   switchTopologyLastSnmpLaunch = now;
-  snprintf(switchTopologySnmpStatus, sizeof(switchTopologySnmpStatus), "switch SNMP refresh started for %s", profile.host);
+  snprintf(switchTopologySnmpStatus, sizeof(switchTopologySnmpStatus), "switch SNMP refresh started for %s", config.host);
   return true;
 }
 
@@ -3815,8 +3834,10 @@ static void switchTopologyCollectHostCb(void **data, HtArgType arg1, HtArgType a
 static void switchTopologySceneRefresh(bool force)
 {
   time_t now;
-  char path[512];
-  switchTopologySnmpRefreshRequest(false);
+  char path[512], emsg[256];
+  emsg[0] = '\0';
+  if (!switchTopologySnmpRefreshRequest(force, emsg, sizeof(emsg)) && *emsg)
+    setStringValue(switchTopologySnmpStatus, sizeof(switchTopologySnmpStatus), emsg);
   time(&now);
   if (!force && switchTopologyState.initialized && ((now - switchTopologyState.lastRefresh) < 1)) return;
   switchTopologyState.initialized = true;

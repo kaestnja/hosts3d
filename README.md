@@ -30,7 +30,7 @@ Current planning notes for capture and sensor-management work live in separate M
 
 The first experimental device-specific helper is `Tools/snmp/scalance_xr328_mirror_check.py`. It shells out to Net-SNMP (`snmpget`/`snmpwalk`), emits JSON, and can also write the simple topology text format consumed by the F9 switch-topology scene.
 
-Hosts3D 1.19 starts the runtime-side integration with a main-scene controller. Press `F9`, click the OSD `Main Scene` row, or use `View` / `Show Switch Topology Scene` to switch between the existing host-traffic scene and the new switch-topology scene. The switch scene reads `hsd-data/switch-topology.txt` while it is displayed. If `hsd-data/switches.txt` contains an enabled switch profile with `auto_refresh=1`, Hosts3D starts the SCALANCE helper in the background, writes the raw result to `hsd-data/scalance_xr328_mirror_check.json`, writes the derived text topology to `hsd-data/switch-topology.txt`, and then reloads the text file on the next scene refresh. The first text format supports lines such as:
+Hosts3D 1.19 starts the runtime-side integration with a main-scene controller. Press `F9`, click the OSD `Main Scene` row, or use `View` / `Show Switch Topology Scene` to switch between the existing host-traffic scene and the new switch-topology scene. The switch scene reads `hsd-data/switch-topology.txt` while it is displayed. F9 starts the SCALANCE helper in the background using the built-in lab default for `sw6248xr328` (`192.168.6.248`, SNMPv2c, read-only defaults `private` then `public`) unless `hsd-data/switches.txt` contains an enabled override line. The helper writes the raw result to `hsd-data/scalance_xr328_mirror_check.json`, writes the derived text topology to `hsd-data/switch-topology.txt`, and then reloads the text file on the next scene refresh. The first text format supports lines such as:
 
 ```text
 switch name=sw6248xr328 ports=28
@@ -41,13 +41,13 @@ host ip=192.168.6.10 mac=00:11:22:33:44:55 port=1 label=plc-01
 
 Hosts appear on a switch port only when the topology file supplies `port=...` for that host identity. The view then draws a connection line and a compact host label block with hostname/label, IP, MAC, and port. Without that file, Hosts3D can still show observed hosts in the topology scene, but it cannot infer their switch ports yet.
 
-`hsd-data/switches.txt` is the human-editable switch connection file. F9 creates a disabled template if the file is missing. Enable it only after editing the switch address and SNMP profile data, for example:
+`hsd-data/switches.txt` is an optional human-editable switch connection override. F9 can create this file with comments and an example, but it does not need the file to start the current SCALANCE prototype. Add an enabled line only when the built-in lab default should be replaced, for example:
 
 ```text
 switch name=sw6248xr328 type=scalance_xr328 host=192.168.6.248 version=2c enabled=1 auto_refresh=1 refresh_seconds=60
 ```
 
-For SNMPv1/v2c, omitting `community` is valid: the helper tries the usual defaults `private` and then `public` while staying read-only. For a non-default value use `community=...` or `community_env=SNMP_COMMUNITY`. For SNMPv3, use environment-variable references such as `user_env=SNMP_USER auth_pass_env=SNMP_AUTH_PASS priv_pass_env=SNMP_PRIV_PASS` when passwords should not live in the local profile file. The `View` menu also contains `Refresh Switch Topology` for a manual background refresh.
+For SNMPv1/v2c, omitting `community` is valid: the helper tries the usual defaults `private` and then `public` while staying read-only. For a non-default value use `community=...` or `community_env=SNMP_COMMUNITY`. For SNMPv3, use environment-variable references such as `user_env=SNMP_USER auth_pass_env=SNMP_AUTH_PASS priv_pass_env=SNMP_PRIV_PASS` when passwords should not live in the local switch config file. The `View` menu also contains `Refresh Switch Topology` for a manual background refresh.
 
 ## Quick Start
 If your main goal is to get the project running again, use this order:
@@ -371,7 +371,7 @@ Main files:
 | `0network.hnl` | network layout on exit; newly written layouts now use the versioned `HN2` format |
 | `1network.hnl`..`4network.hnl` | saved layouts; newly written layouts now use the versioned `HN2` format |
 | `netpos.txt` | CIDR-to-position/color mapping and exact host matching rules for already observed or layout-loaded hosts |
-| `switches.txt` | human-editable switch discovery profile; F9 creates a disabled template when missing |
+| `switches.txt` | optional human-editable switch connection override for the F9 SCALANCE helper |
 | `switch-topology.txt` | generated or manually edited switch/port/host mapping consumed by the F9 switch-topology scene |
 | `scalance_xr328_mirror_check.json` | raw SCALANCE SNMP helper result kept beside the generated topology text for diagnostics |
 | `traffic.hpt` | Hosts3D packet traffic record/replay data (not PCAP) |

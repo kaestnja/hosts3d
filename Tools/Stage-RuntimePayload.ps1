@@ -138,16 +138,17 @@ Quick lab example:
 
 Hosts3D F9 integration:
 
-- `hsd-data\switches.txt` stores the human-editable switch profile.
-- When a profile is `enabled=1` and `auto_refresh=1`, the F9 switch-topology
-  scene starts this helper in the background.
+- F9 starts this helper with the built-in SCALANCE XR328 lab default for
+  `sw6248xr328` at `192.168.6.248`.
+- `hsd-data\switches.txt` is only a human-editable override for another switch
+  address or non-default SNMP data.
 - The helper writes raw diagnostics to `hsd-data\scalance_xr328_mirror_check.json`
   and the display mapping to `hsd-data\switch-topology.txt`.
 
 For SNMPv1/v2c, omitting a community value makes the helper try the usual
 read-only defaults `private` and then `public`. For non-default values use
 `community=...` or `community_env=SNMP_COMMUNITY`; for SNMPv3 passwords prefer
-environment variables or a future local credential profile.
+environment variables referenced from `switches.txt`.
 '@
 Write-TextFile -Path (Join-Path $snmpToolsDir "README.md") -Content $snmpReadme
 
@@ -241,7 +242,21 @@ $cmdWrapper = @'
 setlocal
 set "SCRIPT_DIR=%~dp0"
 set "ROOT=%SCRIPT_DIR%..\.."
-python "%SCRIPT_DIR%scalance_xr328_mirror_check.py" %* --snmpget "%ROOT%\snmpget.exe" --snmpwalk "%ROOT%\snmpwalk.exe"
+set "SNMPGET=%ROOT%\snmpget.exe"
+set "SNMPWALK=%ROOT%\snmpwalk.exe"
+if exist "%SNMPGET%" if exist "%SNMPWALK%" (
+  python "%SCRIPT_DIR%scalance_xr328_mirror_check.py" %* --snmpget "%SNMPGET%" --snmpwalk "%SNMPWALK%"
+  exit /b %ERRORLEVEL%
+)
+if exist "%SNMPGET%" (
+  python "%SCRIPT_DIR%scalance_xr328_mirror_check.py" %* --snmpget "%SNMPGET%"
+  exit /b %ERRORLEVEL%
+)
+if exist "%SNMPWALK%" (
+  python "%SCRIPT_DIR%scalance_xr328_mirror_check.py" %* --snmpwalk "%SNMPWALK%"
+  exit /b %ERRORLEVEL%
+)
+python "%SCRIPT_DIR%scalance_xr328_mirror_check.py" %*
 exit /b %ERRORLEVEL%
 '@
 Write-TextFile -Path (Join-Path $snmpToolsDir "run-scalance-check.cmd") -Content $cmdWrapper
