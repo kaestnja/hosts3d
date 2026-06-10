@@ -117,43 +117,20 @@ foreach ($name in @("sim-hsen.ps1", "sim-hsen.py", "demo-hsen.ps1", "demo-hsen.p
 }
 
 $snmpToolsDir = Join-Path $destinationPath "Tools\snmp"
+foreach ($obsoleteSnmpFile in @(
+    "scalance_xr328_snmp_mirroring_abfrage.md",
+    "scalance_xc208g_snmp_mirroring_abfrage.md"
+)) {
+    $obsoletePath = Join-Path $snmpToolsDir $obsoleteSnmpFile
+    if (Test-Path -LiteralPath $obsoletePath -PathType Leaf) {
+        Remove-Item -LiteralPath $obsoletePath -Force
+    }
+}
+Copy-PayloadFile -Source (Join-Path $repoRoot "Tools\snmp\README.md") -DestinationDirectory $snmpToolsDir -DestinationName "README.md" -Required
 Copy-PayloadFile -Source (Join-Path $repoRoot "Tools\snmp\scalance_xr328_mirror_check.py") -DestinationDirectory $snmpToolsDir -DestinationName "scalance_xr328_mirror_check.py" -Required
-Copy-PayloadFile -Source (Join-Path $repoRoot "Tools\snmp\scalance_xr328_snmp_mirroring_abfrage.md") -DestinationDirectory $snmpToolsDir -DestinationName "scalance_xr328_snmp_mirroring_abfrage.md" -Required
-
-$snmpReadme = @'
-# Hosts3D SNMP Tools
-
-This folder contains optional SNMP diagnostics and switch-specific helpers.
-
-Current helper:
-- scalance_xr328_mirror_check.py
-- scalance_xr328_snmp_mirroring_abfrage.md
-
-The switch type is encoded in the file names so future SNMP helpers can live
-beside these files without creating one folder per switch. From the repository
-root and from a staged package root, the same relative path works.
-
-Quick lab example:
-
-```powershell
-.\run-scalance-check.ps1 -SwitchIp 192.168.6.248 -Version 2c -Community public
-```
-
-Hosts3D F9 integration:
-
-- F9 starts this helper with the built-in SCALANCE XR328 lab default for
-  `sw6248xr328` at `192.168.6.248`.
-- `hsd-data\switches.txt` is only a human-editable override for another switch
-  address or non-default SNMP data.
-- The helper writes raw diagnostics to `hsd-data\scalance_xr328_mirror_check.json`
-  and the display mapping to `hsd-data\switch-topology.txt`.
-
-For SNMPv1/v2c, omitting a community value makes the helper try the usual
-read-only defaults `private` and then `public`. For non-default community
-values use `community=...` directly; for SNMPv3 passwords prefer environment
-variables referenced from `switches.txt`.
-'@
-Write-TextFile -Path (Join-Path $snmpToolsDir "README.md") -Content $snmpReadme
+Copy-PayloadFile -Source (Join-Path $repoRoot "Tools\snmp\scalance_xr328_mirror_check.md") -DestinationDirectory $snmpToolsDir -DestinationName "scalance_xr328_mirror_check.md" -Required
+Copy-PayloadFile -Source (Join-Path $repoRoot "Tools\snmp\scalance_xc208g_mirror_check.py") -DestinationDirectory $snmpToolsDir -DestinationName "scalance_xc208g_mirror_check.py" -Required
+Copy-PayloadFile -Source (Join-Path $repoRoot "Tools\snmp\scalance_xc208g_mirror_check.md") -DestinationDirectory $snmpToolsDir -DestinationName "scalance_xc208g_mirror_check.md" -Required
 
 $psWrapper = @'
 param(

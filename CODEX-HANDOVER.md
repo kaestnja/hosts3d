@@ -37,11 +37,17 @@ These files already existed before this handover and remain important:
   - packaging/runtime handoff for Linux release output
 - `Todos.md`
   - active planning notes for general capture infrastructure, HSEN sensor management/deployment, and network-device mirroring capabilities
-- `Tools/snmp/scalance_xr328_snmp_mirroring_abfrage.md`
-  - device-specific SNMP mirroring discovery and later management plan for Siemens SCALANCE XR328-4C WG; keep detailed SCALANCE OIDs and implementation steps there, not in the general todo file
+- `Tools/snmp/README.md`
+  - shared SNMP helper documentation; keep common SCALANCE OIDs, Net-SNMP usage, JSON contract, status model, credential handling, and staging notes here instead of embedding generated README text in scripts
+- `Tools/snmp/scalance_xr328_mirror_check.md`
+  - device-specific SNMP observations for Siemens SCALANCE XR328-4C WG; keep only real XR328 device knowledge here
 - `Tools/snmp/scalance_xr328_mirror_check.py`
   - first external JSON prototype for SCALANCE mirroring checks; keep this as the contract before wiring a Mirror Check into the Hosts3D local hsen UI or adding controlled switch-management operations
-  - always maintain this script together with `Tools/snmp/scalance_xr328_snmp_mirroring_abfrage.md`: the script header/use cases, JSON output, supported options, observed device behavior, and the markdown plan must describe the same current contract
+  - always maintain this script together with `Tools/snmp/scalance_xr328_mirror_check.md` and the shared `Tools/snmp/README.md`
+- `Tools/snmp/scalance_xc208g_mirror_check.py`
+  - read-only SCALANCE XC208G diagnostic helper; shares the XR328 JSON contract and has been validated against `sw4241xc208g`, `sw4242xc208g`, and `sw4243xc208g`
+- `Tools/snmp/scalance_xc208g_mirror_check.md`
+  - device-specific SNMP observations for Siemens SCALANCE XC208G; keep only real XC208G device knowledge here
 - `compile-net-snmp-windows.bat`
   - optional Windows helper build for Net-SNMP CLI tools; uses a separate Net-SNMP checkout, prepares MSVC OpenSSL inputs via vcpkg under ignored `third_party/openssl/windows/<arch>`, and copies `snmpget.exe`, `snmpwalk.exe`, and `snmpset.exe` to `Release/windows/<arch>`
 - `third_party/net-snmp/README.md`
@@ -350,6 +356,8 @@ Switch topology scene notes:
 - `View -> Refresh Switch Topology` manually starts the same background refresh, independent of the auto-refresh timer
 - without `switch-topology.txt`, the topology scene can show observed Hosts3D hosts, but it cannot infer their switch ports yet
 - keep both formats: JSON is the raw SNMP/diagnostic contract, while `switch-topology.txt` is the small editable rendering/input contract
+- next SNMP-management direction: keep global defaults in `settings.ini`, keep the concrete switch inventory in `hsd-data/switches.txt`, and query all enabled switches serially on F9/manual refresh
+- serial SNMP refresh is acceptable for now; the physical network is treated as stable enough during one pass that `switch-topology.txt` can represent a point-in-time snapshot, while JSON records whether mirroring/config/data-collection state needs attention
 
 VS Code extension setup for another machine:
 
@@ -710,9 +718,11 @@ Minimum required sweep areas:
 
 Special SCALANCE rule:
 
-- when changing `Tools/snmp/scalance_xr328_mirror_check.py`, also review and update `Tools/snmp/scalance_xr328_snmp_mirroring_abfrage.md`
-- when changing SCALANCE assumptions, OIDs, JSON examples, credential handling, or validation notes in `Tools/snmp/scalance_xr328_snmp_mirroring_abfrage.md`, also review and update the script
-- both files should stay consistent about command-line options, credential flow, output field names, observed XR328 behavior, and what remains only a planned future step
+- keep SNMP helper docs paired by basename: `scalance_xr328_mirror_check.py` with `scalance_xr328_mirror_check.md`, and `scalance_xc208g_mirror_check.py` with `scalance_xc208g_mirror_check.md`
+- keep only real device-specific knowledge in the paired device `.md` files
+- keep shared OIDs, command-line usage, JSON examples, credential handling, status model, and staging notes in `Tools/snmp/README.md`
+- do not embed README prose as a here-string in `Tools/Stage-RuntimePayload.ps1`; the staging script should copy `Tools/snmp/README.md`
+- when changing SCALANCE assumptions, OIDs, JSON fields, credential flow, or validation notes, review the relevant script, its paired device `.md`, and `Tools/snmp/README.md` together
 
 For renames/removals/migrations, future Codex sessions should explicitly search for:
 

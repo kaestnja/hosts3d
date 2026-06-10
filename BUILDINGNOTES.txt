@@ -113,7 +113,10 @@ Windows packaging note:
         Tools/snmp/
     Switch-specific SNMP files keep the switch name in the file name, for
     example scalance_xr328_mirror_check.py, instead of creating one folder per
-    switch type.
+    switch type. Script and device notes share the same basename and differ
+    only by extension. Tools/snmp/README.md is the source for the staged SNMP
+    folder README; Stage-RuntimePayload.ps1 copies it instead of embedding
+    README prose in the script.
 
 Linux packaging note:
     package-release-linux creates a tar.gz plus SHA256 file from Release/linux/<arch>.

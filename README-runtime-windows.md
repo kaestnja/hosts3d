@@ -27,9 +27,12 @@ Packages built after the optional Net-SNMP helper step may additionally include:
 - `snmpset.exe`
 
 The optional `Tools\snmp\` folder contains switch-specific diagnostic helpers.
-For example, the SCALANCE XR328 files live there as:
+Current SCALANCE helper files live there as:
 - `Tools\snmp\scalance_xr328_mirror_check.py`
-- `Tools\snmp\scalance_xr328_snmp_mirroring_abfrage.md`
+- `Tools\snmp\scalance_xr328_mirror_check.md`
+- `Tools\snmp\scalance_xc208g_mirror_check.py`
+- `Tools\snmp\scalance_xc208g_mirror_check.md`
+- `Tools\snmp\README.md`
 - `Tools\snmp\run-scalance-check.ps1`
 - `Tools\snmp\run-scalance-check.cmd`
 
@@ -51,6 +54,8 @@ The F9 switch-topology scene can also create and use:
 - `hsd-data\switch-topology.txt`
 
 F9 starts the SCALANCE helper with the built-in lab default for `sw6248xr328` (`192.168.6.248`, SNMPv2c, read-only defaults `private` then `public`) and updates `switch-topology.txt` for display. `switches.txt` is only an optional human-editable override for another switch address or non-default SNMP data. With `auto_refresh=1`, an enabled override line refreshes automatically; `View > Refresh Switch Topology` starts the same refresh manually.
+
+`scalance_xc208g_mirror_check.py` is currently a bundled read-only diagnostic helper, not the F9 default. It shares the XR328 JSON contract, auto-discovers local package/build `snmpget.exe` and `snmpwalk.exe` paths, and has been validated against SCALANCE XC208G devices with 8 physical ports.
 
 You can also trigger the bundled synthetic visualization demos from the top-right OSD:
 - `PS Demo`
