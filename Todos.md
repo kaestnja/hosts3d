@@ -95,6 +95,7 @@ Geraetespezifische Recherche, OID-Listen, Validierungsschritte und konkrete Impl
 Aktueller spezifischer Auftrag:
 
 - `Tools/snmp/README.md`: gemeinsame SNMP-Helfer-Doku, OIDs, JSON-Vertrag, Statusmodell und Staging-Hinweise.
+- `Tools/snmp/scalance_switches_refresh.py`: serieller SNMP-Refresh-Runner fuer alle aktivierten Switches aus `hsd-data/switches.txt`.
 - `Tools/snmp/scalance_xr328_mirror_check.md`: geraetespezifische SNMP-Beobachtungen fuer Siemens SCALANCE XR328-4C WG.
 - `Tools/snmp/scalance_xc208g_mirror_check.md`: geraetespezifische SNMP-Beobachtungen fuer Siemens SCALANCE XC208G.
 - `Tools/snmp/scalance_xr328_mirror_check.py`: erster lesender Prototyp fuer die JSON-Diagnose des SCALANCE-Mirroring-Zustands.

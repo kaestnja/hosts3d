@@ -32,7 +32,7 @@ Current planning notes for capture and sensor-management work live in separate M
 
 The first F9-integrated device-specific helper is `Tools/snmp/scalance_xr328_mirror_check.py`. It shells out to Net-SNMP (`snmpget`/`snmpwalk`), emits JSON, and can also write the simple topology text format consumed by the F9 switch-topology scene. A second read-only diagnostic helper, `Tools/snmp/scalance_xc208g_mirror_check.py`, shares the same JSON contract and has been validated against three SCALANCE XC208G switches (`sw4241xc208g`, `sw4242xc208g`, `sw4243xc208g`) using SNMPv2c.
 
-Hosts3D 1.19 starts the runtime-side integration with a main-scene controller. Press `F9`, click the OSD `Main Scene` row, or use `View` / `Show Switch Topology Scene` to switch between the existing host-traffic scene and the new switch-topology scene. The switch scene reads `hsd-data/switch-topology.txt` while it is displayed. F9 starts the SCALANCE helper in the background using the built-in lab default for `sw6248xr328` (`192.168.6.248`, SNMPv2c, read-only defaults `private` then `public`) unless `hsd-data/switches.txt` contains an enabled override line. The helper writes the raw result to `hsd-data/scalance_xr328_mirror_check.json`, writes the derived text topology to `hsd-data/switch-topology.txt`, and then reloads the text file on the next scene refresh. The first text format supports lines such as:
+Hosts3D 1.19 starts the runtime-side integration with a main-scene controller. Press `F9`, click the OSD `Main Scene` row, or use `View` / `Show Switch Topology Scene` to switch between the existing host-traffic scene and the new switch-topology scene. The switch scene reads `hsd-data/switch-topology.txt` while it is displayed. F9 starts the SCALANCE refresh runner in the background. With no enabled switch rows, it uses the built-in lab default for `sw6248xr328` (`192.168.6.248`, SNMPv2c, read-only defaults `private` then `public`). With enabled rows in `hsd-data/switches.txt`, it queries them serially by `type=...`. The runner writes raw per-switch JSON below `hsd-data/snmp/`, writes the derived text topology to `hsd-data/switch-topology.txt`, and then reloads the text file on the next scene refresh. The first text format supports lines such as:
 
 ```text
 switch name=sw6248xr328 ports=28
@@ -53,7 +53,7 @@ For SNMPv1/v2c, omitting `community` is valid: the helper tries the usual defaul
 
 The XC208G validation on 2026-06-10 confirmed `sysDescr`, `sysObjectID`, `ifName`/`ifDescr`, classic Bridge-MIB FDB, LLDP, and Siemens mirroring OIDs. On `sw4242xc208g` (`192.168.4.242`), active mirroring reported destination `P0.3` and egress source ports `P0.1`, `P0.4`, `P0.6`, and `P0.8`; the other two tested XC208G switches had mirroring disabled.
 
-Next SNMP-management direction: keep global application defaults in `settings.ini`, but keep the switch inventory as the runtime data file `hsd-data/switches.txt`, not in `Tools/snmp` and not as repeated rows inside `settings.ini`. F9/manual refresh should read enabled switch rows and, for now, query them serially. The physical network is assumed stable enough during one refresh pass that `switch-topology.txt` can represent the point-in-time result of that pass; JSON remains the raw diagnostic evidence for whether a GUI update, data-collection change, or configuration verification is needed.
+Current SNMP-management direction: keep global application defaults in `settings.ini`, but keep the switch inventory as the runtime data file `hsd-data/switches.txt`, not in `Tools/snmp` and not as repeated rows inside `settings.ini`. F9/manual refresh reads enabled switch rows and queries them serially. The physical network is assumed stable enough during one refresh pass that `switch-topology.txt` can represent the point-in-time result of that pass; JSON remains the raw diagnostic evidence for whether a GUI update, data-collection change, or configuration verification is needed.
 
 ## Quick Start
 If your main goal is to get the project running again, use this order:
@@ -379,7 +379,7 @@ Main files:
 | `netpos.txt` | CIDR-to-position/color mapping and exact host matching rules for already observed or layout-loaded hosts |
 | `switches.txt` | optional human-editable switch connection override for the F9 SCALANCE helper |
 | `switch-topology.txt` | generated or manually edited switch/port/host mapping consumed by the F9 switch-topology scene |
-| `scalance_xr328_mirror_check.json` | raw SCALANCE SNMP helper result kept beside the generated topology text for diagnostics |
+| `snmp/*.json` | raw per-switch SCALANCE SNMP helper results kept beside the generated topology text for diagnostics |
 | `traffic.hpt` | Hosts3D packet traffic record/replay data (not PCAP) |
 | `local-hsen.state` | machine-local state file for managed local `hsen` PIDs/process stamps on Linux/macOS |
 | `local-hsen-windows.state` | machine-local state file for managed local `hsen.exe` PIDs/process stamps on Windows |

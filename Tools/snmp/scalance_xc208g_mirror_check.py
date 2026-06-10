@@ -118,6 +118,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--write-json", help="Write the raw JSON result to this path")
     parser.add_argument("--write-topology", help="Write Hosts3D switch-topology.txt output to this path")
+    parser.add_argument("--append-topology", action="store_true", help="Append to --write-topology instead of replacing it")
     parser.add_argument("--pretty", action="store_true", help="Pretty-print JSON")
     return parser.parse_args()
 

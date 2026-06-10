@@ -40,10 +40,10 @@ Common use cases:
      python Tools/snmp/scalance_xr328_mirror_check.py 192.168.6.248 --version 2c --community public --skip-fdb --skip-lldp --pretty
 
 6. Use the built-in Hosts3D F9 SCALANCE default and write both runtime outputs:
-     python Tools/snmp/scalance_xr328_mirror_check.py --hosts3d-default --write-json hsd-data/scalance_xr328_mirror_check.json --write-topology hsd-data/switch-topology.txt --pretty
+     python Tools/snmp/scalance_xr328_mirror_check.py --hosts3d-default --write-json hsd-data/snmp/sw6248xr328.json --write-topology hsd-data/switch-topology.txt --pretty
 
 7. Use an optional Hosts3D switch config file instead of the built-in default:
-     python Tools/snmp/scalance_xr328_mirror_check.py --config-file hsd-data/switches.txt --write-json hsd-data/scalance_xr328_mirror_check.json --write-topology hsd-data/switch-topology.txt --pretty
+     python Tools/snmp/scalance_xr328_mirror_check.py --config-file hsd-data/switches.txt --write-json hsd-data/snmp/sw6248xr328.json --write-topology hsd-data/switch-topology.txt --pretty
 
 Example switches.txt line:
      switch name=sw6248xr328 type=scalance_xr328 host=SWITCH_IP version=2c community=COMMUNITY enabled=1 auto_refresh=1 refresh_seconds=60
@@ -167,6 +167,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--write-json", help="Write the raw JSON result to this path")
     parser.add_argument("--write-topology", help="Write Hosts3D switch-topology.txt output to this path")
+    parser.add_argument("--append-topology", action="store_true", help="Append to --write-topology instead of replacing it")
     parser.add_argument("--pretty", action="store_true", help="Pretty-print JSON")
     return parser.parse_args()
 
@@ -814,6 +815,13 @@ def write_text_atomic(path: str, content: str) -> None:
     tmp.replace(target)
 
 
+def append_text(path: str, content: str) -> None:
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with target.open("a", encoding="utf-8", newline="\n") as handle:
+        handle.write(content)
+
+
 def apply_lldp(args: argparse.Namespace, result: dict[str, Any]) -> dict[int, list[dict[str, Any]]]:
     if args.skip_lldp:
         add_detail(result, "lldp_mib", STATUS_NOT_IMPLEMENTED, "skipped by argument")
@@ -993,7 +1001,11 @@ def main() -> int:
     if args.write_json:
         write_text_atomic(args.write_json, text + "\n")
     if args.write_topology and data["status"] in (STATUS_OK, STATUS_PARTIAL):
-        write_text_atomic(args.write_topology, "\n".join(topology_lines(data, switch_config)) + "\n")
+        topology_text = "\n".join(topology_lines(data, switch_config)) + "\n"
+        if args.append_topology:
+            append_text(args.write_topology, topology_text)
+        else:
+            write_text_atomic(args.write_topology, topology_text)
     print(text)
     return 0 if data["status"] in (STATUS_OK, STATUS_PARTIAL) else 1
 

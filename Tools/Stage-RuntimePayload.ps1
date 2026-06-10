@@ -127,6 +127,7 @@ foreach ($obsoleteSnmpFile in @(
     }
 }
 Copy-PayloadFile -Source (Join-Path $repoRoot "Tools\snmp\README.md") -DestinationDirectory $snmpToolsDir -DestinationName "README.md" -Required
+Copy-PayloadFile -Source (Join-Path $repoRoot "Tools\snmp\scalance_switches_refresh.py") -DestinationDirectory $snmpToolsDir -DestinationName "scalance_switches_refresh.py" -Required
 Copy-PayloadFile -Source (Join-Path $repoRoot "Tools\snmp\scalance_xr328_mirror_check.py") -DestinationDirectory $snmpToolsDir -DestinationName "scalance_xr328_mirror_check.py" -Required
 Copy-PayloadFile -Source (Join-Path $repoRoot "Tools\snmp\scalance_xr328_mirror_check.md") -DestinationDirectory $snmpToolsDir -DestinationName "scalance_xr328_mirror_check.md" -Required
 Copy-PayloadFile -Source (Join-Path $repoRoot "Tools\snmp\scalance_xc208g_mirror_check.py") -DestinationDirectory $snmpToolsDir -DestinationName "scalance_xc208g_mirror_check.py" -Required

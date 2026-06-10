@@ -6,6 +6,7 @@ denselben Basisnamen und unterscheiden sich nur durch die Dateiendung.
 
 Aktuelle Paare:
 
+- `scalance_switches_refresh.py`
 - `scalance_xr328_mirror_check.py`
 - `scalance_xr328_mirror_check.md`
 - `scalance_xc208g_mirror_check.py`
@@ -107,9 +108,9 @@ switch name=swxc208g type=scalance_xc208g host=SWITCH_IP version=2c community=CO
 `settings.ini` stehen; die wiederholbare Switch-Liste bleibt als eigene Datei
 lesbarer.
 
-Der naechste Verwaltungsstand soll mehrere `enabled=1` Switch-Zeilen seriell
-abfragen. Die Topologieausgabe darf dabei als Snapshot eines einzelnen
-Refresh-Zeitpunkts neu erzeugt werden. Die JSON-Dateien bleiben der rohe
+`scalance_switches_refresh.py` fragt mehrere `enabled=1` Switch-Zeilen seriell
+ab. Die Topologieausgabe wird als Snapshot eines einzelnen Refresh-Zeitpunkts
+neu erzeugt. Die JSON-Dateien unter `hsd-data/snmp/` bleiben der rohe
 Diagnosevertrag; `switch-topology.txt` bleibt der kleine Anzeigevertrag.
 
 ## Gemeinsame Siemens-Mirroring-OIDs
@@ -251,9 +252,10 @@ unknown
 Runtime-Ordner wie `Release/windows/x64/Tools/snmp/README.md` sind gestagte
 Kopien und sollen nicht direkt gepflegt werden.
 
-`Tools/Stage-RuntimePayload.ps1` kopiert diese README, die Script-/Markdown-
-Paare und die Wrapper `run-scalance-check.ps1` / `run-scalance-check.cmd` in
-den Runtime- oder Paketordner.
+`Tools/Stage-RuntimePayload.ps1` kopiert diese README, den seriellen
+Refresh-Runner, die Script-/Markdown-Paare und die Wrapper
+`run-scalance-check.ps1` / `run-scalance-check.cmd` in den Runtime- oder
+Paketordner.
 
 Die aktuelle F9-Integration startet weiterhin den XR328-Helfer mit dem
 eingebauten Lab-Default fuer `sw6248xr328`. Der XC208G-Helfer ist derzeit ein

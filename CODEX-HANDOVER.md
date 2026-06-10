@@ -39,6 +39,8 @@ These files already existed before this handover and remain important:
   - active planning notes for general capture infrastructure, HSEN sensor management/deployment, and network-device mirroring capabilities
 - `Tools/snmp/README.md`
   - shared SNMP helper documentation; keep common SCALANCE OIDs, Net-SNMP usage, JSON contract, status model, credential handling, and staging notes here instead of embedding generated README text in scripts
+- `Tools/snmp/scalance_switches_refresh.py`
+  - serial refresh runner used by Hosts3D F9/manual refresh; reads `hsd-data/switches.txt`, selects device helpers by `type=...`, writes per-switch JSON below `hsd-data/snmp/`, and writes the combined point-in-time `switch-topology.txt`
 - `Tools/snmp/scalance_xr328_mirror_check.md`
   - device-specific SNMP observations for Siemens SCALANCE XR328-4C WG; keep only real XR328 device knowledge here
 - `Tools/snmp/scalance_xr328_mirror_check.py`
@@ -347,16 +349,16 @@ Switch topology scene notes:
 
 - host labels draw as compact blocks at each node: hostname/label, IP, MAC, and `port <id> <name>` when mapped
 - F9 reads `hsd-data/switch-topology.txt`; this remains the simple human-readable/editable display contract, comparable in spirit to `netpos.txt`
-- F9 starts `Tools/snmp/scalance_xr328_mirror_check.py` with the built-in SCALANCE XR328 lab default (`sw6248xr328`, `192.168.6.248`, SNMPv2c, read-only defaults `private` then `public`) unless `hsd-data/switches.txt` contains an enabled override line
+- F9 starts `Tools/snmp/scalance_switches_refresh.py`; with no enabled switch rows it uses the built-in SCALANCE XR328 lab default (`sw6248xr328`, `192.168.6.248`, SNMPv2c, read-only defaults `private` then `public`), and with enabled rows it queries them serially by `type=...`
 - F9 may create `hsd-data/switches.txt` with comments and an example; this file is an optional switch config override, not a mandatory activation template
 - when an enabled switch override has `auto_refresh=1`, the F9 scene uses that override and throttles refreshes with `refresh_seconds`
 - for SNMPv1/v2c, no `community` value means the helper tries the usual defaults `private` and then `public` read-only; use `community=...` directly for non-default values
 - do not restrict normal lab use just because default SNMP values are involved; warn occasionally when defaults are detected and remind that real non-lab networks should use better SNMP security
-- the SNMP helper writes raw diagnostics to `hsd-data/scalance_xr328_mirror_check.json` and writes the derived display mapping to `hsd-data/switch-topology.txt`
+- the SNMP runner writes raw diagnostics to `hsd-data/snmp/<switch>.json` and writes the derived display mapping to `hsd-data/switch-topology.txt`
 - `View -> Refresh Switch Topology` manually starts the same background refresh, independent of the auto-refresh timer
 - without `switch-topology.txt`, the topology scene can show observed Hosts3D hosts, but it cannot infer their switch ports yet
 - keep both formats: JSON is the raw SNMP/diagnostic contract, while `switch-topology.txt` is the small editable rendering/input contract
-- next SNMP-management direction: keep global defaults in `settings.ini`, keep the concrete switch inventory in `hsd-data/switches.txt`, and query all enabled switches serially on F9/manual refresh
+- current SNMP-management direction: keep global defaults in `settings.ini`, keep the concrete switch inventory in `hsd-data/switches.txt`, and query all enabled switches serially on F9/manual refresh
 - serial SNMP refresh is acceptable for now; the physical network is treated as stable enough during one pass that `switch-topology.txt` can represent a point-in-time snapshot, while JSON records whether mirroring/config/data-collection state needs attention
 
 VS Code extension setup for another machine:

@@ -3471,31 +3471,32 @@ static bool switchTopologyReadConfigOverride(const char *path, switch_topology_c
   return false;
 }
 
-static bool switchTopologyResolveSnmpScript(char *path, size_t pathsz, char *workdir, size_t workdirsz)
+static bool switchTopologyResolveSnmpScript(const char *scriptName, char *path, size_t pathsz, char *workdir, size_t workdirsz)
 {
   char base[512], candidate[512], tools[512], snmp[512];
   if (pathsz) *path = '\0';
   if (workdir && workdirsz) *workdir = '\0';
+  if (!scriptName || !*scriptName) return false;
   if (selfExecutableDir(base, sizeof(base)))
   {
     if (workdir && workdirsz) setStringValue(workdir, workdirsz, base);
     if (pathJoin(tools, sizeof(tools), base, "Tools") &&
         pathJoin(snmp, sizeof(snmp), tools, "snmp") &&
-        pathJoin(path, pathsz, snmp, "scalance_xr328_mirror_check.py") &&
+        pathJoin(path, pathsz, snmp, scriptName) &&
         fileExists(path)) return true;
 #ifdef __MINGW32__
     snprintf(candidate, sizeof(candidate), "%s\\..\\..\\..\\Tools\\snmp", base);
 #else
     snprintf(candidate, sizeof(candidate), "%s/../../../Tools/snmp", base);
 #endif
-    if (pathJoin(path, pathsz, candidate, "scalance_xr328_mirror_check.py") && fileExists(path)) return true;
+    if (pathJoin(path, pathsz, candidate, scriptName) && fileExists(path)) return true;
   }
   if (getcwd(base, sizeof(base)))
   {
     if (!workdir || !workdirsz || !*workdir) setStringValue(workdir, workdirsz, base);
     if (pathJoin(tools, sizeof(tools), base, "Tools") &&
         pathJoin(snmp, sizeof(snmp), tools, "snmp") &&
-        pathJoin(path, pathsz, snmp, "scalance_xr328_mirror_check.py") &&
+        pathJoin(path, pathsz, snmp, scriptName) &&
         fileExists(path)) return true;
   }
   if (pathsz) *path = '\0';
@@ -3532,7 +3533,7 @@ static void switchTopologyAppendRuntimeSnmpTools(char *cmd, size_t cmdsz)
 static bool switchTopologySnmpRefreshRequest(bool manual, char *errbuf = 0, size_t errbufsz = 0)
 {
   switch_topology_config_type config;
-  char cfgPath[512], jsonPath[512], topologyPath[512], scriptPath[512], workdir[512], cmd[4096];
+  char cfgPath[512], jsonDir[512], topologyPath[512], scriptPath[512], workdir[512], cmd[4096];
   bool useConfigFile;
   time_t now;
   if (errbuf && errbufsz) *errbuf = '\0';
@@ -3555,38 +3556,26 @@ static bool switchTopologySnmpRefreshRequest(bool manual, char *errbuf = 0, size
     if (errbuf && errbufsz) setStringValue(errbuf, errbufsz, "A switch topology refresh was just started.");
     return false;
   }
-  if (!switchTopologyResolveSnmpScript(scriptPath, sizeof(scriptPath), workdir, sizeof(workdir)))
+  if (!switchTopologyResolveSnmpScript("scalance_switches_refresh.py", scriptPath, sizeof(scriptPath), workdir, sizeof(workdir)))
   {
-    if (errbuf && errbufsz) setStringValue(errbuf, errbufsz, "Unable to locate Tools/snmp/scalance_xr328_mirror_check.py.");
+    if (errbuf && errbufsz) setStringValue(errbuf, errbufsz, "Unable to locate Tools/snmp/scalance_switches_refresh.py.");
     return false;
   }
-  setStringValue(jsonPath, sizeof(jsonPath), hsddata("scalance_xr328_mirror_check.json"));
+  setStringValue(jsonDir, sizeof(jsonDir), hsddata("snmp"));
   setStringValue(topologyPath, sizeof(topologyPath), hsddata("switch-topology.txt"));
 #ifdef __MINGW32__
-  if (useConfigFile)
-    snprintf(cmd, sizeof(cmd), "py -3 \"%s\" --config-file \"%s\" --write-json \"%s\" --write-topology \"%s\" --pretty",
-             scriptPath, cfgPath, jsonPath, topologyPath);
-  else
-    snprintf(cmd, sizeof(cmd), "py -3 \"%s\" --hosts3d-default --write-json \"%s\" --write-topology \"%s\" --pretty",
-             scriptPath, jsonPath, topologyPath);
+  snprintf(cmd, sizeof(cmd), "py -3 \"%s\" --config-file \"%s\" --json-dir \"%s\" --write-topology \"%s\" --use-default-if-empty --pretty",
+           scriptPath, cfgPath, jsonDir, topologyPath);
 #else
-  if (useConfigFile)
-    snprintf(cmd, sizeof(cmd), "python3 \"%s\" --config-file \"%s\" --write-json \"%s\" --write-topology \"%s\" --pretty",
-             scriptPath, cfgPath, jsonPath, topologyPath);
-  else
-    snprintf(cmd, sizeof(cmd), "python3 \"%s\" --hosts3d-default --write-json \"%s\" --write-topology \"%s\" --pretty",
-             scriptPath, jsonPath, topologyPath);
+  snprintf(cmd, sizeof(cmd), "python3 \"%s\" --config-file \"%s\" --json-dir \"%s\" --write-topology \"%s\" --use-default-if-empty --pretty",
+           scriptPath, cfgPath, jsonDir, topologyPath);
 #endif
   switchTopologyAppendRuntimeSnmpTools(cmd, sizeof(cmd));
   if (!launchDetachedCommandLine(cmd, workdir))
   {
 #ifdef __MINGW32__
-    if (useConfigFile)
-      snprintf(cmd, sizeof(cmd), "python \"%s\" --config-file \"%s\" --write-json \"%s\" --write-topology \"%s\" --pretty",
-               scriptPath, cfgPath, jsonPath, topologyPath);
-    else
-      snprintf(cmd, sizeof(cmd), "python \"%s\" --hosts3d-default --write-json \"%s\" --write-topology \"%s\" --pretty",
-               scriptPath, jsonPath, topologyPath);
+    snprintf(cmd, sizeof(cmd), "python \"%s\" --config-file \"%s\" --json-dir \"%s\" --write-topology \"%s\" --use-default-if-empty --pretty",
+             scriptPath, cfgPath, jsonDir, topologyPath);
     switchTopologyAppendRuntimeSnmpTools(cmd, sizeof(cmd));
     if (!launchDetachedCommandLine(cmd, workdir))
 #endif
@@ -3596,7 +3585,8 @@ static bool switchTopologySnmpRefreshRequest(bool manual, char *errbuf = 0, size
     }
   }
   switchTopologyLastSnmpLaunch = now;
-  snprintf(switchTopologySnmpStatus, sizeof(switchTopologySnmpStatus), "switch SNMP refresh started for %s", config.host);
+  if (useConfigFile) snprintf(switchTopologySnmpStatus, sizeof(switchTopologySnmpStatus), "switch SNMP refresh started for enabled switches");
+  else snprintf(switchTopologySnmpStatus, sizeof(switchTopologySnmpStatus), "switch SNMP refresh started for %s", config.host);
   return true;
 }
 
@@ -3722,6 +3712,10 @@ static switch_topology_host_type *switchTopologyHostForIdentity(const char *ip, 
   return &switchTopologyState.hosts.back();
 }
 
+static int switchTopologyParsePortOffset = 0;
+static int switchTopologyParseNextPortOffset = 0;
+static int switchTopologyParseSwitchCount = 0;
+
 static void switchTopologyParseLine(char *line)
 {
   char *cmd, *tok;
@@ -3729,16 +3723,24 @@ static void switchTopologyParseLine(char *line)
   if ((*cmd == '#') || (*cmd == ';')) return;
   if (strEqNoCase(cmd, "switch"))
   {
+    char name[64] = "";
+    int count = 0;
     while ((tok = strtok(0, " \t\r\n")))
     {
       char *eq = strchr(tok, '=');
       if (!eq) continue;
       *eq = '\0';
       char *key = trimWs(tok), *value = trimWs(eq + 1);
-      int count;
-      if (strEqNoCase(key, "name")) setStringValue(switchTopologyState.switchName, sizeof(switchTopologyState.switchName), value);
-      else if (strEqNoCase(key, "ports") && switchTopologyParseInt(value, &count)) switchTopologyEnsurePorts(count);
+      if (strEqNoCase(key, "name")) setStringValue(name, sizeof(name), value);
+      else if (strEqNoCase(key, "ports")) switchTopologyParseInt(value, &count);
     }
+    if (count < 1) count = 28;
+    switchTopologyParsePortOffset = switchTopologyParseNextPortOffset;
+    switchTopologyParseNextPortOffset += count;
+    if (!switchTopologyParseSwitchCount && *name) setStringValue(switchTopologyState.switchName, sizeof(switchTopologyState.switchName), name);
+    else if (switchTopologyParseSwitchCount == 1) setStringValue(switchTopologyState.switchName, sizeof(switchTopologyState.switchName), "Multiple Switches");
+    switchTopologyParseSwitchCount++;
+    switchTopologyEnsurePorts(switchTopologyParseNextPortOffset);
   }
   else if (strEqNoCase(cmd, "port"))
   {
@@ -3756,6 +3758,7 @@ static void switchTopologyParseLine(char *line)
       if (strEqNoCase(key, "id") || strEqNoCase(key, "port")) switchTopologyParseInt(value, &id);
     }
     if (id <= 0) return;
+    id += switchTopologyParsePortOffset;
     port = switchTopologyPort(id, true);
     port->configured = true;
     for (size_t cnt = 0; cnt < fields.size(); cnt++)
@@ -3764,7 +3767,7 @@ static void switchTopologyParseLine(char *line)
       const char *value = fields[cnt].second.c_str();
       if (strEqNoCase(key, "name")) setStringValue(port->name, sizeof(port->name), value);
       else if (strEqNoCase(key, "role")) port->role = switchTopologyRoleFromText(value);
-      else if ((strEqNoCase(key, "dest") || strEqNoCase(key, "mirror_dest")) && switchTopologyParseInt(value, &dest)) port->mirrorDest = dest;
+      else if ((strEqNoCase(key, "dest") || strEqNoCase(key, "mirror_dest")) && switchTopologyParseInt(value, &dest)) port->mirrorDest = dest + switchTopologyParsePortOffset;
       else if ((strEqNoCase(key, "up") || strEqNoCase(key, "status")) && switchTopologyParseBool(value, &up)) port->up = up;
     }
   }
@@ -3791,6 +3794,7 @@ static void switchTopologyParseLine(char *line)
     if (*label) setStringValue(host->label, sizeof(host->label), label);
     if (portId > 0)
     {
+      portId += switchTopologyParsePortOffset;
       host->port = portId;
       switchTopologyPort(portId, true);
     }
@@ -3803,6 +3807,9 @@ static bool switchTopologyLoadFile(const char *path)
   FILE *fp;
   char line[512];
   if (!(fp = fopen(path, "r"))) return false;
+  switchTopologyParsePortOffset = 0;
+  switchTopologyParseNextPortOffset = 0;
+  switchTopologyParseSwitchCount = 0;
   while (fgets(line, sizeof(line), fp))
   {
     char *txt = trimWs(line);
@@ -3850,13 +3857,16 @@ static void switchTopologySceneRefresh(bool force)
   setStringValue(switchTopologyState.switchName, sizeof(switchTopologyState.switchName), "Switch Topology");
   setStringValue(path, sizeof(path), hsddata("switch-topology.txt"));
   setStringValue(switchTopologyState.sourcePath, sizeof(switchTopologyState.sourcePath), path);
-  switchTopologyEnsurePorts(28);
   if (fileExists(path) && switchTopologyLoadFile(path))
   {
     switchTopologyState.fileLoaded = true;
     setStringValue(switchTopologyState.sourceStatus, sizeof(switchTopologyState.sourceStatus), "switch-topology.txt loaded");
   }
-  else setStringValue(switchTopologyState.sourceStatus, sizeof(switchTopologyState.sourceStatus), "no switch-topology.txt");
+  else
+  {
+    switchTopologyEnsurePorts(28);
+    setStringValue(switchTopologyState.sourceStatus, sizeof(switchTopologyState.sourceStatus), "no switch-topology.txt");
+  }
   if (*switchTopologySnmpStatus && !switchTopologyState.fileLoaded)
     setStringValue(switchTopologyState.sourceStatus, sizeof(switchTopologyState.sourceStatus), switchTopologySnmpStatus);
   hstsByIp.forEach(1, &switchTopologyCollectHostCb, 0, 0, 0, 0);
