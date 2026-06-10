@@ -9093,7 +9093,7 @@ static bool demoLaunch(bool pythonDemo, char *errbuf, size_t errbufsz)
     const char *candidates[] = {"pwsh", "powershell", 0};
     for (unsigned char cnt = 0; candidates[cnt]; cnt++)
     {
-      snprintf(cmd, sizeof(cmd), "%s -ExecutionPolicy Bypass -File \"%s\" -DestinationAddress 127.0.0.1 -Port %u -SensorId %u -LogPath \"%s\" -StatePath \"%s\"%s%s",
+      snprintf(cmd, sizeof(cmd), "%s -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"%s\" -DestinationAddress 127.0.0.1 -Port %u -SensorId %u -LogPath \"%s\" -StatePath \"%s\"%s%s",
                candidates[cnt], scriptPath, HOST3D_PORT, sensorId, logPath,
                statePath,
                (*centerIp ? " -CenterIp " : ""), (*centerIp ? centerIp : ""));
@@ -9120,7 +9120,7 @@ static bool demoLaunch(bool pythonDemo, char *errbuf, size_t errbufsz)
     const char *candidates[] = {"pwsh", "powershell", 0};
     for (unsigned char cnt = 0; candidates[cnt]; cnt++)
     {
-      snprintf(cmd, sizeof(cmd), "%s -File \"%s\" -DestinationAddress 127.0.0.1 -Port %u -SensorId %u -LogPath \"%s\" -StatePath \"%s\"%s%s >/dev/null 2>&1",
+      snprintf(cmd, sizeof(cmd), "%s -NoProfile -NonInteractive -File \"%s\" -DestinationAddress 127.0.0.1 -Port %u -SensorId %u -LogPath \"%s\" -StatePath \"%s\"%s%s >/dev/null 2>&1",
                candidates[cnt], scriptPath, HOST3D_PORT, sensorId, logPath,
                statePath,
                (*centerIp ? " -CenterIp " : ""), (*centerIp ? centerIp : ""));
