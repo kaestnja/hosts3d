@@ -3416,7 +3416,7 @@ static void switchTopologyWriteDefaultConfig(const char *path)
   fputs("# Hosts3D optional switch config overrides\n", fp);
   fputs("# F9 has a built-in SCALANCE XR328 lab default: sw6248xr328 at 192.168.6.248, SNMPv2c, read-only defaults private then public.\n", fp);
   fputs("# Add an enabled switch line only when you need to override that default or use another switch.\n", fp);
-  fputs("# For non-default SNMPv1/v2c values use community=... or community_env=SNMP_COMMUNITY.\n", fp);
+  fputs("# For non-default SNMPv1/v2c values use community=... directly.\n", fp);
   fputs("# For SNMPv3 prefer user_env, auth_pass_env and priv_pass_env instead of writing passwords here.\n", fp);
   fputs("# Example:\n", fp);
   fputs("# switch name=sw6248xr328 type=scalance_xr328 host=192.168.6.248 version=2c enabled=1 auto_refresh=1 refresh_seconds=60\n", fp);

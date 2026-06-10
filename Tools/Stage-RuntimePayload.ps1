@@ -149,9 +149,9 @@ Hosts3D F9 integration:
   and the display mapping to `hsd-data\switch-topology.txt`.
 
 For SNMPv1/v2c, omitting a community value makes the helper try the usual
-read-only defaults `private` and then `public`. For non-default values use
-`community=...` or `community_env=SNMP_COMMUNITY`; for SNMPv3 passwords prefer
-environment variables referenced from `switches.txt`.
+read-only defaults `private` and then `public`. For non-default community
+values use `community=...` directly; for SNMPv3 passwords prefer environment
+variables referenced from `switches.txt`.
 '@
 Write-TextFile -Path (Join-Path $snmpToolsDir "README.md") -Content $snmpReadme
 
@@ -169,7 +169,7 @@ param(
 
     [int]$Retries = 1,
 
-    [string]$Community = $env:SNMP_COMMUNITY,
+    [string]$Community = "",
 
     [string]$User = $env:SNMP_USER,
 

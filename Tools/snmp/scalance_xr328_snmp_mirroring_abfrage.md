@@ -945,10 +945,10 @@ python Tools/snmp/scalance_xr328_mirror_check.py SWITCH_IP --version 3 --pretty
 Beispiel mit SNMPv2c nur fuer Laborbetrieb:
 
 ```bash
-SNMP_COMMUNITY=COMMUNITY python3 Tools/snmp/scalance_xr328_mirror_check.py SWITCH_IP --version 2c --pretty
+python3 Tools/snmp/scalance_xr328_mirror_check.py SWITCH_IP --version 2c --community COMMUNITY --pretty
 ```
 
-Der Prototyp kann SNMP-Credentials aktuell direkt ueber Kommandozeilenparameter, ueber Umgebungsvariablen oder ueber die optionale Hosts3D-Switch-Konfiguration `hsd-data/switches.txt` erhalten. Fuer SNMPv1/v2c ist ein fehlender `community`-Wert kein Fehler: das Skript probiert dann read-only `private` und danach `public`. Fuer abweichende Community-Werte und fuer SNMPv3-Passwoerter sind Umgebungsvariablen besser als direkte CLI-Argumente, wenn diese Werte nicht in Shell-History, Prozesslisten oder lokalen Konfigurationsdateien stehen sollen. Das Skript gibt keine Geheimniswerte aus, sondern meldet nur den Credential-Status beziehungsweise bei SNMPv1/v2c die verwendete Community-Quelle. Mit `--check-access-only` fuehrt es nur die Device-Identity-Abfragen aus und eignet sich damit als kurze SNMPv3-Authentifizierungsprobe, bevor die vollstaendige Mirror-/FDB-/LLDP-Abfrage laeuft.
+Der Prototyp kann SNMPv1/v2c-Community-Werte direkt ueber Kommandozeilenparameter oder ueber die optionale Hosts3D-Switch-Konfiguration `hsd-data/switches.txt` erhalten. Fuer SNMPv1/v2c ist ein fehlender `community`-Wert kein Fehler: das Skript probiert dann read-only `private` und danach `public`. Fuer abweichende Community-Werte wird `--community COMMUNITY` beziehungsweise `community=COMMUNITY` verwendet. Umgebungsvariablen sind fuer SNMPv3-Login-/Passwortwerte vorgesehen, wenn diese Werte nicht in Shell-History, Prozesslisten oder lokalen Konfigurationsdateien stehen sollen. Das Skript gibt keine Geheimniswerte aus, sondern meldet nur den Credential-Status beziehungsweise bei SNMPv1/v2c die verwendete Community-Quelle. Mit `--check-access-only` fuehrt es nur die Device-Identity-Abfragen aus und eignet sich damit als kurze SNMPv3-Authentifizierungsprobe, bevor die vollstaendige Mirror-/FDB-/LLDP-Abfrage laeuft.
 
 Hosts3D F9 verwendet fuer den aktuellen SCALANCE-Prototyp einen eingebauten Lab-Default (`sw6248xr328`, `192.168.6.248`, SNMPv2c, read-only Defaults `private` dann `public`). `hsd-data/switches.txt` ist nur ein Override, wenn ein anderer Switch, eine andere SNMP-Version oder nicht-default Credentials benoetigt werden:
 
@@ -963,7 +963,7 @@ python Tools/snmp/scalance_xr328_mirror_check.py --config-file hsd-data/switches
 python Tools/snmp/scalance_xr328_mirror_check.py --config-file hsd-data/switches.txt --switch sw6248xr328 --pretty
 ```
 
-Eine spaetere lokale Credential-Store-Integration bleibt sinnvoll, ist aber aktuell nicht implementiert. Wenn sie ergaenzt wird, sollte sie Geheimnisse in den lokalen Betriebssystem-Credential-Store legen, zum Beispiel Windows Credential Manager/DPAPI auf Windows, Keychain auf macOS oder Secret Service auf Linux. Bis dahin bleibt der aktuelle Weg ueber Umgebungsvariablen, CLI-Parameter und `switches.txt` der dokumentierte Diagnosepfad.
+Eine spaetere lokale Credential-Store-Integration bleibt sinnvoll, ist aber aktuell nicht implementiert. Wenn sie ergaenzt wird, sollte sie Geheimnisse in den lokalen Betriebssystem-Credential-Store legen, zum Beispiel Windows Credential Manager/DPAPI auf Windows, Keychain auf macOS oder Secret Service auf Linux. Bis dahin bleibt der aktuelle Weg ueber direkte SNMPv1/v2c-Community-Werte, SNMPv3-Umgebungsvariablen, CLI-Parameter und `switches.txt` der dokumentierte Diagnosepfad.
 
 Aktuelle Grenzen des Prototyps:
 

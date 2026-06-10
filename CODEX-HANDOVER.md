@@ -344,7 +344,7 @@ Switch topology scene notes:
 - F9 starts `Tools/snmp/scalance_xr328_mirror_check.py` with the built-in SCALANCE XR328 lab default (`sw6248xr328`, `192.168.6.248`, SNMPv2c, read-only defaults `private` then `public`) unless `hsd-data/switches.txt` contains an enabled override line
 - F9 may create `hsd-data/switches.txt` with comments and an example; this file is an optional switch config override, not a mandatory activation template
 - when an enabled switch override has `auto_refresh=1`, the F9 scene uses that override and throttles refreshes with `refresh_seconds`
-- for SNMPv1/v2c, no `community` value means the helper tries the usual defaults `private` and then `public` read-only; use `community=...` or `community_env=...` only for non-default values
+- for SNMPv1/v2c, no `community` value means the helper tries the usual defaults `private` and then `public` read-only; use `community=...` directly for non-default values
 - do not restrict normal lab use just because default SNMP values are involved; warn occasionally when defaults are detected and remind that real non-lab networks should use better SNMP security
 - the SNMP helper writes raw diagnostics to `hsd-data/scalance_xr328_mirror_check.json` and writes the derived display mapping to `hsd-data/switch-topology.txt`
 - `View -> Refresh Switch Topology` manually starts the same background refresh, independent of the auto-refresh timer

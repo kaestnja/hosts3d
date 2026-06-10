@@ -47,7 +47,7 @@ Hosts appear on a switch port only when the topology file supplies `port=...` fo
 switch name=sw6248xr328 type=scalance_xr328 host=192.168.6.248 version=2c enabled=1 auto_refresh=1 refresh_seconds=60
 ```
 
-For SNMPv1/v2c, omitting `community` is valid: the helper tries the usual defaults `private` and then `public` while staying read-only. For a non-default value use `community=...` or `community_env=SNMP_COMMUNITY`. For SNMPv3, use environment-variable references such as `user_env=SNMP_USER auth_pass_env=SNMP_AUTH_PASS priv_pass_env=SNMP_PRIV_PASS` when passwords should not live in the local switch config file. The `View` menu also contains `Refresh Switch Topology` for a manual background refresh.
+For SNMPv1/v2c, omitting `community` is valid: the helper tries the usual defaults `private` and then `public` while staying read-only. For a non-default value use `community=...` directly. For SNMPv3, use environment-variable references such as `user_env=SNMP_USER auth_pass_env=SNMP_AUTH_PASS priv_pass_env=SNMP_PRIV_PASS` when passwords should not live in the local switch config file. The `View` menu also contains `Refresh Switch Topology` for a manual background refresh.
 
 ## Quick Start
 If your main goal is to get the project running again, use this order:

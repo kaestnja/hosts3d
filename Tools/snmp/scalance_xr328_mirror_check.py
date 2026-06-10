@@ -48,9 +48,10 @@ Common use cases:
 Example switches.txt line:
      switch name=sw6248xr328 type=scalance_xr328 host=SWITCH_IP version=2c community=COMMUNITY enabled=1 auto_refresh=1 refresh_seconds=60
 
-Credentials are never printed as values. Use environment variables for
-non-default community values or SNMPv3 passwords when they should not live in
-the local switch config file.
+Credentials are never printed as values. SNMPv1/v2c community values are
+passed directly with --community or community=... in switches.txt. Use
+environment variables only for SNMPv3 login/password values when they should
+not live in the local switch config file.
 """
 
 from __future__ import annotations
@@ -148,7 +149,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--port", type=int, default=161)
     parser.add_argument("--timeout", type=int, default=3)
     parser.add_argument("--retries", type=int, default=1)
-    parser.add_argument("--community", default=os.getenv("SNMP_COMMUNITY", ""))
+    parser.add_argument("--community", default="")
     parser.add_argument("--user", default=os.getenv("SNMP_USER", ""))
     parser.add_argument("--level", choices=["noAuthNoPriv", "authNoPriv", "authPriv"], default="authPriv")
     parser.add_argument("--auth-proto", default=os.getenv("SNMP_AUTH_PROTO", "SHA"))
@@ -229,7 +230,7 @@ def apply_config_values(args: argparse.Namespace, config: dict[str, str]) -> Non
     args.port = int(config.get("port", args.port))
     args.timeout = int(config.get("timeout", args.timeout))
     args.retries = int(config.get("retries", args.retries))
-    args.community = args.community or env_or_value(config, "community")
+    args.community = args.community or config.get("community", "")
     args.user = args.user or env_or_value(config, "user")
     args.level = config.get("level", args.level)
     args.auth_proto = config.get("auth_proto", args.auth_proto)

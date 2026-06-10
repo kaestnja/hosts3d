@@ -68,12 +68,12 @@ class ScalanceMirrorCheckTests(unittest.TestCase):
 
     def test_switch_config_line_supports_hosts3d_switches_txt(self):
         config = mirror_check.parse_switch_config_line(
-            'switch name=sw6248xr328 type=scalance_xr328 host=192.168.6.248 version=2c community_env=SNMP_COMMUNITY auto_refresh=1'
+            'switch name=sw6248xr328 type=scalance_xr328 host=192.168.6.248 version=2c community=public auto_refresh=1'
         )
 
         self.assertEqual(config["name"], "sw6248xr328")
         self.assertEqual(config["host"], "192.168.6.248")
-        self.assertEqual(config["community_env"], "SNMP_COMMUNITY")
+        self.assertEqual(config["community"], "public")
         self.assertTrue(mirror_check.parse_bool_text(config["auto_refresh"]))
 
     def test_hosts3d_default_config_sets_known_scalance_lab_switch(self):
