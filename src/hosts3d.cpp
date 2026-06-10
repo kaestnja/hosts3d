@@ -8890,7 +8890,7 @@ static bool localHsenFirstSelectedDemoTarget(char *ip, size_t ipsz, unsigned cha
 {
   bool needPopulate = true;
   if (ip && ipsz) *ip = '\0';
-  if (sensorIdOut) *sensorIdOut = 0;
+  if (sensorIdOut) *sensorIdOut = 1;
   for (unsigned char cnt = 0; cnt < localHsenIfCount; cnt++)
   {
     if (localHsenIfs[cnt].selected && localHsenIfs[cnt].ips[0])
