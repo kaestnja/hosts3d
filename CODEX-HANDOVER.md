@@ -42,6 +42,7 @@ These files already existed before this handover and remain important:
 - `Tools/snmp/scalance_switches_refresh.py`
   - serial refresh runner used by Hosts3D F9/manual refresh; reads `hsd-data/switches.txt`, selects device helpers by `type=...`, writes per-switch JSON below `hsd-data/snmp/`, and writes the combined point-in-time `switch-topology.txt`
   - SNMP refreshes are intentionally serial for now; this keeps the shared topology snapshot simple and avoids concurrent writers while the network state is sampled
+  - builds the combined topology in a temporary `.refreshing` file and replaces `switch-topology.txt` only after all enabled switch helpers succeed, so later switch blocks such as XC208G do not disappear while a serial refresh is still running
 - `Tools/snmp/scalance_xr328_mirror_check.md`
   - device-specific SNMP observations for Siemens SCALANCE XR328-4C WG; keep only real XR328 device knowledge here
 - `Tools/snmp/scalance_xr328_mirror_check.py`
@@ -362,6 +363,7 @@ Switch topology scene notes:
 - keep both formats: JSON is the raw SNMP/diagnostic contract, while `switch-topology.txt` is the small editable rendering/input contract
 - current SNMP-management direction: keep global defaults in `settings.ini`, keep the concrete switch inventory in `hsd-data/switches.txt`, and query all enabled switches serially on F9/manual refresh
 - serial SNMP refresh is acceptable for now; the physical network is treated as stable enough during one pass that `switch-topology.txt` can represent a point-in-time snapshot, while JSON records whether mirroring/config/data-collection state needs attention
+- the serial refresh runner must not delete or partially rewrite the visible `switch-topology.txt`; it uses a temporary topology file and replaces the visible file only after a complete successful pass
 - multiple switches in `switch-topology.txt` are rendered as separate rack-like port rows instead of one global port stream
 - 28-port switch blocks use the observed XR328 front-panel order in the default Hosts3D view: P1-P12 over P13-P24, with P25/P26 over P27/P28 at the right edge; this intentionally maps the upper physical row to the positive-Z row because the default camera looks from negative Z toward positive Z
 - hosts attached to the XR328 upper physical port row are rendered on the opposite side from hosts attached to the lower physical port row, using the shorter current port-host distance

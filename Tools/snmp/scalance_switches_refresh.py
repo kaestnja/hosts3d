@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import shlex
 import subprocess
 import sys
@@ -102,48 +103,56 @@ def main() -> int:
 
     json_dir.mkdir(parents=True, exist_ok=True)
     topology_path.parent.mkdir(parents=True, exist_ok=True)
-    if topology_path.exists():
-        topology_path.unlink()
+    temp_topology_path = topology_path.with_name(f"{topology_path.name}.{os.getpid()}.refreshing")
+    if temp_topology_path.exists():
+        temp_topology_path.unlink()
 
     failures = 0
     wrote_topology = False
-    for index, config in enumerate(switches):
-        helper_name = helper_for_type(config.get("type", ""))
-        if not helper_name:
-            print(f"unsupported switch type for {config.get('name') or config.get('host')}: {config.get('type')}", file=sys.stderr)
-            failures += 1
-            continue
-        helper = script_dir / helper_name
-        if not helper.is_file():
-            print(f"missing helper: {helper}", file=sys.stderr)
-            failures += 1
-            continue
+    try:
+        for index, config in enumerate(switches):
+            helper_name = helper_for_type(config.get("type", ""))
+            if not helper_name:
+                print(f"unsupported switch type for {config.get('name') or config.get('host')}: {config.get('type')}", file=sys.stderr)
+                failures += 1
+                continue
+            helper = script_dir / helper_name
+            if not helper.is_file():
+                print(f"missing helper: {helper}", file=sys.stderr)
+                failures += 1
+                continue
 
-        json_path = json_dir / f"{safe_name(config, index)}.json"
-        cmd = [sys.executable, str(helper)]
-        if using_default:
-            cmd.append("--hosts3d-default")
-        else:
-            cmd += ["--config-file", str(config_file)]
-            if config.get("name"):
-                cmd += ["--switch", config["name"]]
-            elif config.get("host"):
-                cmd.append(config["host"])
-        cmd += ["--write-json", str(json_path), "--write-topology", str(topology_path)]
-        if wrote_topology:
-            cmd.append("--append-topology")
-        if args.snmpget:
-            cmd += ["--snmpget", args.snmpget]
-        if args.snmpwalk:
-            cmd += ["--snmpwalk", args.snmpwalk]
-        if args.pretty:
-            cmd.append("--pretty")
+            json_path = json_dir / f"{safe_name(config, index)}.json"
+            cmd = [sys.executable, str(helper)]
+            if using_default:
+                cmd.append("--hosts3d-default")
+            else:
+                cmd += ["--config-file", str(config_file)]
+                if config.get("name"):
+                    cmd += ["--switch", config["name"]]
+                elif config.get("host"):
+                    cmd.append(config["host"])
+            cmd += ["--write-json", str(json_path), "--write-topology", str(temp_topology_path)]
+            if wrote_topology:
+                cmd.append("--append-topology")
+            if args.snmpget:
+                cmd += ["--snmpget", args.snmpget]
+            if args.snmpwalk:
+                cmd += ["--snmpwalk", args.snmpwalk]
+            if args.pretty:
+                cmd.append("--pretty")
 
-        proc = subprocess.run(cmd)
-        if proc.returncode:
-            failures += 1
-        else:
-            wrote_topology = True
+            proc = subprocess.run(cmd)
+            if proc.returncode:
+                failures += 1
+            else:
+                wrote_topology = True
+
+        if wrote_topology and failures == 0:
+            temp_topology_path.replace(topology_path)
+    finally:
+        if temp_topology_path.exists():
+            temp_topology_path.unlink()
 
     return 1 if failures else 0
 

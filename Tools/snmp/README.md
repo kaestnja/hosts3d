@@ -260,7 +260,10 @@ Paketordner.
 Die F9-Integration startet den seriellen Refresh-Runner
 `scalance_switches_refresh.py`. Der Runner liest `hsd-data/switches.txt`, fragt
 alle aktivierten Switches nacheinander ab, schreibt pro Switch ein JSON unter
-`hsd-data/snmp/` und erzeugt eine gemeinsame `switch-topology.txt`.
+`hsd-data/snmp/` und erzeugt eine gemeinsame `switch-topology.txt`. Die neue
+Topologie wird zuerst in einer temporaeren Datei aufgebaut und ersetzt die
+sichtbare `switch-topology.txt` erst, wenn alle aktivierten Switch-Helfer
+erfolgreich waren.
 
 In der F9-Ansicht werden nur Hosts gezeichnet, die einem Switch-Port zugeordnet
 werden konnten. LLDP-Nachbarn und gelernte MAC-Adressen werden pro Port
