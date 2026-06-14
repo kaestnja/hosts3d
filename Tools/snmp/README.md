@@ -269,13 +269,19 @@ erscheint. Neue Topologie-Daten werden erst nach erfolgreichem Einlesen
 uebernommen; waehrend eines Refreshs bleibt die letzte gueltige Darstellung
 sichtbar.
 
-Mehrere Switches werden als getrennte Port-Reihen dargestellt. Fuer 28-Port-
-XR328-Bloecke nutzt Hosts3D die Frontplatten-Reihenfolge P1-P12 ueber P13-P24
-und P25/P26 ueber P27/P28; wegen der Default-Kamera wird die obere physische
-Reihe auf die positive Z-Reihe gelegt. Hosts an der oberen und unteren XR328-
-Portreihe werden auf entgegengesetzte Seiten gelegt. Mirroring wird ueber
-Portfarben und die F9-OSD-Legende angezeigt; direkte Mirror-Verbindungslinien
-werden bewusst nicht gezeichnet.
+Mehrere XR328-Switches werden als getrennte Port-Reihen dargestellt. Fuer
+28-Port-XR328-Bloecke nutzt Hosts3D die Frontplatten-Reihenfolge P1-P12 ueber
+P13-P24 und P25/P26 ueber P27/P28; wegen der Default-Kamera wird die obere
+physische Reihe auf die positive Z-Reihe gelegt. Hosts an der oberen und
+unteren XR328-Portreihe werden auf entgegengesetzte Seiten gelegt.
+
+XC208G-Bloecke werden in der F9-Ansicht anders angeordnet: Die Ports stehen
+vertikal von P1 oben bis P8 unten, Hosts werden rechts neben ihrem Port
+gezeichnet, und mehrere XC208G-Switches werden nebeneinander statt
+uebereinander platziert.
+
+Mirroring wird ueber Portfarben und die F9-OSD-Legende angezeigt; direkte
+Mirror-Verbindungslinien werden bewusst nicht gezeichnet.
 
 ## Quellen
 

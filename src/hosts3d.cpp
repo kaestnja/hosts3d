@@ -552,7 +552,7 @@ struct switch_topology_host_draw_type
 struct switch_topology_switch_type
 {
   int index, portBase, portCount;
-  char name[64];
+  char name[64], type[32];
 };
 
 struct switch_topology_state_type
@@ -3836,7 +3836,7 @@ static void switchTopologyParseLine(char *line)
   if ((*cmd == '#') || (*cmd == ';')) return;
   if (strEqNoCase(cmd, "switch"))
   {
-    char name[64] = "";
+    char name[64] = "", type[32] = "";
     int count = 0;
     while ((tok = strtok(0, " \t\r\n")))
     {
@@ -3845,6 +3845,7 @@ static void switchTopologyParseLine(char *line)
       *eq = '\0';
       char *key = trimWs(tok), *value = trimWs(eq + 1);
       if (strEqNoCase(key, "name")) setStringValue(name, sizeof(name), value);
+      else if (strEqNoCase(key, "type") || strEqNoCase(key, "model")) setStringValue(type, sizeof(type), value);
       else if (strEqNoCase(key, "ports")) switchTopologyParseInt(value, &count);
     }
     if (count < 1) count = 28;
@@ -3856,6 +3857,7 @@ static void switchTopologyParseLine(char *line)
     sw.portBase = switchTopologyParsePortOffset;
     sw.portCount = count;
     setStringValue(sw.name, sizeof(sw.name), *name ? name : "switch");
+    setStringValue(sw.type, sizeof(sw.type), type);
     switchTopologyState.switches.push_back(sw);
     if (!switchTopologyParseSwitchCount && *name) setStringValue(switchTopologyState.switchName, sizeof(switchTopologyState.switchName), name);
     else if (switchTopologyParseSwitchCount == 1) setStringValue(switchTopologyState.switchName, sizeof(switchTopologyState.switchName), "Multiple Switches");
@@ -3996,6 +3998,7 @@ static void switchTopologyEnsureDefaultScene()
   sw.portBase = 0;
   sw.portCount = 28;
   setStringValue(sw.name, sizeof(sw.name), "switch");
+  sw.type[0] = '\0';
   switchTopologyState.switches.push_back(sw);
   switchTopologyEnsurePorts(28);
 }
@@ -4056,11 +4059,31 @@ static const switch_topology_switch_type *switchTopologySwitchForPort(const swit
   return 0;
 }
 
+static bool switchTopologySwitchIsXc208g(const switch_topology_switch_type *sw)
+{
+  return sw && (strEqNoCase(sw->type, "scalance_xc208g")
+                || strEqNoCase(sw->type, "xc208g")
+                || (sw->portCount == 8));
+}
+
+static int switchTopologyXc208gColumn(const switch_topology_switch_type *sw)
+{
+  int col = 0;
+  if (!sw) return 0;
+  for (size_t cnt = 0; cnt < switchTopologyState.switches.size(); cnt++)
+  {
+    const switch_topology_switch_type *item = &switchTopologyState.switches[cnt];
+    if (item->index == sw->index) return col;
+    if (switchTopologySwitchIsXc208g(item)) col++;
+  }
+  return col;
+}
+
 static bool switchTopologyPhysicalXr328Slot(const switch_topology_port_type *port, int *col, int *row)
 {
   const switch_topology_switch_type *sw = switchTopologySwitchForPort(port);
   int id = port ? (port->localId > 0 ? port->localId : port->id) : 0;
-  if (!sw || (sw->portCount != 28) || (id < 1) || (id > 28)) return false;
+  if (!sw || switchTopologySwitchIsXc208g(sw) || (sw->portCount != 28) || (id < 1) || (id > 28)) return false;
   if (id <= 12)
   {
     if (col) *col = id - 1;
@@ -4096,10 +4119,18 @@ static int switchTopologyPortRow(const switch_topology_port_type *port)
 
 static pos_type switchTopologyPortPos(const switch_topology_port_type *port)
 {
+  const switch_topology_switch_type *sw = switchTopologySwitchForPort(port);
+  int localId = port ? (port->localId > 0 ? port->localId : port->id) : 0;
+  if (switchTopologySwitchIsXc208g(sw) && (localId >= 1) && (localId <= 8))
+  {
+    int col = switchTopologyXc208gColumn(sw);
+    pos_type pos = {(-8.5 - ((double)col * 5.0)) * SPC, 0.0, (3.5 - ((double)localId - 1.0)) * SPC};
+    return pos;
+  }
   int col = switchTopologyPortColumn(port);
   int row = switchTopologyPortRow(port);
   int switchIndex = port ? port->switchIndex : 0;
-  pos_type pos = {((double)col - 6.5) * SPC, 0.0, ((double)switchIndex * 7.0 * SPC) + ((double)row * 2.0 * SPC) - SPC};
+  pos_type pos = {(6.5 - (double)col) * SPC, 0.0, ((double)switchIndex * 7.0 * SPC) + ((double)row * 2.0 * SPC) - SPC};
   return pos;
 }
 
@@ -4117,20 +4148,30 @@ static pos_type switchTopologyHostPos(const switch_topology_host_type *host, siz
   if (port)
   {
     pos_type pp = switchTopologyPortPos(port);
+    const switch_topology_switch_type *sw = switchTopologySwitchForPort(port);
     double spread;
     if (total < 1) total = 1;
     if (lane < 0) lane = 0;
     spread = ((double)lane - (((double)total - 1.0) / 2.0));
     if (spread < -3.0) spread = -3.0;
     if (spread > 3.0) spread = 3.0;
-    pos.x = pp.x + (spread * (SPC / 2));
-    pos.y = SPC;
-    pos.z = pp.z + (switchTopologyHostPortSide(port) * 2.2 * SPC);
+    if (switchTopologySwitchIsXc208g(sw))
+    {
+      pos.x = pp.x - (2.2 * SPC);
+      pos.y = 0.0;
+      pos.z = pp.z + (spread * (SPC / 2));
+    }
+    else
+    {
+      pos.x = pp.x + (spread * (SPC / 2));
+      pos.y = 0.0;
+      pos.z = pp.z + (switchTopologyHostPortSide(port) * 2.2 * SPC);
+    }
   }
   else
   {
     pos.x = (((int)(index % 12)) - 6) * SPC;
-    pos.y = SPC;
+    pos.y = 0.0;
     pos.z = 7 * SPC + ((int)(index / 12) * SPC);
   }
   return pos;
@@ -4286,7 +4327,8 @@ static void switchTopologySceneDraw()
     switch_topology_port_type *firstPort = switchTopologyPort(sw->portBase + 1, false);
     if (!firstPort) continue;
     pos_type pos = switchTopologyPortPos(firstPort);
-    pos.x = -8.5 * SPC;
+    if (switchTopologySwitchIsXc208g(sw)) pos.z += SPC;
+    else pos.x = -8.5 * SPC;
     switchTopologyDrawLabel(pos, sw->name, 12);
   }
 

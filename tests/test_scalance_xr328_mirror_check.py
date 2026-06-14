@@ -143,7 +143,7 @@ class ScalanceMirrorCheckTests(unittest.TestCase):
 
         lines = mirror_check.topology_lines(data)
 
-        self.assertIn("switch name=sw6248xr328 ports=28", lines)
+        self.assertIn("switch name=sw6248xr328 type=scalance_xr328 ports=28", lines)
         self.assertIn("port id=2 name=P0.2 role=egress dest=6 up=1", lines)
         self.assertIn("port id=6 name=P0.6 role=destination up=1", lines)
         self.assertIn("host ip=192.168.6.32 mac=68:05:CA:11:D6:C7 port=2 label=W032S22", lines)
@@ -165,7 +165,7 @@ class ScalanceMirrorCheckTests(unittest.TestCase):
 
         lines = mirror_check.topology_lines(data)
 
-        self.assertIn("switch name=sw6248xr328 ports=28", lines)
+        self.assertIn("switch name=sw6248xr328 type=scalance_xr328 ports=28", lines)
         self.assertIn("port id=1 name=P0.1 role=egress dest=6 up=1", lines)
         self.assertNotIn("port id=61 name=vlan1 role=normal up=1", lines)
         self.assertNotIn("port id=105 name=loopback0 role=normal up=1", lines)
