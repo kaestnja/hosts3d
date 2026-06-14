@@ -2910,7 +2910,7 @@ static void osdDrawSwitchLegend(int px, int py)
   py -= (osdTextLineCount * OSD_LINE_H) + OSD_PKT_GAP_H + osdExtraHeight();
   osdPacketHitsClear();
   top = py + 12;
-  bottom = py - 128;
+  bottom = py - 152;
   glColor3ub(15, 15, 20);
   glRecti(left, top, right, bottom);
   glColor3ub(dlgrey[0], dlgrey[1], dlgrey[2]);
@@ -2929,6 +2929,8 @@ static void osdDrawSwitchLegend(int px, int py)
   glEnd();
 
   y = py - 28;
+  osdDrawSwitchLegendRow(left, right, y, grey, "normal port");
+  y -= 24;
   osdDrawSwitchLegendRow(left, right, y, sky, "mirror destination");
   y -= 24;
   osdDrawSwitchLegendRow(left, right, y, orange, "mirror egress");
@@ -2937,7 +2939,7 @@ static void osdDrawSwitchLegend(int px, int py)
   y -= 24;
   osdDrawSwitchLegendRow(left, right, y, purple, "mirror in+egress");
   y -= 24;
-  osdDrawSwitchLegendRow(left, right, y, grey, "down / unknown");
+  osdDrawSwitchLegendRow(left, right, y, red, "port down");
 }
 
 static void drawPacketTrafficStatus()

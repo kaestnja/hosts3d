@@ -280,7 +280,10 @@ vertikal von P1 oben bis P8 unten, Hosts werden rechts neben ihrem Port
 gezeichnet, und mehrere XC208G-Switches werden nebeneinander statt
 uebereinander platziert.
 
-Mirroring wird ueber Portfarben und die F9-OSD-Legende angezeigt; direkte
+Mirroring und Portstatus werden ueber Portfarben und die F9-OSD-Legende
+angezeigt. Grau bedeutet normaler Port, Rot bedeutet `port down` (`up=0` aus
+der Topologie/SNMP-Abfrage), Blau ist Mirror-Destination, Orange Mirror-
+Egress, Gelb Mirror-Ingress und Purple Mirror-Ingress+Egress. Direkte
 Mirror-Verbindungslinien werden bewusst nicht gezeichnet.
 
 ## Quellen

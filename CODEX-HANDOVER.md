@@ -367,7 +367,7 @@ Switch topology scene notes:
 - hosts attached to the XR328 upper physical port row are rendered on the opposite side from hosts attached to the lower physical port row, using the shorter current port-host distance
 - XC208G switch blocks are identified by `type=scalance_xc208g` in `switch-topology.txt`, with `ports=8` as a compatibility fallback; they render as vertical P1-P8 columns, multiple XC208G switches are placed side by side along X, and their hosts are rendered to the right of each port
 - in the default camera, visual right maps to negative world-X; switch-topology layout code intentionally mirrors world-X so labels such as P1/P2 read left-to-right on screen
-- port mirroring in F9 is represented by port colors plus the F9 OSD legend; mirror link lines are intentionally not drawn because they become unreadable across rack-style port rows
+- port mirroring and status in F9 are represented by port colors plus the F9 OSD legend: grey normal, red port down (`up=0`), blue mirror destination, orange mirror egress, yellow mirror ingress, purple mirror in+egress; mirror link lines are intentionally not drawn because they become unreadable across rack-style port rows
 - F9 keeps the last successfully parsed topology visible during refresh; new `switch-topology.txt` data is parsed into a temporary state and only replaces the visible state after a successful load
 
 VS Code extension setup for another machine:
