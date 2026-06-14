@@ -257,9 +257,25 @@ Refresh-Runner, die Script-/Markdown-Paare und die Wrapper
 `run-scalance-check.ps1` / `run-scalance-check.cmd` in den Runtime- oder
 Paketordner.
 
-Die aktuelle F9-Integration startet weiterhin den XR328-Helfer mit dem
-eingebauten Lab-Default fuer `sw6248xr328`. Der XC208G-Helfer ist derzeit ein
-separates read-only Diagnosewerkzeug und nicht die F9-Default-Auswahl.
+Die F9-Integration startet den seriellen Refresh-Runner
+`scalance_switches_refresh.py`. Der Runner liest `hsd-data/switches.txt`, fragt
+alle aktivierten Switches nacheinander ab, schreibt pro Switch ein JSON unter
+`hsd-data/snmp/` und erzeugt eine gemeinsame `switch-topology.txt`.
+
+In der F9-Ansicht werden nur Hosts gezeichnet, die einem Switch-Port zugeordnet
+werden konnten. LLDP-Nachbarn und gelernte MAC-Adressen werden pro Port
+konservativ zusammengefuehrt, damit ein Rechner nicht als zwei Host-Kuben
+erscheint. Neue Topologie-Daten werden erst nach erfolgreichem Einlesen
+uebernommen; waehrend eines Refreshs bleibt die letzte gueltige Darstellung
+sichtbar.
+
+Mehrere Switches werden als getrennte Port-Reihen dargestellt. Fuer 28-Port-
+XR328-Bloecke nutzt Hosts3D die Frontplatten-Reihenfolge P1-P12 ueber P13-P24
+und P25/P26 ueber P27/P28; wegen der Default-Kamera wird die obere physische
+Reihe auf die positive Z-Reihe gelegt. Hosts an der oberen und unteren XR328-
+Portreihe werden auf entgegengesetzte Seiten gelegt. Mirroring wird ueber
+Portfarben und die F9-OSD-Legende angezeigt; direkte Mirror-Verbindungslinien
+werden bewusst nicht gezeichnet.
 
 ## Quellen
 

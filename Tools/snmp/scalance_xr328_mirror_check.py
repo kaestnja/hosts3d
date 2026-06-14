@@ -729,6 +729,21 @@ def topology_host_mac(value: Any) -> str:
     return ""
 
 
+def topology_append_host_line(lines: list[str], port_id: int, ip: str, mac: str, label: str, seen_hosts: set[tuple[int, str, str]]) -> None:
+    key = (port_id, mac.upper(), ip)
+    if key in seen_hosts:
+        return
+    seen_hosts.add(key)
+    parts = ["host"]
+    if ip:
+        parts.append(f"ip={ip}")
+    if mac:
+        parts.append(f"mac={mac}")
+    parts.append(f"port={port_id}")
+    parts.append(f"label={topology_safe_text(label or ip or mac, 'host')}")
+    lines.append(" ".join(parts))
+
+
 def topology_lines(data: dict[str, Any], config: dict[str, str] | None = None) -> list[str]:
     device = data.get("device", {})
     mirroring = data.get("mirroring", {})
@@ -779,31 +794,26 @@ def topology_lines(data: dict[str, Any], config: dict[str, str] | None = None) -
         if port_id > max_port:
             continue
         port = ports_by_id[port_id]
+        macs = []
         for mac_item in port.get("learned_macs", []):
             mac = topology_host_mac(mac_item.get("mac"))
-            if not mac:
-                continue
-            key = (port_id, mac, "")
-            if key in seen_hosts:
-                continue
-            seen_hosts.add(key)
-            lines.append(f"host mac={mac} port={port_id} label={topology_safe_text(mac)}")
-        for neighbor in port.get("lldp_neighbors", []):
+            if mac and mac not in macs:
+                macs.append(mac)
+        neighbors = list(port.get("lldp_neighbors", []))
+        used_macs: set[str] = set()
+        for neighbor in neighbors:
             ip = topology_safe_text(neighbor.get("management_address"))
             label = topology_safe_text(neighbor.get("system_name") or neighbor.get("port_id") or neighbor.get("chassis_id"), "lldp_neighbor")
             mac = topology_host_mac(neighbor.get("chassis_id"))
-            key = (port_id, mac, ip)
-            if key in seen_hosts:
-                continue
-            seen_hosts.add(key)
-            parts = ["host"]
-            if ip:
-                parts.append(f"ip={ip}")
+            if not mac and len(macs) == 1 and len(neighbors) == 1:
+                mac = macs[0]
             if mac:
-                parts.append(f"mac={mac}")
-            parts.append(f"port={port_id}")
-            parts.append(f"label={label}")
-            lines.append(" ".join(parts))
+                used_macs.add(mac)
+            topology_append_host_line(lines, port_id, ip, mac, label, seen_hosts)
+        for mac in macs:
+            if mac in used_macs:
+                continue
+            topology_append_host_line(lines, port_id, "", mac, mac, seen_hosts)
     return lines
 
 

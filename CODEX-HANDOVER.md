@@ -41,11 +41,13 @@ These files already existed before this handover and remain important:
   - shared SNMP helper documentation; keep common SCALANCE OIDs, Net-SNMP usage, JSON contract, status model, credential handling, and staging notes here instead of embedding generated README text in scripts
 - `Tools/snmp/scalance_switches_refresh.py`
   - serial refresh runner used by Hosts3D F9/manual refresh; reads `hsd-data/switches.txt`, selects device helpers by `type=...`, writes per-switch JSON below `hsd-data/snmp/`, and writes the combined point-in-time `switch-topology.txt`
+  - SNMP refreshes are intentionally serial for now; this keeps the shared topology snapshot simple and avoids concurrent writers while the network state is sampled
 - `Tools/snmp/scalance_xr328_mirror_check.md`
   - device-specific SNMP observations for Siemens SCALANCE XR328-4C WG; keep only real XR328 device knowledge here
 - `Tools/snmp/scalance_xr328_mirror_check.py`
   - first external JSON prototype for SCALANCE mirroring checks; keep this as the contract before wiring a Mirror Check into the Hosts3D local hsen UI or adding controlled switch-management operations
   - always maintain this script together with `Tools/snmp/scalance_xr328_mirror_check.md` and the shared `Tools/snmp/README.md`
+  - topology output merges safe LLDP/FDB identity pairs on the same port, for example one learned MAC plus one LLDP neighbor, so Hosts3D can hold IP/MAC/name as one host while still rendering labels on separate visual lines
 - `Tools/snmp/scalance_xc208g_mirror_check.py`
   - read-only SCALANCE XC208G diagnostic helper; shares the XR328 JSON contract and has been validated against `sw4241xc208g`, `sw4242xc208g`, and `sw4243xc208g`
 - `Tools/snmp/scalance_xc208g_mirror_check.md`
@@ -356,10 +358,15 @@ Switch topology scene notes:
 - do not restrict normal lab use just because default SNMP values are involved; warn occasionally when defaults are detected and remind that real non-lab networks should use better SNMP security
 - the SNMP runner writes raw diagnostics to `hsd-data/snmp/<switch>.json` and writes the derived display mapping to `hsd-data/switch-topology.txt`
 - `View -> Refresh Switch Topology` manually starts the same background refresh, independent of the auto-refresh timer
-- without `switch-topology.txt`, the topology scene can show observed Hosts3D hosts, but it cannot infer their switch ports yet
+- without `switch-topology.txt`, the topology scene shows only the switch port scaffold; unassigned observed Hosts3D hosts are intentionally not drawn in F9
 - keep both formats: JSON is the raw SNMP/diagnostic contract, while `switch-topology.txt` is the small editable rendering/input contract
 - current SNMP-management direction: keep global defaults in `settings.ini`, keep the concrete switch inventory in `hsd-data/switches.txt`, and query all enabled switches serially on F9/manual refresh
 - serial SNMP refresh is acceptable for now; the physical network is treated as stable enough during one pass that `switch-topology.txt` can represent a point-in-time snapshot, while JSON records whether mirroring/config/data-collection state needs attention
+- multiple switches in `switch-topology.txt` are rendered as separate rack-like port rows instead of one global port stream
+- 28-port switch blocks use the observed XR328 front-panel order in the default Hosts3D view: P1-P12 over P13-P24, with P25/P26 over P27/P28 at the right edge; this intentionally maps the upper physical row to the positive-Z row because the default camera looks from negative Z toward positive Z
+- hosts attached to the XR328 upper physical port row are rendered on the opposite side from hosts attached to the lower physical port row, using the shorter current port-host distance
+- port mirroring in F9 is represented by port colors plus the F9 OSD legend; mirror link lines are intentionally not drawn because they become unreadable across rack-style port rows
+- F9 keeps the last successfully parsed topology visible during refresh; new `switch-topology.txt` data is parsed into a temporary state and only replaces the visible state after a successful load
 
 VS Code extension setup for another machine:
 

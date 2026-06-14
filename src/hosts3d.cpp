@@ -530,7 +530,7 @@ enum switch_port_role_type { sprNormal, sprMirrorDest, sprMirrorIngress, sprMirr
 
 struct switch_topology_port_type
 {
-  int id, mirrorDest;
+  int id, localId, switchIndex, mirrorDest;
   bool up, configured;
   switch_port_role_type role;
   char name[24];
@@ -538,7 +538,7 @@ struct switch_topology_port_type
 
 struct switch_topology_host_type
 {
-  int port;
+  int port, switchIndex;
   bool observed;
   char ip[16], mac[18], label[64];
 };
@@ -549,18 +549,26 @@ struct switch_topology_host_draw_type
   int lane, total;
 };
 
+struct switch_topology_switch_type
+{
+  int index, portBase, portCount;
+  char name[64];
+};
+
 struct switch_topology_state_type
 {
   bool initialized, fileLoaded;
-  time_t lastRefresh;
+  time_t lastRefresh, sourceMtime;
+  long sourceSize;
   unsigned int observedHosts, mappedHosts;
   char switchName[64], sourcePath[512], sourceStatus[96];
   std::vector<switch_topology_port_type> ports;
   std::vector<switch_topology_host_type> hosts;
+  std::vector<switch_topology_switch_type> switches;
 };
 
 scene_view_type activeSceneView = svHostTraffic;
-switch_topology_state_type switchTopologyState = {false, false, 0, 0, 0, "", "", "", std::vector<switch_topology_port_type>(), std::vector<switch_topology_host_type>()};
+switch_topology_state_type switchTopologyState = {false, false, 0, 0, 0, 0, 0, "", "", "", std::vector<switch_topology_port_type>(), std::vector<switch_topology_host_type>(), std::vector<switch_topology_switch_type>()};
 time_t switchTopologyLastSnmpLaunch = 0;
 char switchTopologySnmpStatus[128] = "";
 
@@ -2877,6 +2885,61 @@ static void osdDrawPktLegend(int px, int py)
   }
 }
 
+static void osdDrawSwitchLegendRow(int left, int right, int y, const unsigned char color[3], const char *label)
+{
+  int swatchLeft = left + OSD_BOX_PAD_X;
+  int swatchRight = swatchLeft + 18;
+  glColor3ub(color[0], color[1], color[2]);
+  glRecti(swatchLeft, y + 5, swatchRight, y - 7);
+  glColor3ub(dlgrey[0], dlgrey[1], dlgrey[2]);
+  glBegin(GL_LINE_LOOP);
+    glVertex2i(swatchLeft, y + 5);
+    glVertex2i(swatchRight, y + 5);
+    glVertex2i(swatchRight, y - 7);
+    glVertex2i(swatchLeft, y - 7);
+  glEnd();
+  glColor3ub(white[0], white[1], white[2]);
+  glRasterPos2i(swatchRight + 10, y - 4);
+  GLWin.DrawString((const unsigned char *)label);
+  (void) right;
+}
+
+static void osdDrawSwitchLegend(int px, int py)
+{
+  int left = px, right = px + OSD_BOX_W, top, bottom, y;
+  py -= (osdTextLineCount * OSD_LINE_H) + OSD_PKT_GAP_H + osdExtraHeight();
+  osdPacketHitsClear();
+  top = py + 12;
+  bottom = py - 128;
+  glColor3ub(15, 15, 20);
+  glRecti(left, top, right, bottom);
+  glColor3ub(dlgrey[0], dlgrey[1], dlgrey[2]);
+  glBegin(GL_LINE_LOOP);
+    glVertex2i(left, top);
+    glVertex2i(right, top);
+    glVertex2i(right, bottom);
+    glVertex2i(left, bottom);
+  glEnd();
+  glColor3ub(brgrey[0], brgrey[1], brgrey[2]);
+  glRasterPos2i(left + OSD_BOX_PAD_X, py + 2);
+  GLWin.DrawString((const unsigned char *)"SWITCH PORTS");
+  glBegin(GL_LINES);
+    glVertex2i(left + 92, py + 5);
+    glVertex2i(right - OSD_BOX_PAD_X, py + 5);
+  glEnd();
+
+  y = py - 28;
+  osdDrawSwitchLegendRow(left, right, y, sky, "mirror destination");
+  y -= 24;
+  osdDrawSwitchLegendRow(left, right, y, orange, "mirror egress");
+  y -= 24;
+  osdDrawSwitchLegendRow(left, right, y, yellow, "mirror ingress");
+  y -= 24;
+  osdDrawSwitchLegendRow(left, right, y, purple, "mirror in+egress");
+  y -= 24;
+  osdDrawSwitchLegendRow(left, right, y, grey, "down / unknown");
+}
+
 static void drawPacketTrafficStatus()
 {
   int left, bottom, top, right, y;
@@ -3590,15 +3653,17 @@ static bool switchTopologySnmpRefreshRequest(bool manual, char *errbuf = 0, size
   return true;
 }
 
-static switch_topology_port_type switchTopologyDefaultPort(int id)
+static switch_topology_port_type switchTopologyDefaultPort(int id, int switchIndex = 0, int localId = 0)
 {
   switch_topology_port_type port;
   port.id = id;
+  port.localId = (localId > 0 ? localId : id);
+  port.switchIndex = switchIndex;
   port.mirrorDest = 0;
   port.up = true;
   port.configured = false;
   port.role = sprNormal;
-  snprintf(port.name, sizeof(port.name), "P0.%d", id);
+  snprintf(port.name, sizeof(port.name), "P0.%d", port.localId);
   return port;
 }
 
@@ -3620,25 +3685,32 @@ static void switchTopologyEnsurePorts(int count)
   }
 }
 
-static switch_topology_port_type *switchTopologyPort(int id, bool create)
+static void switchTopologyEnsureSwitchPorts(int switchIndex, int portBase, int count)
+{
+  if (count < 1) count = 28;
+  for (int localId = 1; localId <= count; localId++)
+  {
+    int id = portBase + localId;
+    bool exists = false;
+    for (size_t cnt = 0; cnt < switchTopologyState.ports.size(); cnt++)
+    {
+      if (switchTopologyState.ports[cnt].id == id)
+      {
+        exists = true;
+        break;
+      }
+    }
+    if (!exists) switchTopologyState.ports.push_back(switchTopologyDefaultPort(id, switchIndex, localId));
+  }
+}
+
+static switch_topology_port_type *switchTopologyPort(int id, bool create, int switchIndex = 0, int localId = 0)
 {
   for (size_t cnt = 0; cnt < switchTopologyState.ports.size(); cnt++)
     if (switchTopologyState.ports[cnt].id == id) return &switchTopologyState.ports[cnt];
   if (!create) return 0;
-  switchTopologyState.ports.push_back(switchTopologyDefaultPort(id));
+  switchTopologyState.ports.push_back(switchTopologyDefaultPort(id, switchIndex, localId));
   return &switchTopologyState.ports.back();
-}
-
-static const char *switchTopologyRoleLabel(switch_port_role_type role)
-{
-  switch (role)
-  {
-    case sprMirrorDest: return "mirror destination";
-    case sprMirrorIngress: return "mirror ingress";
-    case sprMirrorEgress: return "mirror egress";
-    case sprMirrorBoth: return "mirror in+egress";
-    default: return "normal";
-  }
 }
 
 static switch_port_role_type switchTopologyRoleFromText(const char *txt)
@@ -3690,17 +3762,32 @@ static void switchTopologyHostLabel(switch_topology_host_type *host)
   }
 }
 
-static switch_topology_host_type *switchTopologyHostForIdentity(const char *ip, const char *mac, bool create)
+static switch_topology_host_type *switchTopologyHostForIdentity(const char *ip, const char *mac, bool create, int portId = 0, int switchIndex = 0)
 {
+  switch_topology_host_type *portCandidate = 0;
+  int portCandidateCount = 0;
   for (size_t cnt = 0; cnt < switchTopologyState.hosts.size(); cnt++)
   {
     switch_topology_host_type *host = &switchTopologyState.hosts[cnt];
     if (ip && *ip && *host->ip && !strcmp(host->ip, ip)) return host;
     if (mac && *mac && *host->mac && strEqNoCase(host->mac, mac)) return host;
+    if ((portId > 0) && (host->port == portId) && (host->switchIndex == switchIndex))
+    {
+      bool ipFits = (!ip || !*ip || !*host->ip || !strcmp(host->ip, ip));
+      bool macFits = (!mac || !*mac || !*host->mac || strEqNoCase(host->mac, mac));
+      bool canAddIdentity = ((ip && *ip && !*host->ip) || (mac && *mac && !*host->mac));
+      if (ipFits && macFits && canAddIdentity)
+      {
+        portCandidate = host;
+        portCandidateCount++;
+      }
+    }
   }
+  if (portCandidateCount == 1) return portCandidate;
   if (!create) return 0;
   switch_topology_host_type host;
   host.port = 0;
+  host.switchIndex = switchIndex;
   host.observed = false;
   host.ip[0] = '\0';
   host.mac[0] = '\0';
@@ -3715,6 +3802,32 @@ static switch_topology_host_type *switchTopologyHostForIdentity(const char *ip, 
 static int switchTopologyParsePortOffset = 0;
 static int switchTopologyParseNextPortOffset = 0;
 static int switchTopologyParseSwitchCount = 0;
+static int switchTopologyParseSwitchIndex = 0;
+
+static switch_topology_state_type switchTopologyEmptyState()
+{
+  switch_topology_state_type state;
+  state.initialized = false;
+  state.fileLoaded = false;
+  state.lastRefresh = 0;
+  state.sourceMtime = 0;
+  state.sourceSize = 0;
+  state.observedHosts = 0;
+  state.mappedHosts = 0;
+  state.switchName[0] = '\0';
+  state.sourcePath[0] = '\0';
+  state.sourceStatus[0] = '\0';
+  return state;
+}
+
+static bool switchTopologyFileInfo(const char *path, time_t *mtime, long *size)
+{
+  struct stat fs;
+  if (!path || !*path || stat(path, &fs)) return false;
+  if (mtime) *mtime = fs.st_mtime;
+  if (size) *size = (long) fs.st_size;
+  return true;
+}
 
 static void switchTopologyParseLine(char *line)
 {
@@ -3737,10 +3850,17 @@ static void switchTopologyParseLine(char *line)
     if (count < 1) count = 28;
     switchTopologyParsePortOffset = switchTopologyParseNextPortOffset;
     switchTopologyParseNextPortOffset += count;
+    switchTopologyParseSwitchIndex = switchTopologyParseSwitchCount;
+    switch_topology_switch_type sw;
+    sw.index = switchTopologyParseSwitchIndex;
+    sw.portBase = switchTopologyParsePortOffset;
+    sw.portCount = count;
+    setStringValue(sw.name, sizeof(sw.name), *name ? name : "switch");
+    switchTopologyState.switches.push_back(sw);
     if (!switchTopologyParseSwitchCount && *name) setStringValue(switchTopologyState.switchName, sizeof(switchTopologyState.switchName), name);
     else if (switchTopologyParseSwitchCount == 1) setStringValue(switchTopologyState.switchName, sizeof(switchTopologyState.switchName), "Multiple Switches");
     switchTopologyParseSwitchCount++;
-    switchTopologyEnsurePorts(switchTopologyParseNextPortOffset);
+    switchTopologyEnsureSwitchPorts(switchTopologyParseSwitchIndex, switchTopologyParsePortOffset, count);
   }
   else if (strEqNoCase(cmd, "port"))
   {
@@ -3758,9 +3878,12 @@ static void switchTopologyParseLine(char *line)
       if (strEqNoCase(key, "id") || strEqNoCase(key, "port")) switchTopologyParseInt(value, &id);
     }
     if (id <= 0) return;
+    int localId = id;
     id += switchTopologyParsePortOffset;
-    port = switchTopologyPort(id, true);
+    port = switchTopologyPort(id, true, switchTopologyParseSwitchIndex, localId);
     port->configured = true;
+    port->localId = localId;
+    port->switchIndex = switchTopologyParseSwitchIndex;
     for (size_t cnt = 0; cnt < fields.size(); cnt++)
     {
       const char *key = fields[cnt].first.c_str();
@@ -3787,16 +3910,17 @@ static void switchTopologyParseLine(char *line)
       else if (strEqNoCase(key, "label") || strEqNoCase(key, "name")) setStringValue(label, sizeof(label), value);
       else if (strEqNoCase(key, "port")) switchTopologyParseInt(value, &portId);
     }
-    host = switchTopologyHostForIdentity(ip, mac, true);
+    if (portId > 0) portId += switchTopologyParsePortOffset;
+    host = switchTopologyHostForIdentity(ip, mac, true, portId, switchTopologyParseSwitchIndex);
     if (!host) return;
     if (*ip) setStringValue(host->ip, sizeof(host->ip), ip);
     if (*mac) setStringValue(host->mac, sizeof(host->mac), mac);
     if (*label) setStringValue(host->label, sizeof(host->label), label);
     if (portId > 0)
     {
-      portId += switchTopologyParsePortOffset;
       host->port = portId;
-      switchTopologyPort(portId, true);
+      host->switchIndex = switchTopologyParseSwitchIndex;
+      switchTopologyPort(portId, true, switchTopologyParseSwitchIndex, portId - switchTopologyParsePortOffset);
     }
     switchTopologyHostLabel(host);
   }
@@ -3810,6 +3934,7 @@ static bool switchTopologyLoadFile(const char *path)
   switchTopologyParsePortOffset = 0;
   switchTopologyParseNextPortOffset = 0;
   switchTopologyParseSwitchCount = 0;
+  switchTopologyParseSwitchIndex = 0;
   while (fgets(line, sizeof(line), fp))
   {
     char *txt = trimWs(line);
@@ -3817,6 +3942,20 @@ static bool switchTopologyLoadFile(const char *path)
   }
   fclose(fp);
   return true;
+}
+
+static bool switchTopologyLoadFileInto(const char *path, switch_topology_state_type *out)
+{
+  switch_topology_state_type previous;
+  bool ok;
+  if (!out) return false;
+  previous = switchTopologyState;
+  switchTopologyState = switchTopologyEmptyState();
+  setStringValue(switchTopologyState.switchName, sizeof(switchTopologyState.switchName), "Switch Topology");
+  ok = switchTopologyLoadFile(path);
+  if (ok) *out = switchTopologyState;
+  switchTopologyState = previous;
+  return ok;
 }
 
 static void switchTopologyCollectHostCb(void **data, HtArgType arg1, HtArgType arg2, HtArgType arg3, HtArgType arg4)
@@ -3829,7 +3968,7 @@ static void switchTopologyCollectHostCb(void **data, HtArgType arg1, HtArgType a
   (void) arg4;
   if (!ht) return;
   switchTopologyState.observedHosts++;
-  host = switchTopologyHostForIdentity(ht->htip, ht->htmc, true);
+  host = switchTopologyHostForIdentity(ht->htip, ht->htmc, false);
   if (!host) return;
   host->observed = true;
   if (*ht->htip) setStringValue(host->ip, sizeof(host->ip), ht->htip);
@@ -3838,10 +3977,35 @@ static void switchTopologyCollectHostCb(void **data, HtArgType arg1, HtArgType a
   else switchTopologyHostLabel(host);
 }
 
+static void switchTopologyRefreshObservedHosts()
+{
+  switchTopologyState.observedHosts = 0;
+  switchTopologyState.mappedHosts = 0;
+  for (size_t cnt = 0; cnt < switchTopologyState.hosts.size(); cnt++)
+    switchTopologyState.hosts[cnt].observed = false;
+  hstsByIp.forEach(1, &switchTopologyCollectHostCb, 0, 0, 0, 0);
+  for (size_t cnt = 0; cnt < switchTopologyState.hosts.size(); cnt++)
+    if (switchTopologyState.hosts[cnt].port > 0) switchTopologyState.mappedHosts++;
+}
+
+static void switchTopologyEnsureDefaultScene()
+{
+  switch_topology_switch_type sw;
+  if (!switchTopologyState.ports.empty()) return;
+  sw.index = 0;
+  sw.portBase = 0;
+  sw.portCount = 28;
+  setStringValue(sw.name, sizeof(sw.name), "switch");
+  switchTopologyState.switches.push_back(sw);
+  switchTopologyEnsurePorts(28);
+}
+
 static void switchTopologySceneRefresh(bool force)
 {
-  time_t now;
+  time_t now, sourceMtime = 0;
+  long sourceSize = 0;
   char path[512], emsg[256];
+  bool hasFile;
   emsg[0] = '\0';
   if (!switchTopologySnmpRefreshRequest(force, emsg, sizeof(emsg)) && *emsg)
     setStringValue(switchTopologySnmpStatus, sizeof(switchTopologySnmpStatus), emsg);
@@ -3849,47 +4013,101 @@ static void switchTopologySceneRefresh(bool force)
   if (!force && switchTopologyState.initialized && ((now - switchTopologyState.lastRefresh) < 1)) return;
   switchTopologyState.initialized = true;
   switchTopologyState.lastRefresh = now;
-  switchTopologyState.fileLoaded = false;
-  switchTopologyState.observedHosts = 0;
-  switchTopologyState.mappedHosts = 0;
-  switchTopologyState.ports.clear();
-  switchTopologyState.hosts.clear();
-  setStringValue(switchTopologyState.switchName, sizeof(switchTopologyState.switchName), "Switch Topology");
   setStringValue(path, sizeof(path), hsddata("switch-topology.txt"));
   setStringValue(switchTopologyState.sourcePath, sizeof(switchTopologyState.sourcePath), path);
-  if (fileExists(path) && switchTopologyLoadFile(path))
+  hasFile = switchTopologyFileInfo(path, &sourceMtime, &sourceSize);
+  if (hasFile && (force || !switchTopologyState.fileLoaded || (switchTopologyState.sourceMtime != sourceMtime) || (switchTopologyState.sourceSize != sourceSize)))
   {
-    switchTopologyState.fileLoaded = true;
-    setStringValue(switchTopologyState.sourceStatus, sizeof(switchTopologyState.sourceStatus), "switch-topology.txt loaded");
+    switch_topology_state_type parsed;
+    if (switchTopologyLoadFileInto(path, &parsed))
+    {
+      parsed.initialized = true;
+      parsed.fileLoaded = true;
+      parsed.lastRefresh = now;
+      parsed.sourceMtime = sourceMtime;
+      parsed.sourceSize = sourceSize;
+      setStringValue(parsed.sourcePath, sizeof(parsed.sourcePath), path);
+      setStringValue(parsed.sourceStatus, sizeof(parsed.sourceStatus), "switch-topology.txt loaded");
+      switchTopologyState = parsed;
+    }
+    else if (!switchTopologyState.fileLoaded)
+    {
+      switchTopologyEnsureDefaultScene();
+      setStringValue(switchTopologyState.sourceStatus, sizeof(switchTopologyState.sourceStatus), "no switch-topology.txt");
+    }
   }
-  else
+  else if (!hasFile && !switchTopologyState.fileLoaded)
   {
-    switchTopologyEnsurePorts(28);
+    switchTopologyEnsureDefaultScene();
     setStringValue(switchTopologyState.sourceStatus, sizeof(switchTopologyState.sourceStatus), "no switch-topology.txt");
   }
+  else if (!hasFile && switchTopologyState.fileLoaded)
+    setStringValue(switchTopologyState.sourceStatus, sizeof(switchTopologyState.sourceStatus), "using last switch-topology.txt");
   if (*switchTopologySnmpStatus && !switchTopologyState.fileLoaded)
     setStringValue(switchTopologyState.sourceStatus, sizeof(switchTopologyState.sourceStatus), switchTopologySnmpStatus);
-  hstsByIp.forEach(1, &switchTopologyCollectHostCb, 0, 0, 0, 0);
-  for (size_t cnt = 0; cnt < switchTopologyState.hosts.size(); cnt++)
-    if (switchTopologyState.hosts[cnt].port > 0) switchTopologyState.mappedHosts++;
+  switchTopologyRefreshObservedHosts();
+}
+
+static const switch_topology_switch_type *switchTopologySwitchForPort(const switch_topology_port_type *port)
+{
+  if (!port) return 0;
+  for (size_t cnt = 0; cnt < switchTopologyState.switches.size(); cnt++)
+    if (switchTopologyState.switches[cnt].index == port->switchIndex) return &switchTopologyState.switches[cnt];
+  return 0;
+}
+
+static bool switchTopologyPhysicalXr328Slot(const switch_topology_port_type *port, int *col, int *row)
+{
+  const switch_topology_switch_type *sw = switchTopologySwitchForPort(port);
+  int id = port ? (port->localId > 0 ? port->localId : port->id) : 0;
+  if (!sw || (sw->portCount != 28) || (id < 1) || (id > 28)) return false;
+  if (id <= 12)
+  {
+    if (col) *col = id - 1;
+    if (row) *row = 1;
+    return true;
+  }
+  if (id <= 24)
+  {
+    if (col) *col = id - 13;
+    if (row) *row = 0;
+    return true;
+  }
+  if (col) *col = 12 + ((id - 25) % 2);
+  if (row) *row = (id >= 27 ? 0 : 1);
+  return true;
 }
 
 static int switchTopologyPortColumn(const switch_topology_port_type *port)
 {
-  return port ? ((port->id - 1) % 14) : 0;
+  int col = 0, row = 0;
+  if (switchTopologyPhysicalXr328Slot(port, &col, &row)) return col;
+  int id = port ? (port->localId > 0 ? port->localId : port->id) : 1;
+  return (id - 1) % 14;
 }
 
 static int switchTopologyPortRow(const switch_topology_port_type *port)
 {
-  return port ? ((port->id - 1) / 14) : 0;
+  int col = 0, row = 0;
+  if (switchTopologyPhysicalXr328Slot(port, &col, &row)) return row;
+  int id = port ? (port->localId > 0 ? port->localId : port->id) : 1;
+  return (id - 1) / 14;
 }
 
 static pos_type switchTopologyPortPos(const switch_topology_port_type *port)
 {
   int col = switchTopologyPortColumn(port);
   int row = switchTopologyPortRow(port);
-  pos_type pos = {((double)col - 6.5) * SPC, 0.0, (row ? (double)SPC : -(double)SPC)};
+  int switchIndex = port ? port->switchIndex : 0;
+  pos_type pos = {((double)col - 6.5) * SPC, 0.0, ((double)switchIndex * 7.0 * SPC) + ((double)row * 2.0 * SPC) - SPC};
   return pos;
+}
+
+static double switchTopologyHostPortSide(const switch_topology_port_type *port)
+{
+  int col = 0, row = 0;
+  if (switchTopologyPhysicalXr328Slot(port, &col, &row)) return (row > 0 ? 1.0 : -1.0);
+  return 1.0;
 }
 
 static pos_type switchTopologyHostPos(const switch_topology_host_type *host, size_t index, int lane, int total)
@@ -3899,7 +4117,6 @@ static pos_type switchTopologyHostPos(const switch_topology_host_type *host, siz
   if (port)
   {
     pos_type pp = switchTopologyPortPos(port);
-    int row = switchTopologyPortRow(port);
     double spread;
     if (total < 1) total = 1;
     if (lane < 0) lane = 0;
@@ -3908,7 +4125,7 @@ static pos_type switchTopologyHostPos(const switch_topology_host_type *host, siz
     if (spread > 3.0) spread = 3.0;
     pos.x = pp.x + (spread * (SPC / 2));
     pos.y = SPC;
-    pos.z = pp.z + (row ? (5 * SPC) : (-5 * SPC));
+    pos.z = pp.z + (switchTopologyHostPortSide(port) * 2.2 * SPC);
   }
   else
   {
@@ -4039,7 +4256,7 @@ static void switchTopologyDrawHostLabels(const switch_topology_host_type *host, 
   if (port && (lineCount < 4))
   {
     char portText[72];
-    snprintf(portText, sizeof(portText), "port %d %s", port->id, port->name);
+    snprintf(portText, sizeof(portText), "port %d %s", (port->localId > 0 ? port->localId : port->id), port->name);
     switchTopologyCompactText(portText, line[lineCount++], sizeof(line[0]), 22);
   }
   const char *lines[4] = {line[0], line[1], line[2], line[3]};
@@ -4063,30 +4280,22 @@ static void switchTopologySceneDraw()
   glRasterPos3i(-7 * SPC, 3 * SPC, -7 * SPC);
   GLWin.DrawString((const unsigned char *)label);
 
+  for (size_t cnt = 0; cnt < switchTopologyState.switches.size(); cnt++)
+  {
+    switch_topology_switch_type *sw = &switchTopologyState.switches[cnt];
+    switch_topology_port_type *firstPort = switchTopologyPort(sw->portBase + 1, false);
+    if (!firstPort) continue;
+    pos_type pos = switchTopologyPortPos(firstPort);
+    pos.x = -8.5 * SPC;
+    switchTopologyDrawLabel(pos, sw->name, 12);
+  }
+
   for (size_t cnt = 0; cnt < switchTopologyState.ports.size(); cnt++)
   {
     switch_topology_port_type *port = &switchTopologyState.ports[cnt];
     pos_type pos = switchTopologyPortPos(port);
     switchTopologyDrawCube(pos, switchTopologyPortList(port), 0.7);
     switchTopologyDrawLabel(pos, port->name, 12);
-    if (port->role != sprNormal)
-    {
-      snprintf(label, sizeof(label), "%s", switchTopologyRoleLabel(port->role));
-      switchTopologyDrawLabel(pos, label, -15);
-    }
-    if (port->mirrorDest > 0)
-    {
-      switch_topology_port_type *dest = switchTopologyPort(port->mirrorDest, false);
-      if (dest)
-      {
-        pos_type dpos = switchTopologyPortPos(dest);
-        glColor3ub(sky[0], sky[1], sky[2]);
-        glBegin(GL_LINES);
-          glVertex3d(pos.x, pos.y + 8.0, pos.z);
-          glVertex3d(dpos.x, dpos.y + 8.0, dpos.z);
-        glEnd();
-      }
-    }
   }
 
   hostDraw.reserve(switchTopologyState.hosts.size());
@@ -4102,6 +4311,7 @@ static void switchTopologySceneDraw()
     item.index = cnt;
     item.lane = 0;
     item.total = 1;
+    if (portId <= 0) continue;
     if (portId > 0)
     {
       item.lane = portSeen[portId]++;
@@ -4165,7 +4375,8 @@ void draw2D()
     osdBounds(&left, &top, &right, &bottom);
     px = left;
     drawOsdPanel();
-    osdDrawPktLegend(px, py);
+    if (activeSceneView == svSwitchTopology) osdDrawSwitchLegend(px, py);
+    else osdDrawPktLegend(px, py);
   }
   if (ptrc > hlt) drawPacketTrafficStatus();
   if (helpOverlayVisible) drawHelpOverlay();
