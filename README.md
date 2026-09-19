@@ -21,18 +21,61 @@ This README is organized for practical use:
 4. adjust settings and controls
 5. use the later sections as reference
 
+## Shared ScriptCommands
+
+Hosts3D uses the existing `sec/scriptcommands` Git checkout directly for its
+SCALANCE XR328 and XC208G queries. In `hsd-data/settings.ini`, set:
+
+```ini
+[scriptcommands]
+scriptcommands_path=C:\Temp\_SecLab\ScriptCommands
+```
+
+This is the development-computer example. On another computer, select that
+computer's checkout; a layout with sibling application/command directories can
+use `scriptcommands_path=..\ScriptCommands`. Relative paths resolve against the
+Hosts3D executable directory. Edit `settings.ini` with Hosts3D closed and restart
+it after a path change; ordinary command edits need no restart.
+
+Install Python 3.10 or newer and provide Net-SNMP `snmpget`/`snmpwalk` on PATH or
+beside Hosts3D.exe. F9 (or **View > Refresh Switch Topology**) calls the existing
+refresh runner, which reads enabled entries from `hsd-data/switches.txt` and
+passes their connection parameters to the shared commands. For example:
+
+```text
+switch name=switch1 type=scalance_xr328 host=192.0.2.10 version=2c community=COMMUNITY enabled=1 auto_refresh=1 refresh_seconds=60
+```
+
+Use `type=scalance_xc208g` for XC208G. SNMPv3 accepts `user`, `level`, `auth_proto`,
+`auth_pass`, `priv_proto`, `priv_pass`; `user_env`, `auth_pass_env`, `priv_pass_env`
+refer to environment variables. For SNMPv1/v2c, provide `community` explicitly;
+`community_fallback` optionally supplies one explicit alternative. The earlier
+lab default must be represented by a local switch row. No device is queried
+when there are no enabled rows. Missing checkout files are reported at refresh.
+
+Raw observations stay in `hsd-data/snmp/`; Hosts3D renders `switch-topology.txt`.
+The last complete topology remains until every enabled switch query succeeds.
+Configuration and rendered data remain in Hosts3D; reusable device commands and
+their protocol notes/tests are in the shared checkout.
+
+To fix or extend a command, read that checkout's `CONTRACT.md`, edit and test
+there, then commit and push there. Use `git pull --ff-only` in the same checkout
+to update it. Wait for an active refresh to finish before updating. There is no
+extra package or update mechanism. For a new device family, add a shared command
+and its type mapping in `Tools/snmp/scalance_switches_refresh.py`.
+
 ## Planning / Design Notes
 
 Current planning notes for capture and sensor-management work live in separate Markdown files so they can evolve without overloading the user-facing runtime documentation:
 
 - `Todos.md`: general capture, HSEN sensor-management, deployment, and network-device mirroring planning.
 - `Tools/snmp/README.md`: shared SCALANCE SNMP helper documentation, common OIDs, usage, status model, JSON contract, and staging notes.
-- `Tools/snmp/scalance_xr328_mirror_check.md`: device-specific SNMP observations for the Siemens SCALANCE XR328-4C WG.
-- `Tools/snmp/scalance_xc208g_mirror_check.md`: device-specific SNMP observations and real-device validation notes for Siemens SCALANCE XC208G switches.
+- `scalance_xr328_mirror_check.md` in the configured ScriptCommands checkout: device-specific SNMP observations for the Siemens SCALANCE XR328-4C WG.
+- `scalance_xc208g_mirror_check.md` in the configured ScriptCommands checkout: device-specific SNMP observations and real-device validation notes for Siemens SCALANCE XC208G switches.
 
-The first F9-integrated device-specific helper is `Tools/snmp/scalance_xr328_mirror_check.py`. It shells out to Net-SNMP (`snmpget`/`snmpwalk`), emits JSON, and can also write the simple topology text format consumed by the F9 switch-topology scene. A second read-only diagnostic helper, `Tools/snmp/scalance_xc208g_mirror_check.py`, shares the same JSON contract and has been validated against three SCALANCE XC208G switches (`sw4241xc208g`, `sw4242xc208g`, `sw4243xc208g`) using SNMPv2c.
+The first F9-integrated device-specific helper is `scalance_xr328_mirror_check.py` in the configured checkout. It shells out to Net-SNMP (`snmpget`/`snmpwalk`), emits JSON, and can also write the simple topology text format consumed by the F9 switch-topology scene. A second read-only diagnostic helper, `scalance_xc208g_mirror_check.py` in the configured checkout, shares the same JSON contract and has been validated against three SCALANCE XC208G switches (`sw4241xc208g`, `sw4242xc208g`, `sw4243xc208g`) using SNMPv2c.
 
-Hosts3D 1.19 starts the runtime-side integration with a main-scene controller. Press `F9`, click the OSD `Main Scene` row, or use `View` / `Show Switch Topology Scene` to switch between the existing host-traffic scene and the new switch-topology scene. The switch scene reads `hsd-data/switch-topology.txt` while it is displayed. F9 starts the SCALANCE refresh runner in the background. With no enabled switch rows, it uses the built-in lab default for `sw6248xr328` (`192.168.6.248`, SNMPv2c, read-only defaults `private` then `public`). With enabled rows in `hsd-data/switches.txt`, it queries them serially by `type=...`. The runner writes raw per-switch JSON below `hsd-data/snmp/`, builds the derived text topology in a temporary file, and replaces `hsd-data/switch-topology.txt` only after all enabled switch helpers succeed. Hosts3D then reloads the text file on the next scene refresh. The first text format supports lines such as:
+Hosts3D 1.19 starts the runtime-side integration with a main-scene controller. Press `F9`, click the OSD `Main Scene` row, or use `View` / `Show Switch Topology Scene` to switch between the existing host-traffic scene and the new switch-topology scene. The switch scene reads `hsd-data/switch-topology.txt` while it is displayed. F9 starts the SCALANCE refresh runner in the background. Without enabled switch rows, refresh reports that configuration is required. With enabled rows in `hsd-data/switches.txt`, it queries them serially by `type=...`. The runner writes raw per-switch JSON below `hsd-data/snmp/`, builds the derived text topology in a temporary file, and replaces `hsd-data/switch-topology.txt` only after all enabled switch helpers succeed. Hosts3D then reloads the text file on the next scene refresh. The first text format supports lines such as:
 
 ```text
 switch name=sw6248xr328 ports=28
@@ -43,10 +86,10 @@ host ip=192.168.6.10 mac=00:11:22:33:44:55 port=1 label=plc-01
 
 Hosts appear on a switch port only when the topology file supplies `port=...` for that host identity. The view then draws a connection line and a compact host label block with hostname/label, IP, MAC, and port. Without that file, Hosts3D can still show observed hosts in the topology scene, but it cannot infer their switch ports yet.
 
-`hsd-data/switches.txt` is an optional human-editable switch connection override. F9 can create this file with comments and an example, but it does not need the file to start the current SCALANCE prototype. Add an enabled line only when the built-in lab default should be replaced, for example:
+`hsd-data/switches.txt` holds the configured switches. F9 creates a commented example if the file is missing. Add an enabled line for each switch to query, for example:
 
 ```text
-switch name=sw6248xr328 type=scalance_xr328 host=192.168.6.248 version=2c enabled=1 auto_refresh=1 refresh_seconds=60
+switch name=sw6248xr328 type=scalance_xr328 host=192.168.6.248 version=2c community=COMMUNITY enabled=1 auto_refresh=1 refresh_seconds=60
 ```
 
 For SNMPv1/v2c, omitting `community` is valid: the helper tries the usual defaults `private` and then `public` while staying read-only. For a non-default value use `community=...` directly. For SNMPv3, use environment-variable references such as `user_env=SNMP_USER auth_pass_env=SNMP_AUTH_PASS priv_pass_env=SNMP_PRIV_PASS` when passwords should not live in the local switch config file. The `View` menu also contains `Refresh Switch Topology` for a manual background refresh.
@@ -379,7 +422,7 @@ Main files:
 | `0network.hnl` | network layout on exit; newly written layouts now use the versioned `HN2` format |
 | `1network.hnl`..`4network.hnl` | saved layouts; newly written layouts now use the versioned `HN2` format |
 | `netpos.txt` | CIDR-to-position/color mapping and exact host matching rules for already observed or layout-loaded hosts |
-| `switches.txt` | optional human-editable switch connection override for the F9 SCALANCE helper |
+| `switches.txt` | human-editable switch connections for the F9 SCALANCE queries |
 | `switch-topology.txt` | generated or manually edited switch/port/host mapping consumed by the F9 switch-topology scene |
 | `snmp/*.json` | raw per-switch SCALANCE SNMP helper results kept beside the generated topology text for diagnostics |
 | `traffic.hpt` | Hosts3D packet traffic record/replay data (not PCAP) |
@@ -1042,3 +1085,14 @@ Open an issue in this repository with repro steps and platform/build details.
 
 ## Copyright
 Copyright (c) 2006-2011 Del Castle
+
+### Native Windows compiler alternative
+
+`compile-hosts3d.bat Debug x64 --no-pause` also recognizes the native WinLibs
+POSIX/UCRT package installed by `winget install BrechtSanders.WinLibs.POSIX.UCRT`.
+This does not require an MSYS2 shell. Install GLFW Windows x64 headers under the
+compiler's `mingw64/include/GLFW`, `libglfw3dll.a` under `mingw64/lib`, and
+`glfw3.dll` under `mingw64/bin` from the official GLFW binary archive.
+Sources: [WinLibs](https://www.winlibs.com/) and
+[GLFW Windows binaries](https://www.glfw.org/download.html).
+The native path/argument test is `tests/test_scriptcommands_path.cpp`.

@@ -26,6 +26,12 @@ set "MACHINE="
 if /I "%ARCH%"=="x86" call :probe_compiler "C:\msys64\mingw32\bin\g++.exe" "%ARCH%"
 if /I "%ARCH%"=="x64" call :probe_compiler "C:\msys64\mingw64\bin\g++.exe" "%ARCH%"
 if not defined GPP_EXE if /I "%ARCH%"=="x64" call :probe_compiler "C:\msys64\ucrt64\bin\g++.exe" "%ARCH%"
+rem Native WinLibs is also supported when MSYS2 is unavailable.
+if not defined GPP_EXE if /I "%ARCH%"=="x64" if defined LOCALAPPDATA (
+  for /d %%d in ("%LOCALAPPDATA%\Microsoft\WinGet\Packages\BrechtSanders.WinLibs.POSIX.UCRT_*") do (
+    if not defined GPP_EXE call :probe_compiler "%%d\mingw64\bin\g++.exe" "%ARCH%"
+  )
+)
 if not defined GPP_EXE (
   for /f "delims=" %%i in ('where g++.exe 2^>NUL') do (
     if not defined GPP_EXE call :probe_compiler "%%i" "%ARCH%"

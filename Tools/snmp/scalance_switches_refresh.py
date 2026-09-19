@@ -11,14 +11,6 @@ import sys
 from pathlib import Path
 
 
-DEFAULT_SWITCH = {
-    "name": "sw6248xr328",
-    "type": "scalance_xr328",
-    "host": "192.168.6.248",
-    "version": "2c",
-}
-
-
 def parse_bool(value: str | None, default: bool = False) -> bool:
     if value is None:
         return default
@@ -77,25 +69,45 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--config-file", default="hsd-data/switches.txt")
     parser.add_argument("--json-dir", default="hsd-data/snmp")
     parser.add_argument("--write-topology", default="hsd-data/switch-topology.txt")
+    parser.add_argument("--scriptcommands-path", required=True, help="Existing shared ScriptCommands checkout")
+    parser.add_argument("--application-dir", default=str(Path.cwd()), help="Base directory for relative checkout paths")
     parser.add_argument("--snmpget", default="")
     parser.add_argument("--snmpwalk", default="")
     parser.add_argument("--pretty", action="store_true")
-    parser.add_argument("--use-default-if-empty", action="store_true")
     return parser.parse_args()
+
+
+def resolve_commands_path(configured: str, application_dir: str) -> Path:
+    if not configured.strip():
+        raise ValueError("Set scriptcommands_path in settings.ini to the existing shared checkout")
+    path = Path(configured.strip())
+    if path.anchor and not path.is_absolute():
+        raise ValueError("Use an absolute or application-relative scriptcommands_path")
+    return (path if path.is_absolute() else Path(application_dir) / path).resolve()
+
+
+def connection_arguments(config: dict[str, str]) -> list[str]:
+    if not config.get("host"):
+        raise ValueError("An enabled switch is missing host=... in switches.txt")
+    arguments = [config["host"]]
+    # Hosts3D owns this file format. Shared commands receive only method parameters.
+    for key in ("name", "version", "port", "timeout", "retries", "community", "community_fallback", "user", "level",
+                "auth_proto", "auth_pass", "priv_proto", "priv_pass"):
+        value = config.get(key, "")
+        if key in ("user", "auth_pass", "priv_pass") and config.get(key + "_env"):
+            value = os.getenv(config[key + "_env"], value)
+        if value:
+            arguments.extend(["--" + key.replace("_", "-"), value])
+    return arguments
 
 
 def main() -> int:
     args = parse_args()
-    script_dir = Path(__file__).resolve().parent
+    script_dir = resolve_commands_path(args.scriptcommands_path, args.application_dir)
     config_file = Path(args.config_file)
     json_dir = Path(args.json_dir)
     topology_path = Path(args.write_topology)
     switches = load_switches(config_file)
-
-    using_default = False
-    if not switches and args.use_default_if_empty:
-        switches = [dict(DEFAULT_SWITCH)]
-        using_default = True
 
     if not switches:
         print("no enabled switches found", file=sys.stderr)
@@ -123,15 +135,7 @@ def main() -> int:
                 continue
 
             json_path = json_dir / f"{safe_name(config, index)}.json"
-            cmd = [sys.executable, str(helper)]
-            if using_default:
-                cmd.append("--hosts3d-default")
-            else:
-                cmd += ["--config-file", str(config_file)]
-                if config.get("name"):
-                    cmd += ["--switch", config["name"]]
-                elif config.get("host"):
-                    cmd.append(config["host"])
+            cmd = [sys.executable, str(helper), *connection_arguments(config)]
             cmd += ["--write-json", str(json_path), "--write-topology", str(temp_topology_path)]
             if wrote_topology:
                 cmd.append("--append-topology")

@@ -119,7 +119,13 @@ foreach ($name in @("sim-hsen.ps1", "sim-hsen.py", "demo-hsen.ps1", "demo-hsen.p
 $snmpToolsDir = Join-Path $destinationPath "Tools\snmp"
 foreach ($obsoleteSnmpFile in @(
     "scalance_xr328_snmp_mirroring_abfrage.md",
-    "scalance_xc208g_snmp_mirroring_abfrage.md"
+    "scalance_xc208g_snmp_mirroring_abfrage.md",
+    "scalance_xr328_mirror_check.py",
+    "scalance_xc208g_mirror_check.py",
+    "run-scalance-check.ps1",
+    "run-scalance-check.cmd",
+    "scalance_xr328_mirror_check.md",
+    "scalance_xc208g_mirror_check.md"
 )) {
     $obsoletePath = Join-Path $snmpToolsDir $obsoleteSnmpFile
     if (Test-Path -LiteralPath $obsoletePath -PathType Leaf) {
@@ -128,118 +134,5 @@ foreach ($obsoleteSnmpFile in @(
 }
 Copy-PayloadFile -Source (Join-Path $repoRoot "Tools\snmp\README.md") -DestinationDirectory $snmpToolsDir -DestinationName "README.md" -Required
 Copy-PayloadFile -Source (Join-Path $repoRoot "Tools\snmp\scalance_switches_refresh.py") -DestinationDirectory $snmpToolsDir -DestinationName "scalance_switches_refresh.py" -Required
-Copy-PayloadFile -Source (Join-Path $repoRoot "Tools\snmp\scalance_xr328_mirror_check.py") -DestinationDirectory $snmpToolsDir -DestinationName "scalance_xr328_mirror_check.py" -Required
-Copy-PayloadFile -Source (Join-Path $repoRoot "Tools\snmp\scalance_xr328_mirror_check.md") -DestinationDirectory $snmpToolsDir -DestinationName "scalance_xr328_mirror_check.md" -Required
-Copy-PayloadFile -Source (Join-Path $repoRoot "Tools\snmp\scalance_xc208g_mirror_check.py") -DestinationDirectory $snmpToolsDir -DestinationName "scalance_xc208g_mirror_check.py" -Required
-Copy-PayloadFile -Source (Join-Path $repoRoot "Tools\snmp\scalance_xc208g_mirror_check.md") -DestinationDirectory $snmpToolsDir -DestinationName "scalance_xc208g_mirror_check.md" -Required
-
-$psWrapper = @'
-param(
-    [Parameter(Mandatory = $true)]
-    [string]$SwitchIp,
-
-    [ValidateSet("1", "2c", "3")]
-    [string]$Version = "2c",
-
-    [int]$Port = 161,
-
-    [int]$Timeout = 3,
-
-    [int]$Retries = 1,
-
-    [string]$Community = "",
-
-    [string]$User = $env:SNMP_USER,
-
-    [ValidateSet("noAuthNoPriv", "authNoPriv", "authPriv")]
-    [string]$Level = "authPriv",
-
-    [string]$AuthProto = $(if ($env:SNMP_AUTH_PROTO) { $env:SNMP_AUTH_PROTO } else { "SHA" }),
-
-    [string]$AuthPass = $env:SNMP_AUTH_PASS,
-
-    [string]$PrivProto = $(if ($env:SNMP_PRIV_PROTO) { $env:SNMP_PRIV_PROTO } else { "AES" }),
-
-    [string]$PrivPass = $env:SNMP_PRIV_PASS,
-
-    [switch]$CheckAccessOnly,
-
-    [bool]$Pretty = $true,
-
-    [Parameter(ValueFromRemainingArguments = $true)]
-    [string[]]$ExtraArgs
-)
-
-$ErrorActionPreference = "Stop"
-$root = Resolve-Path (Join-Path $PSScriptRoot "..\..")
-$script = Join-Path $PSScriptRoot "scalance_xr328_mirror_check.py"
-$snmpget = Join-Path $root "snmpget.exe"
-$snmpwalk = Join-Path $root "snmpwalk.exe"
-
-$args = @($script, $SwitchIp, "--version", $Version, "--port", $Port, "--timeout", $Timeout, "--retries", $Retries)
-if ($Version -in @("1", "2c") -and $Community) {
-    $args += @("--community", $Community)
-}
-if ($Version -eq "3") {
-    if ($User) {
-        $args += @("--user", $User)
-    }
-    $args += @("--level", $Level)
-    if ($Level -in @("authNoPriv", "authPriv")) {
-        $args += @("--auth-proto", $AuthProto)
-        if ($AuthPass) {
-            $args += @("--auth-pass", $AuthPass)
-        }
-    }
-    if ($Level -eq "authPriv") {
-        $args += @("--priv-proto", $PrivProto)
-        if ($PrivPass) {
-            $args += @("--priv-pass", $PrivPass)
-        }
-    }
-}
-if (Test-Path -LiteralPath $snmpget) {
-    $args += @("--snmpget", $snmpget)
-}
-if (Test-Path -LiteralPath $snmpwalk) {
-    $args += @("--snmpwalk", $snmpwalk)
-}
-if ($CheckAccessOnly) {
-    $args += "--check-access-only"
-}
-if ($Pretty) {
-    $args += "--pretty"
-}
-if ($ExtraArgs) {
-    $args += $ExtraArgs
-}
-
-python @args
-'@
-Write-TextFile -Path (Join-Path $snmpToolsDir "run-scalance-check.ps1") -Content $psWrapper
-
-$cmdWrapper = @'
-@echo off
-setlocal
-set "SCRIPT_DIR=%~dp0"
-set "ROOT=%SCRIPT_DIR%..\.."
-set "SNMPGET=%ROOT%\snmpget.exe"
-set "SNMPWALK=%ROOT%\snmpwalk.exe"
-if exist "%SNMPGET%" if exist "%SNMPWALK%" (
-  python "%SCRIPT_DIR%scalance_xr328_mirror_check.py" %* --snmpget "%SNMPGET%" --snmpwalk "%SNMPWALK%"
-  exit /b %ERRORLEVEL%
-)
-if exist "%SNMPGET%" (
-  python "%SCRIPT_DIR%scalance_xr328_mirror_check.py" %* --snmpget "%SNMPGET%"
-  exit /b %ERRORLEVEL%
-)
-if exist "%SNMPWALK%" (
-  python "%SCRIPT_DIR%scalance_xr328_mirror_check.py" %* --snmpwalk "%SNMPWALK%"
-  exit /b %ERRORLEVEL%
-)
-python "%SCRIPT_DIR%scalance_xr328_mirror_check.py" %*
-exit /b %ERRORLEVEL%
-'@
-Write-TextFile -Path (Join-Path $snmpToolsDir "run-scalance-check.cmd") -Content $cmdWrapper
 
 Write-Host "Staged runtime payload to $destinationPath"

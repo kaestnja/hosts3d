@@ -26,6 +26,7 @@
 #include <stdlib.h>  //abs(), atoi(), system()
 #include <thread>
 #include <string>
+#include "scriptcommands.h"
 #include <string.h>
 #include <mutex>
 #include <utility>
@@ -571,6 +572,7 @@ scene_view_type activeSceneView = svHostTraffic;
 switch_topology_state_type switchTopologyState = {false, false, 0, 0, 0, 0, 0, "", "", "", std::vector<switch_topology_port_type>(), std::vector<switch_topology_host_type>(), std::vector<switch_topology_switch_type>()};
 time_t switchTopologyLastSnmpLaunch = 0;
 char switchTopologySnmpStatus[128] = "";
+char scriptCommandsPath[512] = "";
 
 enum menustate_type { msNone, msToggle, msChoice };
 
@@ -3465,12 +3467,12 @@ static void switchTopologyDefaultSnmpConfig(switch_topology_config_type *config)
 {
   if (!config) return;
   config->exists = true;
-  config->enabled = true;
-  config->autoRefresh = true;
+  config->enabled = false;
+  config->autoRefresh = false;
   config->refreshSeconds = 60;
-  setStringValue(config->name, sizeof(config->name), "sw6248xr328");
+  setStringValue(config->name, sizeof(config->name), "");
   setStringValue(config->type, sizeof(config->type), "scalance_xr328");
-  setStringValue(config->host, sizeof(config->host), "192.168.6.248");
+  setStringValue(config->host, sizeof(config->host), "");
 }
 
 static void switchTopologyWriteDefaultConfig(const char *path)
@@ -3478,13 +3480,12 @@ static void switchTopologyWriteDefaultConfig(const char *path)
   FILE *fp;
   if (!path || !*path || fileExists(path)) return;
   if (!(fp = fopen(path, "w"))) return;
-  fputs("# Hosts3D optional switch config overrides\n", fp);
-  fputs("# F9 has a built-in SCALANCE XR328 lab default: sw6248xr328 at 192.168.6.248, SNMPv2c, read-only defaults private then public.\n", fp);
-  fputs("# Add an enabled switch line only when you need to override that default or use another switch.\n", fp);
-  fputs("# For non-default SNMPv1/v2c values use community=... directly.\n", fp);
+  fputs("# Hosts3D switch connections; F9 queries only explicitly enabled rows.\n", fp);
+  fputs("# Configure scriptcommands_path in settings.ini before refreshing.\n", fp);
+  fputs("# For SNMPv1/v2c provide community=... explicitly.\n", fp);
   fputs("# For SNMPv3 prefer user_env, auth_pass_env and priv_pass_env instead of writing passwords here.\n", fp);
   fputs("# Example:\n", fp);
-  fputs("# switch name=sw6248xr328 type=scalance_xr328 host=192.168.6.248 version=2c enabled=1 auto_refresh=1 refresh_seconds=60\n", fp);
+  fputs("# switch name=switch1 type=scalance_xr328 host=SWITCH_IP version=2c community=COMMUNITY enabled=1 auto_refresh=1 refresh_seconds=60\n", fp);
   fclose(fp);
 }
 
@@ -3610,7 +3611,7 @@ static bool switchTopologySnmpRefreshRequest(bool manual, char *errbuf = 0, size
   if (!config.enabled || !*config.host)
   {
     if (manual && errbuf && errbufsz)
-      snprintf(errbuf, errbufsz, "Switch config is missing host=... Fix hsd-data/switches.txt or remove its override line.");
+      snprintf(errbuf, errbufsz, "Configure an enabled switch with host=... in hsd-data/switches.txt.");
     return false;
   }
   if (!manual && !config.autoRefresh) return false;
@@ -3626,21 +3627,40 @@ static bool switchTopologySnmpRefreshRequest(bool manual, char *errbuf = 0, size
     if (errbuf && errbufsz) setStringValue(errbuf, errbufsz, "Unable to locate Tools/snmp/scalance_switches_refresh.py.");
     return false;
   }
+  char applicationDir[512];
+  if (!selfExecutableDir(applicationDir, sizeof(applicationDir))) return false;
+  std::string commands = scriptCommandsLocation(scriptCommandsPath, applicationDir);
+  char commandPath[1024];
+  if (commands.empty() ||
+      !pathJoin(commandPath, sizeof(commandPath), commands.c_str(), "scalance_xr328_mirror_check.py") || !fileExists(commandPath) ||
+      !pathJoin(commandPath, sizeof(commandPath), commands.c_str(), "scalance_xc208g_mirror_check.py") || !fileExists(commandPath))
+  {
+    if (errbuf && errbufsz) setStringValue(errbuf, errbufsz, "Set scriptcommands_path in settings.ini to a checkout containing the SCALANCE commands.");
+    return false;
+  }
   setStringValue(jsonDir, sizeof(jsonDir), hsddata("snmp"));
   setStringValue(topologyPath, sizeof(topologyPath), hsddata("switch-topology.txt"));
+  std::string arguments = " " + scriptCommandsArgument(scriptPath)
+    + " --config-file " + scriptCommandsArgument(cfgPath)
+    + " --json-dir " + scriptCommandsArgument(jsonDir)
+    + " --write-topology " + scriptCommandsArgument(topologyPath)
+    + " --scriptcommands-path " + scriptCommandsArgument(commands)
+    + " --application-dir " + scriptCommandsArgument(applicationDir) + " --pretty";
+  if (arguments.size() + 16 >= sizeof(cmd))
+  {
+    if (errbuf && errbufsz) setStringValue(errbuf, errbufsz, "Switch refresh paths exceed the command length limit.");
+    return false;
+  }
 #ifdef __MINGW32__
-  snprintf(cmd, sizeof(cmd), "py -3 \"%s\" --config-file \"%s\" --json-dir \"%s\" --write-topology \"%s\" --use-default-if-empty --pretty",
-           scriptPath, cfgPath, jsonDir, topologyPath);
+  snprintf(cmd, sizeof(cmd), "py -3%s", arguments.c_str());
 #else
-  snprintf(cmd, sizeof(cmd), "python3 \"%s\" --config-file \"%s\" --json-dir \"%s\" --write-topology \"%s\" --use-default-if-empty --pretty",
-           scriptPath, cfgPath, jsonDir, topologyPath);
+  snprintf(cmd, sizeof(cmd), "python3%s", arguments.c_str());
 #endif
   switchTopologyAppendRuntimeSnmpTools(cmd, sizeof(cmd));
   if (!launchDetachedCommandLine(cmd, workdir))
   {
 #ifdef __MINGW32__
-    snprintf(cmd, sizeof(cmd), "python \"%s\" --config-file \"%s\" --json-dir \"%s\" --write-topology \"%s\" --use-default-if-empty --pretty",
-             scriptPath, cfgPath, jsonDir, topologyPath);
+    snprintf(cmd, sizeof(cmd), "python%s", arguments.c_str());
     switchTopologyAppendRuntimeSnmpTools(cmd, sizeof(cmd));
     if (!launchDetachedCommandLine(cmd, workdir))
 #endif
@@ -9889,6 +9909,7 @@ static bool settsLoadIni(const char *path)
     {
       if (parseSonaValue(value, &sona)) setts.sona = sona;
     }
+    else if (!strcmp(key, "scriptcommands_path")) setStringValue(scriptCommandsPath, sizeof(scriptCommandsPath), value);
     else if (!strcmp(key, "hsen_start_command")) setStringValue(setts.hsst, sizeof(setts.hsst), value);
     else if (!strcmp(key, "hsen_sensor_id")) setStringValue(setts.hsid, sizeof(setts.hsid), value);
     else if (!strcmp(key, "hsen_interface")) setStringValue(setts.hsif, sizeof(setts.hsif), value);
@@ -10041,6 +10062,10 @@ static bool settsSaveIni(const char *path)
   fprintf(sts, "sensor_filter=%u\n", setts.sen);
   fprintf(sts, "packet_tree_filter=%s\n", packetTreeFilterString(packetTreeFilter));
   fprintf(sts, "port_filter=%u\n\n", setts.prt);
+
+  fputs("[scriptcommands]\n", sts);
+  fputs("# Existing shared checkout; relative paths resolve against the executable directory.\n", sts);
+  fprintf(sts, "scriptcommands_path=%s\n\n", scriptCommandsPath);
 
   fputs("[hsen]\n", sts);
 #ifdef __MINGW32__
