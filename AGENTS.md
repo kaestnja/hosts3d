@@ -15,6 +15,10 @@ mapping in `Tools/snmp/scalance_switches_refresh.py` and suitable rendering.
 Keep real laboratory settings in local configuration. Preserve configured devices
 and access data; real non-secret examples in documentation/tests are allowed.
 Never restore a specific laboratory host or implicit credentials as a code default.
+On Windows, MSYS2 under `C:\msys64` is a required build and debugging prerequisite
+for both developers and coding agents. It must provide the selected MinGW GCC,
+GLFW, `make`, and matching x64/x86 GDB tools. Before changing build or debug
+configuration, run `pwsh -NoProfile -File Tools/Hosts3D-DevTools.ps1 -Task CheckAll`.
 Run focused tests with `python -B -m unittest discover -s tests`. Build Windows
 with `Tools/Hosts3D-DevTools.ps1 -Task BuildHosts3D -Config Debug -Arch x64`.
 The C++ path test is `tests/test_scriptcommands_path.cpp`.

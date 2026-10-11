@@ -182,7 +182,11 @@ The script itself now prints a warning and pauses for confirmation before it pro
 ```
 
 ### Windows 11 Build (MSYS2 + MinGW32/MinGW64)
-> If `g++` is missing (`g++ is not recognized`), install toolchain first.
+MSYS2 under `C:\msys64` is required for Windows builds and native GDB debugging,
+for both human developers and coding agents. The required installation includes
+the matching MinGW compiler, binutils, GLFW 3, `make`, and GDB for each target
+architecture you intend to build. If `g++` is missing (`g++ is not recognized`),
+install the toolchain first.
 > Install MSYS2 first from the official project (`https://www.msys2.org/`) or via `winget`, then use the package commands below.
 
 ```powershell
