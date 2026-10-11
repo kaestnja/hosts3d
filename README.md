@@ -28,14 +28,21 @@ SCALANCE XR328 and XC208G queries. In `hsd-data/settings.ini`, set:
 
 ```ini
 [scriptcommands]
-scriptcommands_path=C:\Temp\_SecLab\ScriptCommands
+scriptcommands_path=C:\Development\sec\ScriptCommands
 ```
 
-This is the development-computer example. On another computer, select that
-computer's checkout; a layout with sibling application/command directories can
-use `scriptcommands_path=..\ScriptCommands`. Relative paths resolve against the
-Hosts3D executable directory. Edit `settings.ini` with Hosts3D closed and restart
-it after a path change; ordinary command edits need no restart.
+This is the development-computer example: Hosts3D stays in its independent
+`C:\Development\hosts3d` checkout and consumes the shared source directly.
+For a temporary portable runtime, place Hosts3D in its own directory, for
+example `C:\Temp\_SecLab\Hosts3D`, beside a `ScriptCommands` runtime copy and
+set `scriptcommands_path=..\ScriptCommands`. Keep that runtime copy separate
+from the Git sources; update and fix shared commands in their original checkout.
+On another computer, select its configured command directory. Relative paths
+resolve against the Hosts3D executable directory. Edit `settings.ini` with
+Hosts3D closed and restart it after a path change; ordinary command edits need
+no restart. Removing the portable Hosts3D folder removes its own files and data;
+separately installed capture drivers and shared command directories have their
+own lifecycle.
 
 Install Python 3.10 or newer and provide Net-SNMP `snmpget`/`snmpwalk` on PATH or
 beside Hosts3D.exe. F9 (or **View > Refresh Switch Topology**) calls the existing
