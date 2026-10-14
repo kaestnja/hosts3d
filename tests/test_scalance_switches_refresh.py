@@ -18,6 +18,55 @@ SPEC.loader.exec_module(switches_refresh)
 
 
 class ScalanceSwitchesRefreshTests(unittest.TestCase):
+    def test_optional_provider_unavailable_is_inert_and_keeps_saved_topology(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            config = base / "switches.txt"
+            config.write_text("switch host=192.0.2.1 type=scalance_xr328 enabled=1\n", encoding="utf-8")
+            topology = base / "switch-topology.txt"
+            topology.write_text("saved real topology\n", encoding="utf-8")
+            json_dir = base / "json"
+            for provider_args in ([], ["--scriptcommands-path", str(base / "missing commands")]):
+                argv = ["refresh", "--config-file", str(config), "--json-dir", str(json_dir),
+                        "--write-topology", str(topology), *provider_args]
+                error = io.StringIO()
+                with patch.object(sys, "argv", argv), patch.object(switches_refresh.subprocess, "run") as run, contextlib.redirect_stderr(error):
+                    self.assertEqual(switches_refresh.main(), 2)
+                    run.assert_not_called()
+                self.assertIn("unavailable", error.getvalue())
+                self.assertEqual(topology.read_text(encoding="utf-8"), "saved real topology\n")
+                self.assertFalse(json_dir.exists())
+                self.assertFalse(list(base.glob("*.refreshing")))
+
+    def test_only_selected_command_families_are_required(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            commands = base / "commands"
+            commands.mkdir()
+            (commands / "scalance_xc208g_mirror_check.py").write_text("# inert fixture", encoding="utf-8")
+            config = base / "switches.txt"
+            config.write_text('switch type="scalance_xc208g" host=192.0.2.1 enabled="1"\n'
+                              'switch type="scalance_xr328" host=192.0.2.2 enabled="0"\n', encoding="utf-8")
+            topology = base / "switch-topology.txt"
+
+            def fake_run(cmd):
+                self.assertEqual(Path(cmd[1]).name, "scalance_xc208g_mirror_check.py")
+                Path(cmd[cmd.index("--write-topology") + 1]).write_text("complete fixture topology", encoding="utf-8")
+                return SimpleNamespace(returncode=0)
+
+            argv = ["refresh", "--scriptcommands-path", str(commands), "--config-file", str(config),
+                    "--json-dir", str(base / "json"), "--write-topology", str(topology)]
+            with patch.object(sys, "argv", argv), patch.object(switches_refresh.subprocess, "run", side_effect=fake_run) as run:
+                self.assertEqual(switches_refresh.main(), 0)
+                self.assertEqual(run.call_count, 1)
+            self.assertEqual(topology.read_text(encoding="utf-8"), "complete fixture topology")
+
+            config.write_text(config.read_text(encoding="utf-8").replace('enabled="0"', 'enabled="1"'), encoding="utf-8")
+            with patch.object(sys, "argv", argv), patch.object(switches_refresh.subprocess, "run") as run, contextlib.redirect_stderr(io.StringIO()):
+                self.assertEqual(switches_refresh.main(), 2)
+                run.assert_not_called()
+            self.assertEqual(topology.read_text(encoding="utf-8"), "complete fixture topology")
+
     def test_topology_is_replaced_only_after_all_helpers_succeed(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp)

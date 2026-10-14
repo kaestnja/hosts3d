@@ -2,6 +2,7 @@ param(
     [ValidateSet(
         "Help",
         "CheckTools",
+        "CheckBuild",
         "CheckDebug",
         "CheckArtifacts",
         "CheckAll",
@@ -34,6 +35,8 @@ param(
 
     [string]$Msys2Root = "C:\msys64",
 
+    [string]$ToolchainRoot,
+
     [switch]$WithNpcap,
 
     [switch]$NoPackage,
@@ -46,6 +49,7 @@ $ErrorActionPreference = "Stop"
 $script:ToolRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $script:RepoRoot = Split-Path -Parent $script:ToolRoot
 $script:ArchWasProvided = $PSBoundParameters.ContainsKey("Arch")
+$script:MsysRootWasProvided = $PSBoundParameters.ContainsKey("Msys2Root")
 $script:IsDotSourced = $MyInvocation.InvocationName -eq "."
 
 function Get-Hosts3DRepoRoot {
@@ -92,6 +96,114 @@ function ConvertTo-BashSingleQuoted {
     return "'" + ($Value -replace "'", "'\''") + "'"
 }
 
+function Invoke-Hosts3DToolProbe {
+    param([string]$FilePath, [string]$Arguments, [int]$TimeoutMilliseconds = 5000)
+    $start = New-Object System.Diagnostics.ProcessStartInfo
+    $start.FileName = $FilePath
+    $start.Arguments = $Arguments
+    $start.UseShellExecute = $false
+    $start.CreateNoWindow = $true
+    $start.RedirectStandardOutput = $true
+    $start.RedirectStandardError = $true
+    $process = New-Object System.Diagnostics.Process
+    $process.StartInfo = $start
+    try {
+        if (-not $process.Start()) { throw "Could not start tool: $FilePath" }
+        $output = $process.StandardOutput.ReadToEndAsync()
+        $errors = $process.StandardError.ReadToEndAsync()
+        if (-not $process.WaitForExit($TimeoutMilliseconds)) {
+            $process.Kill()
+            [void]$process.WaitForExit(1000)
+            throw "Tool probe timed out: $FilePath"
+        }
+        [pscustomobject]@{
+            ExitCode = $process.ExitCode
+            Output = $output.GetAwaiter().GetResult().Trim()
+            Error = $errors.GetAwaiter().GetResult().Trim()
+        }
+    } finally { $process.Dispose() }
+}
+
+function Get-Hosts3DToolchain {
+    param(
+        [ValidateSet('x64', 'x86', 'arm64')][string]$Architecture = $Arch,
+        [string]$Prefix = $ToolchainRoot,
+        [string]$MsysRoot = $Msys2Root
+    )
+    if (-not $Prefix) { $Prefix = $env:HOSTS3D_TOOLCHAIN_ROOT }
+    $candidates = New-Object 'System.Collections.Generic.List[string]'
+    $explicit = -not [string]::IsNullOrWhiteSpace($Prefix)
+    if ($explicit) {
+        $candidates.Add((Join-Path $Prefix 'bin\g++.exe'))
+    } else {
+        foreach ($command in @(Get-Command g++.exe -All -ErrorAction SilentlyContinue)) {
+            if ($command.Source) { $candidates.Add($command.Source) }
+        }
+        $folders = switch ($Architecture) {
+            'x86' { @('mingw32') }
+            'arm64' { @('clangarm64') }
+            default { @('mingw64', 'ucrt64', 'clang64') }
+        }
+        if ($env:HOSTS3D_MSYS2_ROOT -and -not $PSBoundParameters.ContainsKey('MsysRoot') -and
+            -not $script:MsysRootWasProvided) { $MsysRoot = $env:HOSTS3D_MSYS2_ROOT }
+        foreach ($folder in $folders) {
+            $candidates.Add((Join-Path $MsysRoot "$folder\bin\g++.exe"))
+        }
+        if ($env:LOCALAPPDATA) {
+            $packages = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages'
+            if (Test-Path -LiteralPath $packages -PathType Container) {
+                foreach ($package in @(Get-ChildItem -LiteralPath $packages -Directory -Filter 'BrechtSanders.WinLibs*' -ErrorAction SilentlyContinue | Sort-Object Name)) {
+                    foreach ($folder in $folders) {
+                        $candidates.Add((Join-Path $package.FullName "$folder\bin\g++.exe"))
+                    }
+                }
+            }
+        }
+    }
+    $machinePattern = switch ($Architecture) {
+        'x86' { '^i[3-6]86-.*mingw32$' }
+        'arm64' { '^aarch64-.*mingw32$' }
+        default { '^x86_64-.*mingw32$' }
+    }
+    foreach ($candidate in @($candidates | Select-Object -Unique)) {
+        if (-not (Test-Path -LiteralPath $candidate -PathType Leaf)) {
+            if ($explicit) { throw "ToolchainRoot has no readable bin\g++.exe: $Prefix" }
+            continue
+        }
+        try { $probe = Invoke-Hosts3DToolProbe -FilePath $candidate -Arguments '-dumpmachine' }
+        catch { if ($explicit) { throw }; continue }
+        if ($probe.ExitCode -ne 0 -or $probe.Output -notmatch $machinePattern) {
+            if ($explicit) { throw "ToolchainRoot compiler is incompatible with $Architecture`: $($probe.Output)" }
+            continue
+        }
+        $compiler = [IO.Path]::GetFullPath($candidate)
+        $bin = Split-Path -Parent $compiler
+        $prefixRoot = Split-Path -Parent $bin
+        $gdb = Join-Path $bin 'gdb.exe'
+        if (-not (Test-Path -LiteralPath $gdb -PathType Leaf)) {
+            $gdb = ''
+            $onPath = Get-Command gdb.exe -ErrorAction SilentlyContinue
+            if ($onPath) { $gdb = $onPath.Source }
+        }
+        $make = Join-Path $bin 'mingw32-make.exe'
+        if (-not (Test-Path -LiteralPath $make -PathType Leaf)) {
+            $make = ''
+            $onPath = Get-Command make.exe -ErrorAction SilentlyContinue
+            if ($onPath) { $make = $onPath.Source }
+        }
+        return [pscustomobject]@{
+            Architecture = $Architecture
+            Compiler = $compiler
+            Machine = $probe.Output
+            Root = $prefixRoot
+            BinDirectory = $bin
+            Gdb = $gdb
+            Make = $make
+        }
+    }
+    throw "No compatible $Architecture MinGW compiler found. Use existing tools on PATH or -ToolchainRoot; MSYS2 is the recommended setup when no suitable environment exists."
+}
+
 function Invoke-Hosts3DBatch {
     param(
         [Parameter(Mandatory = $true)][string]$Script,
@@ -114,9 +226,18 @@ function Invoke-Hosts3DBatch {
         return
     }
 
-    & $env:ComSpec /d /c $cmdLine
-    if ($LASTEXITCODE -ne 0) {
-        throw "Batch command failed with exit code $LASTEXITCODE"
+    $oldPrefix = $env:HOSTS3D_TOOLCHAIN_ROOT
+    $oldMsysRoot = $env:HOSTS3D_MSYS2_ROOT
+    try {
+        if ($ToolchainRoot) { $env:HOSTS3D_TOOLCHAIN_ROOT = $ToolchainRoot }
+        if ($script:MsysRootWasProvided) { $env:HOSTS3D_MSYS2_ROOT = $Msys2Root }
+        & $env:ComSpec /d /c $cmdLine
+        if ($LASTEXITCODE -ne 0) {
+            throw "Batch command failed with exit code $LASTEXITCODE"
+        }
+    } finally {
+        $env:HOSTS3D_TOOLCHAIN_ROOT = $oldPrefix
+        $env:HOSTS3D_MSYS2_ROOT = $oldMsysRoot
     }
 }
 
@@ -177,14 +298,15 @@ function Get-CommandCheck {
     param(
         [string]$Area,
         [string]$Name,
-        [string]$CommandName
+        [string]$CommandName,
+        [bool]$Required = $true
     )
 
     $cmd = Get-Command $CommandName -ErrorAction SilentlyContinue
     if (-not $cmd) {
-        return New-CheckResult -Area $Area -Name $Name -Found $false
+        return New-CheckResult -Area $Area -Name $Name -Found $false -Required $Required
     }
-    return New-CheckResult -Area $Area -Name $Name -Found $true -Path $cmd.Source
+    return New-CheckResult -Area $Area -Name $Name -Found $true -Path $cmd.Source -Required $Required
 }
 
 function Get-FileCheck {
@@ -239,63 +361,99 @@ function Find-ClangTidy {
     return ""
 }
 
-function Test-Hosts3DTools {
+function Test-Hosts3DBuild {
+    param($ResolvedTools)
     $results = @()
-    $results += Get-CommandCheck -Area "shell" -Name "PowerShell 7" -CommandName "pwsh"
-    $results += Get-CommandCheck -Area "shell" -Name "Windows PowerShell" -CommandName "powershell"
-    $results += Get-CommandCheck -Area "shell" -Name "cmd.exe" -CommandName "cmd"
-    $results += Get-CommandCheck -Area "source" -Name "git" -CommandName "git"
-    $results += Get-CommandCheck -Area "source" -Name "GitHub CLI" -CommandName "gh"
-    $results += Get-CommandCheck -Area "script" -Name "python" -CommandName "python"
-    $results += Get-CommandCheck -Area "script" -Name "py launcher" -CommandName "py"
-    $clangTidy = Find-ClangTidy
-    $results += New-CheckResult -Area "analysis" -Name "clang-tidy" -Found ($clangTidy -ne "") -Path $clangTidy -Required $false -Note "optional; needed for RunClangTidySarif"
-    $results += Get-CommandCheck -Area "editor" -Name "VS Code CLI" -CommandName "code"
-
-    $results += Get-FileCheck -Area "msys2" -Name "bash" -Path (Join-Path $Msys2Root "usr\bin\bash.exe")
-    $results += Get-FileCheck -Area "msys2" -Name "pacman" -Path (Join-Path $Msys2Root "usr\bin\pacman.exe")
-    $results += Get-FileCheck -Area "mingw64" -Name "g++ x64" -Path (Join-Path $Msys2Root "mingw64\bin\g++.exe")
-    $results += Get-FileCheck -Area "mingw32" -Name "g++ x86" -Path (Join-Path $Msys2Root "mingw32\bin\g++.exe")
-    $results += Get-FileCheck -Area "mingw64" -Name "gdb x64" -Path (Join-Path $Msys2Root "mingw64\bin\gdb.exe")
-    $results += Get-FileCheck -Area "mingw32" -Name "gdb x86" -Path (Join-Path $Msys2Root "mingw32\bin\gdb.exe")
-    $results += Get-FileCheck -Area "msys2" -Name "make" -Path (Join-Path $Msys2Root "usr\bin\make.exe")
-    $results += Get-FileCheck -Area "mingw64" -Name "mingw32-make x64" -Path (Join-Path $Msys2Root "mingw64\bin\mingw32-make.exe") -Required $false -Note "optional fallback; repo scripts currently use g++ directly"
-    $results += Get-FileCheck -Area "mingw32" -Name "mingw32-make x86" -Path (Join-Path $Msys2Root "mingw32\bin\mingw32-make.exe") -Required $false -Note "optional fallback; repo scripts currently use g++ directly"
-
-    $vs = Get-VSCodeExtensions
-    $requiredExtensions = @("ms-vscode.cpptools", "ms-vscode.powershell", "ms-python.python", "ms-python.debugpy")
-    foreach ($extension in $requiredExtensions) {
-        $results += New-CheckResult -Area "vscode" -Name $extension -Found ($vs.Extensions -contains $extension) -Path $vs.Command
+    try { $tools = if ($ResolvedTools) { $ResolvedTools } else { Get-Hosts3DToolchain } }
+    catch { return New-CheckResult -Area 'build' -Name "MinGW compiler $Arch" -Found $false -Note $_.Exception.Message }
+    $results += New-CheckResult -Area 'build' -Name "MinGW compiler $Arch" -Found $true -Path $tools.Compiler -Version $tools.Machine
+    $resourceCompiler = Join-Path $tools.BinDirectory 'windres.exe'
+    if (-not (Test-Path -LiteralPath $resourceCompiler -PathType Leaf)) {
+        $onPath = Get-Command windres.exe -ErrorAction SilentlyContinue
+        if ($onPath) { $resourceCompiler = $onPath.Source }
     }
+    $results += Get-FileCheck -Area 'build' -Name 'Windows resource compiler' -Path $resourceCompiler
+    $results += Get-FileCheck -Area 'build' -Name 'GLFW headers' -Path (Join-Path $tools.Root 'include\GLFW\glfw3.h')
+    $staticLibrary = Join-Path $tools.Root 'lib\libglfw3.a'
+    $importLibrary = Join-Path $tools.Root 'lib\libglfw3dll.a'
+    $usesStaticLibrary = Test-Path -LiteralPath $staticLibrary -PathType Leaf
+    $library = if ($usesStaticLibrary) { $staticLibrary } else { $importLibrary }
+    $results += Get-FileCheck -Area 'build' -Name 'GLFW library' -Path $library
+    if (-not $usesStaticLibrary) {
+        $results += Get-FileCheck -Area 'build' -Name 'GLFW runtime' -Path (Join-Path $tools.BinDirectory 'glfw3.dll')
+    }
+    return $results
+}
 
+function Get-Hosts3DDebugger {
+    $prefix = if ($ToolchainRoot) { $ToolchainRoot } else { $env:HOSTS3D_TOOLCHAIN_ROOT }
+    if ($prefix) {
+        $candidate = Join-Path $prefix 'bin\gdb.exe'
+        if (Test-Path -LiteralPath $candidate -PathType Leaf) { return $candidate }
+        throw "ToolchainRoot has no readable bin\gdb.exe: $prefix"
+    }
+    try {
+        $tools = Get-Hosts3DToolchain
+        if ($tools.Gdb) { return $tools.Gdb }
+    } catch { }
+    $onPath = Get-Command gdb.exe -ErrorAction SilentlyContinue
+    if ($onPath) { return $onPath.Source }
+    $root = if ($env:HOSTS3D_MSYS2_ROOT -and -not $script:MsysRootWasProvided) { $env:HOSTS3D_MSYS2_ROOT } else { $Msys2Root }
+    $folder = switch ($Arch) { 'x86' { 'mingw32' }; 'arm64' { 'clangarm64' }; default { 'mingw64' } }
+    $candidate = Join-Path $root "$folder\bin\gdb.exe"
+    if (Test-Path -LiteralPath $candidate -PathType Leaf) { return $candidate }
+    throw "No GDB found for $Arch. Configure existing debugger tools on PATH or use -ToolchainRoot."
+}
+
+function Test-Hosts3DTools {
+    try { $tools = Get-Hosts3DToolchain; $results = @(Test-Hosts3DBuild -ResolvedTools $tools) }
+    catch {
+        $tools = $null
+        $results = @(New-CheckResult -Area 'build' -Name "MinGW compiler $Arch" -Found $false -Note $_.Exception.Message)
+    }
+    $results += Get-CommandCheck -Area 'shell' -Name 'PowerShell 7' -CommandName 'pwsh' -Required $false
+    $results += Get-CommandCheck -Area 'shell' -Name 'cmd.exe' -CommandName 'cmd'
+    foreach ($tool in @('powershell', 'git', 'gh', 'python', 'py', 'code')) {
+        $results += Get-CommandCheck -Area 'workflow' -Name $tool -CommandName $tool -Required $false
+    }
+    foreach ($name in @('bash', 'pacman')) {
+        $results += Get-FileCheck -Area 'msys2' -Name $name -Path (Join-Path $Msys2Root "usr\bin\$name.exe") -Required $false -Note 'needed only for MSYS2-native/package operations'
+    }
+    if ($tools) { $gdb = $tools.Gdb } else { try { $gdb = Get-Hosts3DDebugger } catch { $gdb = '' } }
+    $results += New-CheckResult -Area 'debug' -Name "GDB $Arch" -Found ([bool]$gdb) -Path $gdb -Required $false -Note 'needed for debugging, not compilation'
+    $make = if ($tools) { $tools.Make } else { '' }
+    $results += New-CheckResult -Area 'make' -Name 'make' -Found ([bool]$make) -Path $make -Required $false -Note 'native batch builds invoke the compiler directly'
     return $results
 }
 
 function Test-Hosts3DDebug {
     $results = @()
-    $results += Get-FileCheck -Area "debug" -Name "launch.json" -Path ".vscode\launch.json"
-    $results += Get-FileCheck -Area "debug" -Name "tasks.json" -Path ".vscode\tasks.json"
-    $results += Get-FileCheck -Area "debug" -Name "c_cpp_properties.json" -Path ".vscode\c_cpp_properties.json"
-    $results += Get-FileCheck -Area "debug" -Name "gdb x64" -Path (Join-Path $Msys2Root "mingw64\bin\gdb.exe")
-    $results += Get-FileCheck -Area "debug" -Name "gdb x86" -Path (Join-Path $Msys2Root "mingw32\bin\gdb.exe")
-    $results += Get-FileCheck -Area "debug" -Name "Debug Hosts3D x64 exe" -Path "Debug\windows\x64\Hosts3D.exe"
-    $results += Get-FileCheck -Area "debug" -Name "Debug Hosts3D x86 exe" -Path "Debug\windows\x86\Hosts3D.exe"
-
-    foreach ($file in @(".vscode\launch.json", ".vscode\tasks.json", ".vscode\c_cpp_properties.json", ".vscode\settings.json")) {
+    try {
+        $gdb = Get-Hosts3DDebugger
+        $results += New-CheckResult -Area 'debug' -Name "GDB $Arch" -Found $true -Path $gdb
+    } catch { $results += New-CheckResult -Area 'debug' -Name "GDB $Arch" -Found $false -Note $_.Exception.Message }
+    $debugProgram = if ($Program) { $Program } else { "Debug\windows\$Arch\Hosts3D.exe" }
+    $results += Get-FileCheck -Area 'debug' -Name "Debug program $Arch" -Path $debugProgram
+    foreach ($file in @('.vscode\launch.json', '.vscode\tasks.json', '.vscode\c_cpp_properties.json')) {
+        $results += Get-FileCheck -Area 'editor' -Name $file -Path $file -Required $false -Note 'optional; CLI debugging does not require VS Code'
         $fullPath = Resolve-RepoPath $file
         if (Test-Path -LiteralPath $fullPath -PathType Leaf) {
             try {
                 Get-Content -LiteralPath $fullPath -Raw | ConvertFrom-Json | Out-Null
-                $results += New-CheckResult -Area "debug-json" -Name $file -Found $true -Path $fullPath
-            } catch {
-                $results += New-CheckResult -Area "debug-json" -Name $file -Found $false -Path $fullPath -Note $_.Exception.Message
-            }
+                $results += New-CheckResult -Area 'editor-json' -Name $file -Found $true -Path $fullPath -Required $false
+            } catch { $results += New-CheckResult -Area 'editor-json' -Name $file -Found $false -Path $fullPath -Note $_.Exception.Message -Required $false }
         }
     }
-
     return $results
 }
 
+function Show-Hosts3DChecks {
+    param([object[]]$Results)
+    $Results | Format-Table -AutoSize
+    if (@($Results | Where-Object { $_.Status -eq 'missing' }).Count -gt 0) {
+        throw 'Required tools for the selected operation/architecture are missing; optional tools do not require installation.'
+    }
+}
 function Invoke-Hosts3DArtifactChecks {
     Push-Location $script:RepoRoot
     try {
@@ -346,14 +504,7 @@ function Invoke-Hosts3DGdbFile {
         $Program = "Debug\windows\$Arch\Hosts3D.exe"
     }
 
-    $gdb = if ($Arch -eq "x86") {
-        Join-Path $Msys2Root "mingw32\bin\gdb.exe"
-    } else {
-        Join-Path $Msys2Root "mingw64\bin\gdb.exe"
-    }
-    if (-not (Test-Path -LiteralPath $gdb -PathType Leaf)) {
-        throw "GDB not found: $gdb"
-    }
+    $gdb = Get-Hosts3DDebugger
 
     $programPath = Resolve-RepoPath $Program
     if (-not (Test-Path -LiteralPath $programPath -PathType Leaf)) {
@@ -394,7 +545,8 @@ function Show-Hosts3DDevToolsHelp {
 Hosts3D DevTools helper
 
 Examples:
-  pwsh -NoProfile -File Tools/Hosts3D-DevTools.ps1 -Task CheckAll
+  pwsh -NoProfile -File Tools/Hosts3D-DevTools.ps1 -Task CheckBuild -Arch x64
+  pwsh -NoProfile -File Tools/Hosts3D-DevTools.ps1 -Task CheckAll -Arch x64
   pwsh -NoProfile -File Tools/Hosts3D-DevTools.ps1 -Task BuildHosts3D -Config Debug -Arch x64
   pwsh -NoProfile -File Tools/Hosts3D-DevTools.ps1 -Task BuildAllWindows -WithNpcap
   pwsh -NoProfile -File Tools/Hosts3D-DevTools.ps1 -Task PackageWindows -Arch x64 -WithNpcap
@@ -402,8 +554,13 @@ Examples:
   pwsh -NoProfile -File Tools/Hosts3D-DevTools.ps1 -Task PacmanInstall -Packages mingw-w64-x86_64-gdb,mingw-w64-i686-gdb
   pwsh -NoProfile -File Tools/Hosts3D-DevTools.ps1 -Task GdbFile -Arch x64 -Program Debug/windows/x64/Hosts3D.exe
 
+Compatible existing MinGW/WinLibs tools are discovered automatically.
+Optional overrides: -ToolchainRoot <prefix with bin/g++.exe>, -Msys2Root <MSYS prefix>.
+x64 does not require x86 tools. GDB, make and MSYS2 are operation-specific.
+
 Dot-source for functions:
   . Tools/Hosts3D-DevTools.ps1
+  Get-Hosts3DToolchain -Architecture x64
   Invoke-Hosts3DBatch -Script compile-hosts3d.bat -BatchArgs Debug,x64,--no-pause
   Invoke-Msys2Command -MsysCommand 'pacman -Syu --noconfirm'
 "@
@@ -418,17 +575,20 @@ switch ($Task) {
         Show-Hosts3DDevToolsHelp
     }
     "CheckTools" {
-        Test-Hosts3DTools | Format-Table -AutoSize
+        Show-Hosts3DChecks -Results @(Test-Hosts3DTools)
+    }
+    "CheckBuild" {
+        Show-Hosts3DChecks -Results @(Test-Hosts3DBuild)
     }
     "CheckDebug" {
-        Test-Hosts3DDebug | Format-Table -AutoSize
+        Show-Hosts3DChecks -Results @(Test-Hosts3DDebug)
     }
     "CheckArtifacts" {
         Invoke-Hosts3DArtifactChecks
     }
     "CheckAll" {
-        Test-Hosts3DTools | Format-Table -AutoSize
-        Test-Hosts3DDebug | Format-Table -AutoSize
+        Show-Hosts3DChecks -Results @(Test-Hosts3DTools)
+        Show-Hosts3DChecks -Results @(Test-Hosts3DDebug)
         Invoke-Hosts3DArtifactChecks
     }
     "BuildHosts3D" {

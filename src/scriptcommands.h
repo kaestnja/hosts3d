@@ -4,6 +4,14 @@
 #include <cctype>
 #include <string>
 
+// Strip matching outer quotes from one already-tokenized switch parameter.
+inline std::string scriptCommandsConfigValue(const std::string &value)
+{
+  if (value.size() >= 2 && (value.front() == '\'' || value.front() == '"') && value.back() == value.front())
+    return value.substr(1, value.size() - 2);
+  return value;
+}
+
 // Resolve against the executable directory, independent of the launch directory.
 inline std::string scriptCommandsLocation(const std::string &configured, const std::string &applicationDir)
 {

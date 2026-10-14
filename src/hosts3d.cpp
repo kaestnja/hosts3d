@@ -3489,10 +3489,12 @@ static void switchTopologyWriteDefaultConfig(const char *path)
   fclose(fp);
 }
 
-static bool switchTopologyReadConfigOverride(const char *path, switch_topology_config_type *config)
+static bool switchTopologyReadConfigOverride(const char *path, switch_topology_config_type *config,
+                                            std::vector<switch_topology_config_type> *enabledConfigs = 0)
 {
   FILE *fp;
   char line[1024];
+  bool found = false;
   if (!config) return false;
   if (!(fp = fopen(path, "r"))) return false;
   while (fgets(line, sizeof(line), fp))
@@ -3515,7 +3517,9 @@ static bool switchTopologyReadConfigOverride(const char *path, switch_topology_c
       char *eq = strchr(tok, '=');
       if (!eq) continue;
       *eq = '\0';
-      char *key = trimWs(tok), *value = trimWs(eq + 1);
+      char *key = trimWs(tok);
+      std::string parsedValue = scriptCommandsConfigValue(trimWs(eq + 1));
+      const char *value = parsedValue.c_str();
       bool flag;
       unsigned int seconds;
       if (strEqNoCase(key, "name")) setStringValue(candidate.name, sizeof(candidate.name), value);
@@ -3527,14 +3531,22 @@ static bool switchTopologyReadConfigOverride(const char *path, switch_topology_c
     }
     if (candidate.enabled)
     {
-      *config = candidate;
-      if (config->refreshSeconds < 15) config->refreshSeconds = 15;
-      fclose(fp);
-      return true;
+      if (!found)
+      {
+        *config = candidate;
+        if (config->refreshSeconds < 15) config->refreshSeconds = 15;
+        found = true;
+      }
+      if (enabledConfigs) enabledConfigs->push_back(candidate);
+      else
+      {
+        fclose(fp);
+        return true;
+      }
     }
   }
   fclose(fp);
-  return false;
+  return found;
 }
 
 static bool switchTopologyResolveSnmpScript(const char *scriptName, char *path, size_t pathsz, char *workdir, size_t workdirsz)
@@ -3599,6 +3611,7 @@ static void switchTopologyAppendRuntimeSnmpTools(char *cmd, size_t cmdsz)
 static bool switchTopologySnmpRefreshRequest(bool manual, char *errbuf = 0, size_t errbufsz = 0)
 {
   switch_topology_config_type config;
+  std::vector<switch_topology_config_type> enabledConfigs;
   char cfgPath[512], jsonDir[512], topologyPath[512], scriptPath[512], workdir[512], cmd[4096];
   bool useConfigFile;
   time_t now;
@@ -3607,7 +3620,7 @@ static bool switchTopologySnmpRefreshRequest(bool manual, char *errbuf = 0, size
   setStringValue(cfgPath, sizeof(cfgPath), hsddata("switches.txt"));
   switchTopologyWriteDefaultConfig(cfgPath);
   switchTopologyDefaultSnmpConfig(&config);
-  useConfigFile = switchTopologyReadConfigOverride(cfgPath, &config);
+  useConfigFile = switchTopologyReadConfigOverride(cfgPath, &config, &enabledConfigs);
   if (!config.enabled || !*config.host)
   {
     if (manual && errbuf && errbufsz)
@@ -3630,13 +3643,34 @@ static bool switchTopologySnmpRefreshRequest(bool manual, char *errbuf = 0, size
   char applicationDir[512];
   if (!selfExecutableDir(applicationDir, sizeof(applicationDir))) return false;
   std::string commands = scriptCommandsLocation(scriptCommandsPath, applicationDir);
-  char commandPath[1024];
-  if (commands.empty() ||
-      !pathJoin(commandPath, sizeof(commandPath), commands.c_str(), "scalance_xr328_mirror_check.py") || !fileExists(commandPath) ||
-      !pathJoin(commandPath, sizeof(commandPath), commands.c_str(), "scalance_xc208g_mirror_check.py") || !fileExists(commandPath))
+  if (commands.empty())
   {
-    if (errbuf && errbufsz) setStringValue(errbuf, errbufsz, "Set scriptcommands_path in settings.ini to a checkout containing the SCALANCE commands.");
+    if (errbuf && errbufsz) setStringValue(errbuf, errbufsz, "Switch refresh unavailable: configure scriptcommands_path in settings.ini. Saved topology remains available.");
     return false;
+  }
+  // Check selected capabilities before a detached launch can report "started".
+  // The Python runner repeats this boundary for direct calls and path changes.
+  char commandPath[1024];
+  for (size_t index = 0; index < enabledConfigs.size(); ++index)
+  {
+    const char *type = enabledConfigs[index].type;
+    const char *helper = 0;
+    if (!*type || strEqNoCase(type, "scalance_xr328") || strEqNoCase(type, "xr328"))
+      helper = "scalance_xr328_mirror_check.py";
+    else if (strEqNoCase(type, "scalance_xc208g") || strEqNoCase(type, "xc208g"))
+      helper = "scalance_xc208g_mirror_check.py";
+    if (!helper)
+    {
+      if (errbuf && errbufsz)
+        snprintf(errbuf, errbufsz, "Switch refresh unavailable: unsupported enabled type %s. Saved topology remains available.", type);
+      return false;
+    }
+    if (!pathJoin(commandPath, sizeof(commandPath), commands.c_str(), helper) || !fileExists(commandPath))
+    {
+      if (errbuf && errbufsz)
+        snprintf(errbuf, errbufsz, "Switch refresh unavailable: missing %s in the configured command directory. Saved topology remains available.", helper);
+      return false;
+    }
   }
   setStringValue(jsonDir, sizeof(jsonDir), hsddata("snmp"));
   setStringValue(topologyPath, sizeof(topologyPath), hsddata("switch-topology.txt"));

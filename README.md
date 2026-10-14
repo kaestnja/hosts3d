@@ -23,7 +23,13 @@ This README is organized for practical use:
 
 ## Shared ScriptCommands
 
-Hosts3D uses the existing `sec/scriptcommands` Git checkout directly for its
+The external command directory is optional. Host/traffic views, capture/replay
+and saved or manually maintained switch topology work without it. Live switch
+queries are unavailable until the commands needed by enabled device families are
+present. An unavailable refresh keeps the last complete topology and never
+substitutes a simulated successful query. See the [refresh status contract](Tools/snmp/README.md#optional-availability).
+
+Hosts3D uses an optional external script directory for its
 SCALANCE XR328 and XC208G queries. In `hsd-data/settings.ini`, set:
 
 ```ini
@@ -34,8 +40,9 @@ scriptcommands_path=C:\Development\sec\ScriptCommands
 This is the development-computer example: Hosts3D stays in its independent
 `C:\Development\hosts3d` checkout and consumes the shared source directly.
 For a temporary portable runtime, place Hosts3D in its own directory, for
-example `C:\Temp\_SecLab\Hosts3D`, beside a `ScriptCommands` runtime copy and
-set `scriptcommands_path=..\ScriptCommands`. Keep that runtime copy separate
+example `C:\Tools\Hosts3D`, beside an external script directory at
+`C:\Tools\ExternalScripts`, and set `scriptcommands_path=..\ExternalScripts`.
+Keep that runtime copy separate
 from the Git sources; update and fix shared commands in their original checkout.
 On another computer, select its configured command directory. Relative paths
 resolve against the Hosts3D executable directory. Edit `settings.ini` with
@@ -76,6 +83,7 @@ and its type mapping in `Tools/snmp/scalance_switches_refresh.py`.
 Current planning notes for capture and sensor-management work live in separate Markdown files so they can evolve without overloading the user-facing runtime documentation:
 
 - `Todos.md`: general capture, HSEN sensor-management, deployment, and network-device mirroring planning.
+- `docs/README.md`: documentation responsibilities, runtime invariants and development operations; `Todos.md` remains the single active planning/status source.
 - `Tools/snmp/README.md`: shared SCALANCE SNMP helper documentation, common OIDs, usage, status model, JSON contract, and staging notes.
 - `scalance_xr328_mirror_check.md` in the configured ScriptCommands checkout: device-specific SNMP observations for the Siemens SCALANCE XR328-4C WG.
 - `scalance_xc208g_mirror_check.md` in the configured ScriptCommands checkout: device-specific SNMP observations and real-device validation notes for Siemens SCALANCE XC208G switches.
@@ -118,8 +126,8 @@ If your main goal is to get the project running again, use this order:
 
 Recommended paths:
 - Windows 11:
-  - install the MinGW/MSYS2 toolchain once
-  - build both Windows runtime pairs with `.\compile-all-windows.bat`
+  - reuse a compatible MinGW toolchain; if none exists, use the recommended MSYS2 setup below
+  - build the Windows x64 runtimes with `.\compile-all-windows.bat x64`
   - start `.\start-Hosts3DW.bat`
   - in Hosts3D, right-click in the 3D view, then choose `Configure Local Sensors (hsen)`
 - Linux/macOS:
@@ -141,7 +149,7 @@ Use the platform-specific subsection that matches the machine you are building o
 | Linux | `glfw3`, `libpcap` | `g++`, `libglfw3-dev`, `libpcap-dev`, `pkg-config` |
 | macOS | GLFW 3 | GCC/Clang + GLFW 3 + `pkg-config` |
 | FreeBSD | `hsen` supported | standard C/C++ toolchain |
-| Windows | Npcap/WinPcap-compatible runtime | MinGW (MSYS2) + GLFW 3 + Wpcap/Npcap SDK files |
+| Windows | Npcap/WinPcap-compatible runtime | Compatible MinGW GCC (for example MSYS2 or WinLibs) + GLFW 3 + Wpcap/Npcap SDK files |
 
 ## Build
 
@@ -181,13 +189,29 @@ The script itself now prints a warning and pauses for confirmation before it pro
 ./compile-hsen
 ```
 
-### Windows 11 Build (MSYS2 + MinGW32/MinGW64)
-MSYS2 under `C:\msys64` is required for Windows builds and native GDB debugging,
-for both human developers and coding agents. The required installation includes
-the matching MinGW compiler, binutils, GLFW 3, `make`, and GDB for each target
-architecture you intend to build. If `g++` is missing (`g++ is not recognized`),
-install the toolchain first.
-> Install MSYS2 first from the official project (`https://www.msys2.org/`) or via `winget`, then use the package commands below.
+### Windows 11 Build
+
+Reuse an existing compatible MinGW toolchain, including native WinLibs. The
+project does not require MSYS2 or a particular installation directory. Hosts3D
+builds need a compiler for the selected architecture and matching GLFW 3 files;
+hsen needs its Wpcap/Npcap SDK inputs. Native GDB debugging additionally needs
+a matching GDB. `make` is needed only for make-based flows; Bash and pacman are
+needed only for MSYS2 operations. Building or debugging x64 does not require x86
+tools. Already built runtimes do not require development tools.
+
+Project scripts select compatible installed tools automatically. An exceptional
+installation can use `-ToolchainRoot` with `Tools/Hosts3D-DevTools.ps1` or the
+process-local `HOSTS3D_TOOLCHAIN_ROOT` variable for batch entrypoints; both select
+a prefix containing `bin/g++.exe`. A missing or wrong-architecture compiler in an
+explicit override fails instead of silently selecting another toolchain. The
+MSYS2 location can likewise use `-Msys2Root` or `HOSTS3D_MSYS2_ROOT`.
+See [development operations](docs/operations/development.md#windows-development)
+for focused checks and conditional VS Code setup. No persistent environment
+changes are required.
+
+If no suitable development/build environment exists, the established recommendation
+is MSYS2 under `C:\msys64`. Install it from the [official MSYS2 project](https://www.msys2.org/)
+or via `winget`, then use the package commands below for the desired architectures:
 
 ```powershell
 winget install -e --id MSYS2.MSYS2
@@ -196,11 +220,14 @@ C:\msys64\usr\bin\bash -lc "pacman -S --needed --noconfirm mingw-w64-i686-gcc mi
 C:\msys64\usr\bin\bash -lc "pacman -S --needed --noconfirm mingw-w64-x86_64-gcc mingw-w64-x86_64-binutils mingw-w64-x86_64-glfw make"
 ```
 
-For Codex-driven setup work, prefer the repo helper when commands would otherwise need nested PowerShell/cmd/MSYS2 quoting:
+For MSYS2 setup work, prefer the repo helper when commands would otherwise need
+nested PowerShell/cmd/MSYS2 quoting. Install GDB only for native debugging and for
+the architectures you intend to debug; the example below installs both:
 ```powershell
-pwsh -NoProfile -File Tools/Hosts3D-DevTools.ps1 -Task CheckAll
 pwsh -NoProfile -File Tools/Hosts3D-DevTools.ps1 -Task PacmanInstall -Packages mingw-w64-x86_64-gdb,mingw-w64-i686-gdb
 ```
+
+For example, inspect the x86 compiler in the recommended MSYS2 installation:
 
 ```powershell
 $env:Path = "C:\msys64\mingw32\bin;$env:Path"
@@ -213,29 +240,42 @@ Expected target:
 i686-w64-mingw32
 ```
 
-Recommended build order:
+Recommended x64 build:
 ```powershell
 $repo = Join-Path $env:USERPROFILE "source\\repos\\github.com\\<your-github-user>\\hosts3d"
 Set-Location $repo
-.\compile-all-windows.bat
+.\compile-all-windows.bat x64
 ```
 
 Prefer `x64` as the main runtime/package target when it builds and runs cleanly.
 Build `x86` as well when possible so you keep a compatibility/fallback runtime ready.
 If `x64` shows concrete build, startup, or runtime problems on a given machine, fall back to `x86`.
 
-Windows x64 also requires:
-- an installed x64 MinGW toolchain (`mingw64` or `ucrt64`)
-- the matching GLFW 3 package, for example:
+The selected x64 MinGW toolchain needs matching GLFW 3 files. For the recommended
+MSYS2 setup, the corresponding package command is:
 
 ```powershell
 C:\msys64\usr\bin\bash -lc "pacman -S --needed --noconfirm mingw-w64-x86_64-gcc mingw-w64-x86_64-binutils mingw-w64-x86_64-glfw make"
 ```
 
-The Windows `Hosts3D` build script now uses the GLFW 3 package installed under the selected MSYS2 MinGW toolchain root and copies `glfw3.dll` into the runtime output.
+The Windows `Hosts3D` build script uses GLFW 3 from the selected compatible
+toolchain root and copies `glfw3.dll` into the runtime output.
 
-Verified current compiler path:
-- `C:\msys64\mingw64\bin\g++.exe`
+An x64 compiler path in the recommended MSYS2 setup is
+`C:\msys64\mingw64\bin\g++.exe`; other compatible locations are supported.
+
+#### Native Windows compiler alternative
+
+`compile-hosts3d.bat Debug x64 --no-pause` also recognizes the native WinLibs
+POSIX/UCRT package installed by `winget install BrechtSanders.WinLibs.POSIX.UCRT`.
+This does not require an MSYS2 shell. Install GLFW Windows x64 headers under the
+compiler's `mingw64/include/GLFW`, `libglfw3dll.a` under `mingw64/lib`, and
+`glfw3.dll` under `mingw64/bin` from the official GLFW binary archive.
+Sources: [WinLibs](https://www.winlibs.com/) and
+[GLFW Windows binaries](https://www.glfw.org/download.html).
+The native path/argument test is `tests/test_scriptcommands_path.cpp`.
+Toolchain selection and operation-specific dependency checks are covered by
+`tests/Test-DevelopmentToolchain.ps1`.
 
 ## Build Output Layout
 Build scripts place binaries into config/os/arch folders:
@@ -1096,14 +1136,3 @@ Open an issue in this repository with repro steps and platform/build details.
 
 ## Copyright
 Copyright (c) 2006-2011 Del Castle
-
-### Native Windows compiler alternative
-
-`compile-hosts3d.bat Debug x64 --no-pause` also recognizes the native WinLibs
-POSIX/UCRT package installed by `winget install BrechtSanders.WinLibs.POSIX.UCRT`.
-This does not require an MSYS2 shell. Install GLFW Windows x64 headers under the
-compiler's `mingw64/include/GLFW`, `libglfw3dll.a` under `mingw64/lib`, and
-`glfw3.dll` under `mingw64/bin` from the official GLFW binary archive.
-Sources: [WinLibs](https://www.winlibs.com/) and
-[GLFW Windows binaries](https://www.glfw.org/download.html).
-The native path/argument test is `tests/test_scriptcommands_path.cpp`.

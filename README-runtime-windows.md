@@ -2,17 +2,24 @@
 
 ## Shared ScriptCommands
 
-Hosts3D uses the existing `sec/scriptcommands` Git checkout directly for its
+External commands are optional. Host/traffic views, capture/replay and saved or
+manually maintained topology remain available without them. Missing commands for
+enabled device families produce an unavailable refresh and retain the last
+complete topology; no demo data is reported as a live query. Unused families do
+not need their commands installed.
+
+Hosts3D uses an optional external script directory for its
 SCALANCE XR328 and XC208G queries. In `hsd-data/settings.ini`, set:
 
 ```ini
 [scriptcommands]
-scriptcommands_path=C:\Temp\_SecLab\ScriptCommands
+scriptcommands_path=C:\Tools\ExternalScripts
 ```
 
-This is the development-computer example. On another computer, select that
-computer's checkout; a layout with sibling application/command directories can
-use `scriptcommands_path=..\ScriptCommands`. Relative paths resolve against the
+For example, place Hosts3D at `C:\Tools\Hosts3D` and select the external script
+directory above. On another computer, select its configured directory; the same
+sibling layout can use `scriptcommands_path=..\ExternalScripts`.
+Relative paths resolve against the
 Hosts3D executable directory. Edit `settings.ini` with Hosts3D closed and restart
 it after a path change; ordinary command edits need no restart.
 

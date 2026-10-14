@@ -69,7 +69,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--config-file", default="hsd-data/switches.txt")
     parser.add_argument("--json-dir", default="hsd-data/snmp")
     parser.add_argument("--write-topology", default="hsd-data/switch-topology.txt")
-    parser.add_argument("--scriptcommands-path", required=True, help="Existing shared ScriptCommands checkout")
+    parser.add_argument("--scriptcommands-path", default="", help="Optional external device-command directory")
     parser.add_argument("--application-dir", default=str(Path.cwd()), help="Base directory for relative checkout paths")
     parser.add_argument("--snmpget", default="")
     parser.add_argument("--snmpwalk", default="")
@@ -79,7 +79,7 @@ def parse_args() -> argparse.Namespace:
 
 def resolve_commands_path(configured: str, application_dir: str) -> Path:
     if not configured.strip():
-        raise ValueError("Set scriptcommands_path in settings.ini to the existing shared checkout")
+        raise ValueError("set scriptcommands_path in settings.ini to an external command directory")
     path = Path(configured.strip())
     if path.anchor and not path.is_absolute():
         raise ValueError("Use an absolute or application-relative scriptcommands_path")
@@ -103,7 +103,6 @@ def connection_arguments(config: dict[str, str]) -> list[str]:
 
 def main() -> int:
     args = parse_args()
-    script_dir = resolve_commands_path(args.scriptcommands_path, args.application_dir)
     config_file = Path(args.config_file)
     json_dir = Path(args.json_dir)
     topology_path = Path(args.write_topology)
@@ -112,6 +111,25 @@ def main() -> int:
     if not switches:
         print("no enabled switches found", file=sys.stderr)
         return 1
+
+    # An absent optional provider is an inert call, never a simulated live result.
+    # Preflight every selected capability before querying or creating output files.
+    try:
+        script_dir = resolve_commands_path(args.scriptcommands_path, args.application_dir)
+    except ValueError as exc:
+        print(f"switch refresh unavailable: {exc}; saved topology is unchanged", file=sys.stderr)
+        return 2
+    helpers = []
+    for config in switches:
+        helper_name = helper_for_type(config.get("type", ""))
+        if not helper_name:
+            print(f"switch refresh unavailable: unsupported switch type {config.get('type')}; saved topology is unchanged", file=sys.stderr)
+            return 2
+        helper = script_dir / helper_name
+        if not helper.is_file():
+            print(f"switch refresh unavailable: missing helper {helper}; saved topology is unchanged", file=sys.stderr)
+            return 2
+        helpers.append(helper)
 
     json_dir.mkdir(parents=True, exist_ok=True)
     topology_path.parent.mkdir(parents=True, exist_ok=True)
@@ -122,18 +140,7 @@ def main() -> int:
     failures = 0
     wrote_topology = False
     try:
-        for index, config in enumerate(switches):
-            helper_name = helper_for_type(config.get("type", ""))
-            if not helper_name:
-                print(f"unsupported switch type for {config.get('name') or config.get('host')}: {config.get('type')}", file=sys.stderr)
-                failures += 1
-                continue
-            helper = script_dir / helper_name
-            if not helper.is_file():
-                print(f"missing helper: {helper}", file=sys.stderr)
-                failures += 1
-                continue
-
+        for index, (config, helper) in enumerate(zip(switches, helpers)):
             json_path = json_dir / f"{safe_name(config, index)}.json"
             cmd = [sys.executable, str(helper), *connection_arguments(config)]
             cmd += ["--write-json", str(json_path), "--write-topology", str(temp_topology_path)]
