@@ -72,6 +72,11 @@ maintained in [docs/architecture/runtime.md](docs/architecture/runtime.md).
 
 Read only the relevant local skill:
 
+Before any repository or external-state mutation, and before scope-sensitive
+multi-step work, read `.agents/skills/goal-fidelity/SKILL.md` and establish its
+task contract. Then read only the applicable domain skill; a domain skill remains
+subordinate to the authorized objective, phases, scope and stop boundary.
+
 - `.agents/skills/hosts3d-development/SKILL.md` for build, debugger, packaging or
   toolchain work.
 - `.agents/skills/hosts3d-switch-topology/SKILL.md` for optional device commands,
