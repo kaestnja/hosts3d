@@ -79,6 +79,9 @@ subordinate to the authorized objective, phases, scope and stop boundary.
 
 - `.agents/skills/hosts3d-development/SKILL.md` for build, debugger, packaging or
   toolchain work.
+- `.agents/skills/secure-package-consumption/SKILL.md` for dependency,
+source/registry, lockfile or package-manager install/update decisions, not an ordinary build
+  with an unchanged locked dependency graph.
 - `.agents/skills/hosts3d-switch-topology/SKILL.md` for optional device commands,
   switch configuration, refresh or topology rendering.
 
