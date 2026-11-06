@@ -3,7 +3,9 @@
 Setup is described in the root [README](../../README.md#shared-scriptcommands).
 `scalance_switches_refresh.py` belongs to Hosts3D. It reads `switches.txt`, passes
 explicit parameters to the device commands in the configured shared checkout,
-and replaces the topology only after every enabled query succeeds.
+and replaces the topology only after every enabled query succeeds. F9 captures
+the complete switch configuration when the refresh is requested; edits made
+while it runs apply to the next refresh.
 
 The device commands, device-specific protocol notes and their tests live in an
 optional external script directory, selected by `scriptcommands_path` in `settings.ini`.
@@ -11,6 +13,8 @@ F9 passes the executable directory as the base for a relative checkout path.
 For manual refresh, supply `--scriptcommands-path` and optionally
 `--application-dir` along with `--config-file`, `--json-dir`, `--write-topology`.
 Use `--snmpget` and `--snmpwalk` for explicit Net-SNMP executable paths.
+`--consume-config-snapshot` is reserved for the operation snapshot created by
+Hosts3D and removes that snapshot immediately after it is loaded.
 
 ## Optional availability
 

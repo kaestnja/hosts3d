@@ -67,6 +67,8 @@ def helper_for_type(switch_type: str) -> str | None:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Refresh all enabled SCALANCE switches serially.")
     parser.add_argument("--config-file", default="hsd-data/switches.txt")
+    parser.add_argument("--consume-config-snapshot", action="store_true",
+                        help="Consume a Hosts3D operation snapshot after loading it")
     parser.add_argument("--json-dir", default="hsd-data/snmp")
     parser.add_argument("--write-topology", default="hsd-data/switch-topology.txt")
     parser.add_argument("--scriptcommands-path", default="", help="Optional external device-command directory")
@@ -75,6 +77,17 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--snmpwalk", default="")
     parser.add_argument("--pretty", action="store_true")
     return parser.parse_args()
+
+
+def load_operation_switches(path: Path, consume_snapshot: bool) -> list[dict[str, str]]:
+    if not consume_snapshot:
+        return load_switches(path)
+    if not path.name.endswith(".operation-snapshot"):
+        raise ValueError("consumed config must be a Hosts3D operation snapshot")
+    try:
+        return load_switches(path)
+    finally:
+        path.unlink()
 
 
 def resolve_commands_path(configured: str, application_dir: str) -> Path:
@@ -106,7 +119,11 @@ def main() -> int:
     config_file = Path(args.config_file)
     json_dir = Path(args.json_dir)
     topology_path = Path(args.write_topology)
-    switches = load_switches(config_file)
+    try:
+        switches = load_operation_switches(config_file, args.consume_config_snapshot)
+    except (OSError, ValueError) as exc:
+        print(f"switch refresh unavailable: {exc}; saved topology is unchanged", file=sys.stderr)
+        return 2
 
     if not switches:
         print("no enabled switches found", file=sys.stderr)

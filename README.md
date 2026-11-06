@@ -54,7 +54,9 @@ own lifecycle.
 Install Python 3.10 or newer and provide Net-SNMP `snmpget`/`snmpwalk` on PATH or
 beside Hosts3D.exe. F9 (or **View > Refresh Switch Topology**) calls the existing
 refresh runner, which reads enabled entries from `hsd-data/switches.txt` and
-passes their connection parameters to the shared commands. For example:
+passes their connection parameters to the shared commands. The refresh uses the
+complete configuration captured when F9 is pressed; later edits apply to the
+next refresh. For example:
 
 ```text
 switch name=switch1 type=scalance_xr328 host=192.0.2.10 version=2c community=COMMUNITY enabled=1 auto_refresh=1 refresh_seconds=60

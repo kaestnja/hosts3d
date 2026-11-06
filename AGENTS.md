@@ -50,6 +50,20 @@ Use general runtime examples such as `C:\Tools\Hosts3D` and
 Device manufacturers, model names and required attribution remain legitimate
 documentation.
 
+## Operation input snapshot
+
+At invocation, resolve the complete effective input—selection, editor values,
+configured references and defaults—into an operation-owned immutable value
+snapshot. Materialize collections before the first asynchronous or background
+handoff and use that snapshot through continuations, retries, progress, results
+and persistence. Later selection or value changes belong to the next operation.
+Bind cancellation and output to the owners captured for the active operation.
+
+Verify affected behavior by holding the first asynchronous handoff, changing
+selection or values, and confirming that the active operation uses the captured
+values while the next invocation uses the changed values. Durable domain
+entities remain owned by their existing sources; the snapshot is a value copy.
+
 ## Runtime and verification
 
 Keep real laboratory settings in local configuration. Preserve configured devices

@@ -3489,6 +3489,77 @@ static void switchTopologyWriteDefaultConfig(const char *path)
   fclose(fp);
 }
 
+struct switch_topology_config_snapshot_type
+{
+  char path[640];
+  bool transferred;
+
+  switch_topology_config_snapshot_type() : transferred(false)
+  {
+    path[0] = '\0';
+  }
+
+  ~switch_topology_config_snapshot_type()
+  {
+    if (*path && !transferred) remove(path);
+  }
+};
+
+static bool switchTopologyCreateConfigSnapshot(const char *sourcePath, char *snapshotPath, size_t snapshotPathSize)
+{
+  static std::atomic<unsigned int> sequence(0);
+  FILE *source = 0, *snapshot = 0;
+  char buffer[4096];
+  size_t count;
+  bool copied = true;
+#ifdef __MINGW32__
+  unsigned long processId = (unsigned long)GetCurrentProcessId();
+#else
+  unsigned long processId = (unsigned long)getpid();
+#endif
+  unsigned int operationId = sequence.fetch_add(1, std::memory_order_relaxed) + 1;
+  int pathLength;
+
+  if (!sourcePath || !*sourcePath || !snapshotPath || !snapshotPathSize) return false;
+  pathLength = snprintf(snapshotPath, snapshotPathSize, "%s.%lu.%u.operation-snapshot",
+                        sourcePath, processId, operationId);
+  if ((pathLength < 0) || ((size_t)pathLength >= snapshotPathSize))
+  {
+    *snapshotPath = '\0';
+    return false;
+  }
+  source = fopen(sourcePath, "rb");
+  if (!source)
+  {
+    *snapshotPath = '\0';
+    return false;
+  }
+  snapshot = fopen(snapshotPath, "wb");
+  if (!snapshot)
+  {
+    fclose(source);
+    *snapshotPath = '\0';
+    return false;
+  }
+  while ((count = fread(buffer, 1, sizeof(buffer), source)) > 0)
+  {
+    if (fwrite(buffer, 1, count, snapshot) != count)
+    {
+      copied = false;
+      break;
+    }
+  }
+  if (ferror(source) || ferror(snapshot)) copied = false;
+  if (fclose(snapshot)) copied = false;
+  fclose(source);
+  if (!copied)
+  {
+    remove(snapshotPath);
+    *snapshotPath = '\0';
+  }
+  return copied;
+}
+
 static bool switchTopologyReadConfigOverride(const char *path, switch_topology_config_type *config,
                                             std::vector<switch_topology_config_type> *enabledConfigs = 0)
 {
@@ -3611,6 +3682,7 @@ static void switchTopologyAppendRuntimeSnmpTools(char *cmd, size_t cmdsz)
 static bool switchTopologySnmpRefreshRequest(bool manual, char *errbuf = 0, size_t errbufsz = 0)
 {
   switch_topology_config_type config;
+  switch_topology_config_snapshot_type configSnapshot;
   std::vector<switch_topology_config_type> enabledConfigs;
   char cfgPath[512], jsonDir[512], topologyPath[512], scriptPath[512], workdir[512], cmd[4096];
   bool useConfigFile;
@@ -3619,8 +3691,13 @@ static bool switchTopologySnmpRefreshRequest(bool manual, char *errbuf = 0, size
   ensureHsdDataDir();
   setStringValue(cfgPath, sizeof(cfgPath), hsddata("switches.txt"));
   switchTopologyWriteDefaultConfig(cfgPath);
+  if (!switchTopologyCreateConfigSnapshot(cfgPath, configSnapshot.path, sizeof(configSnapshot.path)))
+  {
+    if (errbuf && errbufsz) setStringValue(errbuf, errbufsz, "Unable to capture the switch configuration for this refresh.");
+    return false;
+  }
   switchTopologyDefaultSnmpConfig(&config);
-  useConfigFile = switchTopologyReadConfigOverride(cfgPath, &config, &enabledConfigs);
+  useConfigFile = switchTopologyReadConfigOverride(configSnapshot.path, &config, &enabledConfigs);
   if (!config.enabled || !*config.host)
   {
     if (manual && errbuf && errbufsz)
@@ -3675,7 +3752,8 @@ static bool switchTopologySnmpRefreshRequest(bool manual, char *errbuf = 0, size
   setStringValue(jsonDir, sizeof(jsonDir), hsddata("snmp"));
   setStringValue(topologyPath, sizeof(topologyPath), hsddata("switch-topology.txt"));
   std::string arguments = " " + scriptCommandsArgument(scriptPath)
-    + " --config-file " + scriptCommandsArgument(cfgPath)
+    + " --config-file " + scriptCommandsArgument(configSnapshot.path)
+    + " --consume-config-snapshot"
     + " --json-dir " + scriptCommandsArgument(jsonDir)
     + " --write-topology " + scriptCommandsArgument(topologyPath)
     + " --scriptcommands-path " + scriptCommandsArgument(commands)
@@ -3703,6 +3781,7 @@ static bool switchTopologySnmpRefreshRequest(bool manual, char *errbuf = 0, size
       return false;
     }
   }
+  configSnapshot.transferred = true;
   switchTopologyLastSnmpLaunch = now;
   if (useConfigFile) snprintf(switchTopologySnmpStatus, sizeof(switchTopologySnmpStatus), "switch SNMP refresh started for enabled switches");
   else snprintf(switchTopologySnmpStatus, sizeof(switchTopologySnmpStatus), "switch SNMP refresh started for %s", config.host);

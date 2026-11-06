@@ -69,7 +69,9 @@ unfinished work. Historical successful runs do not establish current readiness.
   need a restart; edits within the selected command directory need no restart.
 - `switches.txt` owns the inventory and explicit connection parameters. Only
   enabled rows select command capabilities. No implicit switch or credentials
-  are queried when the inventory is empty.
+  are queried when the inventory is empty. A refresh captures this complete
+  configuration at invocation; edits made while it runs apply to the next
+  refresh.
 - Missing external commands are an unavailable, inert operation. Host traffic,
   capture/replay and manual/saved topology remain available without them. Never
   substitute demo observations for a live successful query or modify live records

@@ -18,6 +18,41 @@ SPEC.loader.exec_module(switches_refresh)
 
 
 class ScalanceSwitchesRefreshTests(unittest.TestCase):
+    def test_operation_snapshot_keeps_start_values_and_next_run_uses_changes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            commands = base / "commands"
+            commands.mkdir()
+            (commands / "scalance_xr328_mirror_check.py").write_text("# inert fixture", encoding="utf-8")
+            canonical = base / "switches.txt"
+            topology = base / "switch-topology.txt"
+            seen_hosts = []
+
+            def fake_run(cmd):
+                seen_hosts.append(cmd[2])
+                Path(cmd[cmd.index("--write-topology") + 1]).write_text("complete fixture topology", encoding="utf-8")
+                return SimpleNamespace(returncode=0)
+
+            canonical.write_text("switch host=192.0.2.1 type=scalance_xr328 enabled=1\n", encoding="utf-8")
+            first_snapshot = base / "switches.txt.1.1.operation-snapshot"
+            first_snapshot.write_text(canonical.read_text(encoding="utf-8"), encoding="utf-8")
+            canonical.write_text("switch host=192.0.2.2 type=scalance_xr328 enabled=1\n", encoding="utf-8")
+
+            def run_snapshot(snapshot):
+                argv = ["refresh", "--scriptcommands-path", str(commands), "--config-file", str(snapshot),
+                        "--consume-config-snapshot", "--json-dir", str(base / "json"),
+                        "--write-topology", str(topology)]
+                with patch.object(sys, "argv", argv), patch.object(switches_refresh.subprocess, "run", side_effect=fake_run):
+                    self.assertEqual(switches_refresh.main(), 0)
+                self.assertFalse(snapshot.exists())
+
+            run_snapshot(first_snapshot)
+            second_snapshot = base / "switches.txt.1.2.operation-snapshot"
+            second_snapshot.write_text(canonical.read_text(encoding="utf-8"), encoding="utf-8")
+            run_snapshot(second_snapshot)
+
+            self.assertEqual(seen_hosts, ["192.0.2.1", "192.0.2.2"])
+
     def test_optional_provider_unavailable_is_inert_and_keeps_saved_topology(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp)
