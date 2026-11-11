@@ -105,14 +105,30 @@ not create another handover or session-memory authority.
 
 ## graphify
 
-This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
+When the user types `/graphify`, use the installed graphify skill before any
+other project-navigation action.
 
-When the user types `/graphify`, use the installed graphify skill or instructions before doing anything else.
+For a codebase question, resolve one navigation path before the first source
+search and give exploring subagents the same resolver:
 
-Rules:
-- When graphify-out/graph.json exists, run `graphify query "<question>"` before your first grep, search or source-file read for a codebase question, and put this rule in every subagent prompt that explores code. Read raw files only for lines the graph or an earlier read already located. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
-- Dirty graphify-out/ files are expected after hooks or incremental updates; dirty graph files are not a reason to skip graphify. Only skip graphify if the task is about stale or incorrect graph output, or the user explicitly says not to use it.
-- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
-- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
-- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
-- A committed graphify-out/graph.json is rewritten whole on every build, so a large diff to it in a pull request is expected. Do not flag it as churn or suggest skipping the graph rebuild or its hooks.
+1. Classify `graphify-out/graph.json` as `CURRENT` only when it is readable,
+   contains nodes, its `built_at_commit` resolves in this repository, no tracked
+   source change outside `graphify-out/` exists from that commit through the
+   current HEAD, index and worktree, and the installed Graphify reader accepts
+   its schema and version.
+2. For `CURRENT`, run `graphify query "<question>"` first. Use
+   `graphify path "<A>" "<B>"` for relationships and
+   `graphify explain "<concept>"` for a focused concept.
+3. For `MISSING`, `STALE` or `UNSUITABLE`, use targeted `rg` searches and
+   bounded reads of the owning source files.
+4. Verify every decisive claim at its owning source. The graph supplies
+   navigation evidence rather than a second authority.
+
+Use `graphify-out/wiki/index.md` for broad navigation when the resolver selected
+the graph. Read `GRAPH_REPORT.md` for broad architecture review or when
+query/path/explain cannot answer the question.
+
+Graph creation and update are explicit maintenance actions. Run them when the
+user requests Graphify preparation or when this repository has adopted a
+maintained graph policy. Review regenerated graph provenance and semantics even
+when a whole-file `graph.json` rewrite is expected.

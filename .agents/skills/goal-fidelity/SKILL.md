@@ -3,7 +3,7 @@ name: goal-fidelity
 description: Establish the sole task contract for repository or external-state changes and scope-sensitive multi-step work; keep domain skills subordinate to the user's requested outcome. Skip simple read-only answers with one obvious result.
 metadata:
   role: task-contract
-  core-version: 2
+  core-version: 3
 ---
 
 Project scope: `Hosts3D`. Use this repository's tools and instructions.
@@ -37,6 +37,49 @@ Before acting, derive these six fields:
 Derive a value from selected context when it is reliable. Ask only when a
 missing value would materially change the result.
 
+## Resolve the complete phase bundle
+
+Treat the request intent as authorizing the corresponding complete bundle:
+
+| Request intent | Complete authorized phase bundle |
+| --- | --- |
+| `answer`, `explain`, `review`, `report`, `diagnose` | `INSPECTING -> REPORTING -> COMPLETED` |
+| `propose` | `INSPECTING -> PROPOSING -> COMPLETED` |
+| `fix`, `change`, `build` | `INSPECTING -> IMPLEMENTING -> VERIFYING -> COMPLETED` |
+| `commit`, `push`, `deliver` | `REVIEWED_CHANGESET -> VERIFYING -> DELIVERY_WORKFLOW -> COMPLETED` |
+
+`DELIVERY_WORKFLOW` performs exactly the requested delivery effect. A `commit`
+request ends with the reviewed local commit; `push` or `deliver` includes the
+named remote effect. Combine explicitly requested intents in their natural
+order. An explicit restriction such as read-only or proposal-only narrows the
+bundle. Findings, completion, safety assessment and project boundaries supply
+evidence or transition conditions; they do not create another phase.
+
+Use these named terminal states when the complete bundle cannot continue:
+
+| Condition | Terminal state |
+| --- | --- |
+| A decisive value is required from the owner | `WAITING_FOR_REQUIRED_INPUT` |
+| A required dependency is outside the authorized scope | `BLOCKED_SCOPE` |
+| A required acceptance check failed or cannot run | `VALIDATION_BLOCKED` |
+| The next action lies beyond the authorized bundle | `STOP_BOUNDARY_REACHED` |
+| A platform or owner approval denied the material action | `WAITING_FOR_OPERATOR` |
+
+An explicit owner authorization of the waiting action, or a material change to
+the input that caused the wait, resumes at that transition for one supported
+attempt. A status request observes and reports the current state.
+
+Classify each acceptance mechanism before execution as `OBSERVING` or
+`MUTATING`. Observation belongs to verification. A mutating repair belongs to
+an authorized implementation phase and is followed by verification. Use a
+deterministic summary as primary evidence; follow it to the owning source when
+an unresolved acceptance question depends on that evidence.
+
+Once an operation starts, preserve its captured contract, input owners and
+result owners through its terminal state. Later selection or context changes
+belong to the next operation. Presentation may change result visibility while
+the operation and its results retain their captured ownership.
+
 ## Execute the bounded contract
 
 - Keep the objective unchanged. A finding, prior failure, recommendation or
@@ -48,11 +91,10 @@ missing value would materially change the result.
 - Trace every edit and external mutation directly to the objective or a
   mandatory project contract. If a required dependency lies outside scope,
   report the blocker instead of editing it.
-- Keep inspection, proposal, implementation, verification and delivery
-  distinct. One request may authorize several phases; never infer the next one.
-- Implement the minimum requested result. Verification observes the agreed
-  result and does not silently repair another defect. Deliver only when
-  requested, using the exact reviewed change set.
+- Follow the resolved phase bundle in order and keep its phases distinct. Stop
+  at its named terminal state or after `COMPLETED`.
+- Implement the minimum requested result. Verification evaluates the agreed
+  result. Delivery uses the exact reviewed change set and requested effect.
 - Call the result complete only when acceptance evidence supports the requested
   outcome. Otherwise report the precise state as failed, unavailable, not
   attempted or not verified; none of these states is success.
