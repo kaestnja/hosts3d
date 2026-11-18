@@ -7,6 +7,10 @@
 `Hosts3D` visualizes hosts and packet traffic in a 3D scene.  
 `hsen` (Hosts3D Sensor) captures packet headers and sends compact packet metadata via UDP to `Hosts3D` (local or remote).
 
+Development is AI-assisted, not autonomous: changes are critically reviewed,
+corrected where necessary, and approved by the project maintainer before
+publication.
+
 Core capabilities:
 - Multiple sensors (`hsen`) feeding one or more `Hosts3D` instances
 - Hostname/service discovery from observed traffic

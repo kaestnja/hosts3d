@@ -12,6 +12,10 @@ existing German material; create a German translation only on an explicit reques
 Maintain any existing language pair together with equivalent meaning. Describe
 this software and its components as tools or applications.
 
+AI assistance is disclosed at project level, not on every commit. Commit
+authorship remains with the responsible human maintainer; do not add
+`Co-authored-by: Copilot` trailers.
+
 Keep changes small and preserve working behavior. Update affected README/runtime
 instructions, generated help, menus, OSD text, build/staging files and references
 in the same change. Search renamed or removed identifiers before completion.
